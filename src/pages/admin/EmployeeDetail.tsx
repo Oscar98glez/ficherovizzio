@@ -152,7 +152,7 @@ export default function EmployeeDetail() {
         <StatCard label="Noches trabajadas" value={nights} sub={nights ? `${fmtHours(hours / nights)} de media` : undefined} />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:mt-5 lg:grid-cols-3 lg:gap-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:mt-5 lg:grid-cols-3 lg:gap-5">
         <Card className="lg:col-span-2">
           <CardHeader
             title="Fichajes recientes"

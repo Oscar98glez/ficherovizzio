@@ -38,7 +38,7 @@ export default function Settings() {
     <>
       <PageHeader title="Ajustes" />
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <div>
           <SectionTitle>Tu cuenta</SectionTitle>
           <Card className="flex items-center gap-4 p-5">

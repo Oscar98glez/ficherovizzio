@@ -101,7 +101,7 @@ export default function Schedule() {
         <StatCard label="Coste previsto" value={fmtMoney0(cost)} />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-7 lg:gap-2.5">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-7 lg:gap-2.5">
         {days.map((d) => {
           const list = byDay[d] ?? [];
           const evs = data.events.filter((e) => e.date === d);

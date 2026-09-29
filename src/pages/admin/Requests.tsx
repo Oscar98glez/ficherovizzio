@@ -64,7 +64,7 @@ export default function Requests() {
       </div>
 
       {list.length ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {list.map((r) => {
             const emp = emps.get(r.employee_id);
             return (

@@ -77,7 +77,7 @@ export default function Events() {
       </div>
 
       {rows.length ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {rows.map(({ ev, income, result, staffCount, plannedCost }) => (
             <Card
               key={ev.id}

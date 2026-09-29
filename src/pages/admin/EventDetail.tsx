@@ -96,7 +96,7 @@ export default function EventDetail() {
         />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:mt-5 lg:grid-cols-2 lg:gap-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:mt-5 lg:grid-cols-2 lg:gap-5">
         <Card className="p-5">
           <h3 className="mb-4 text-[17px] font-semibold">Ingresos por concepto</h3>
           <HBarList items={incomeByCat} color="rgb(var(--green))" empty="Registra el cierre de caja para ver el desglose." />

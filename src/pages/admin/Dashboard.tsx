@@ -100,7 +100,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:mt-5 lg:grid-cols-5 lg:gap-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:mt-5 lg:grid-cols-5 lg:gap-5">
         <Card className="lg:col-span-2">
           <CardHeader
             title={
@@ -156,7 +156,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:mt-5 lg:grid-cols-3 lg:gap-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:mt-5 lg:grid-cols-3 lg:gap-5">
         <Card>
           <CardHeader
             title="Próximas noches"

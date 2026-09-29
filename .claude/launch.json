@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev", "--", "--port", "5180", "--strictPort"],
       "port": 5180,
       "autoPort": false
+    },
+    {
+      "name": "vizzio-demo",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5181", "--strictPort", "--mode", "demo"],
+      "port": 5181,
+      "autoPort": false
     }
   ]
 }

@@ -87,7 +87,7 @@ export default function Employees() {
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
         <SearchInput value={q} onChange={setQ} placeholder="Buscar por nombre, puesto o email" className="sm:w-80" />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Segmented
             value={filter}
             onChange={setFilter}
@@ -97,7 +97,7 @@ export default function Employees() {
               { value: 'all', label: 'Todos' },
             ]}
           />
-          <Select value={dept} onChange={(e) => setDept(e.target.value as Department | '')} className="h-9 w-auto rounded-[10px] text-[14px]">
+          <Select value={dept} onChange={(e) => setDept(e.target.value as Department | '')} className="h-9 w-full rounded-[10px] text-[14px] sm:w-auto">
             <option value="">Todos los departamentos</option>
             {Object.entries(DEPARTMENTS).map(([k, v]) => (
               <option key={k} value={k}>

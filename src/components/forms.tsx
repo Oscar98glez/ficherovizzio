@@ -147,7 +147,7 @@ export function EmployeeForm({
           </Field>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Email" hint="Con este email podrá registrarse y fichar desde su móvil.">
             <Input type="email" inputMode="email" autoComplete="off" value={f.email} onChange={(e) => set('email', e.target.value)} />
           </Field>
@@ -156,7 +156,7 @@ export function EmployeeForm({
           </Field>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Puesto">
             <Input list="positions" value={f.position} onChange={(e) => set('position', e.target.value)} />
             <datalist id="positions">
@@ -176,7 +176,7 @@ export function EmployeeForm({
           </Field>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Coste por hora (€)" className="sm:col-span-1">
             <Input inputMode="decimal" placeholder="0,00" value={f.hourly_rate} onChange={(e) => set('hourly_rate', e.target.value)} />
           </Field>
@@ -316,7 +316,7 @@ export function EntryForm({
             ))}
           </Select>
         </Field>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Entrada">
             <Input type="datetime-local" value={f.clock_in} onChange={(e) => setF({ ...f, clock_in: e.target.value })} required />
           </Field>
@@ -458,7 +458,7 @@ export function ShiftForm({
           </Field>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Evento">
             <Select value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value })}>
               <option value="">Sin evento</option>

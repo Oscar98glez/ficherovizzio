@@ -141,8 +141,8 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-[13px] text-ink-2">Próximo turno</div>
-              <div className="text-[16px] font-semibold">
-                {fmtDate(businessDate(nextShift.start_at), { weekday: 'long', day: 'numeric', month: 'long' })}
+              <div className="truncate text-[16px] font-semibold capitalize">
+                {fmtDate(businessDate(nextShift.start_at), { weekday: 'short', day: 'numeric', month: 'short' })}
               </div>
             </div>
             <div className="tabular text-right text-[15px] font-medium">

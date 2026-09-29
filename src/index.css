@@ -64,6 +64,11 @@ body {
   font-feature-settings: 'cv11', 'ss01', 'ss03';
 }
 
+/* Los hijos de un grid pueden encogerse (evita desbordes horizontales en móvil) */
+.grid > * {
+  min-width: 0;
+}
+
 @layer components {
   .card {
     @apply rounded-2xl bg-surface shadow-card;
