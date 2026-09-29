@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --bg: 245 245 247;
+  --surface: 255 255 255;
+  --elevated: 255 255 255;
+  --ink: 29 29 31;
+  --ink-2: 110 110 115;
+  --ink-3: 162 162 168;
+  --accent: 0 113 227;
+  --green: 36 160 72;
+  --red: 227 45 36;
+  --orange: 214 110 0;
+  --purple: 160 70 210;
+  --teal: 0 140 170;
+  --pink: 230 30 85;
+  --indigo: 88 86 214;
+  --line: rgba(0, 0, 0, 0.08);
+  --fill: rgba(120, 120, 128, 0.1);
+  --fill-2: rgba(120, 120, 128, 0.18);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 20px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: 0 0 0;
+    --surface: 28 28 30;
+    --elevated: 44 44 46;
+    --ink: 245 245 247;
+    --ink-2: 161 161 166;
+    --ink-3: 110 110 115;
+    --accent: 10 132 255;
+    --green: 48 209 88;
+    --red: 255 69 58;
+    --orange: 255 159 10;
+    --purple: 191 90 242;
+    --teal: 100 210 255;
+    --pink: 255 55 95;
+    --indigo: 94 92 230;
+    --line: rgba(255, 255, 255, 0.09);
+    --fill: rgba(118, 118, 128, 0.22);
+    --fill-2: rgba(118, 118, 128, 0.32);
+    --shadow-card: 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+    --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+  }
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  @apply bg-bg text-ink font-sans;
+  font-size: 15px;
+  letter-spacing: -0.011em;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-surface shadow-card;
+  }
+  .glass {
+    @apply bg-surface/75 backdrop-blur-2xl backdrop-saturate-[1.8];
+  }
+  .input {
+    @apply h-11 w-full rounded-xl border border-transparent bg-fill px-3.5 text-[15px] text-ink outline-none transition
+      placeholder:text-ink-3 focus:border-accent focus:bg-surface focus:ring-4 focus:ring-accent/15 disabled:opacity-50;
+  }
+  select.input {
+    @apply appearance-none pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 9 5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+  }
+  textarea.input {
+    @apply h-auto min-h-[88px] py-2.5;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+input[type='date'].input,
+input[type='time'].input,
+input[type='datetime-local'].input {
+  @apply min-w-0;
+}

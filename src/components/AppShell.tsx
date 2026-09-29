@@ -1,0 +1,248 @@
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import {
+  CalendarDays,
+  Clock,
+  Ellipsis,
+  Fingerprint,
+  Inbox,
+  LayoutGrid,
+  LogOut,
+  PartyPopper,
+  Receipt,
+  Settings,
+  User,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react';
+import { useAuth } from '../auth';
+import { api } from '../lib/api';
+import { APP_NAME, IS_DEMO } from '../lib/config';
+import { cx, fullName } from '../lib/utils';
+import { Modal } from './overlay';
+import { Avatar } from './ui';
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  badge?: number;
+}
+
+interface NavSection {
+  title?: string;
+  items: NavItem[];
+}
+
+export function Logo({ size = 32 }: { size?: number }) {
+  return <img src="/icon.svg" alt="" width={size} height={size} className="shrink-0 rounded-[22%] shadow-sm" />;
+}
+
+export function AppShell() {
+  const { profile, employee, isAdmin, signOut } = useAuth();
+  const [pending, setPending] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.requests.list({ eq: { status: 'pending' } }).then((r) => setPending(r.length)).catch(() => {});
+  }, [isAdmin, location.pathname]);
+
+  useEffect(() => setMoreOpen(false), [location.pathname]);
+
+  const sections: NavSection[] = isAdmin
+    ? [
+        { items: [{ to: '/resumen', label: 'Resumen', icon: LayoutGrid }] },
+        {
+          title: 'Equipo',
+          items: [
+            { to: '/personal', label: 'Personal', icon: Users },
+            { to: '/fichajes', label: 'Fichajes', icon: Clock },
+            { to: '/turnos', label: 'Turnos', icon: CalendarDays },
+            { to: '/solicitudes', label: 'Solicitudes', icon: Inbox, badge: pending },
+          ],
+        },
+        {
+          title: 'Negocio',
+          items: [
+            { to: '/noches', label: 'Noches', icon: PartyPopper },
+            { to: '/finanzas', label: 'Finanzas', icon: Wallet },
+            { to: '/nominas', label: 'Nóminas', icon: Receipt },
+          ],
+        },
+        {
+          title: 'Cuenta',
+          items: [
+            ...(employee ? [{ to: '/fichar', label: 'Mi fichaje', icon: Fingerprint }] : []),
+            { to: '/ajustes', label: 'Ajustes', icon: Settings },
+          ],
+        },
+      ]
+    : [
+        {
+          items: [
+            { to: '/fichar', label: 'Fichar', icon: Fingerprint },
+            { to: '/mis-horas', label: 'Mis horas', icon: Clock },
+            { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays },
+            { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
+            { to: '/perfil', label: 'Perfil', icon: User },
+          ],
+        },
+      ];
+
+  const all = sections.flatMap((s) => s.items);
+  const tabs: NavItem[] = isAdmin
+    ? [
+        all.find((i) => i.to === '/resumen')!,
+        all.find((i) => i.to === '/personal')!,
+        all.find((i) => i.to === '/fichajes')!,
+        all.find((i) => i.to === '/finanzas')!,
+        { to: '#more', label: 'Más', icon: Ellipsis, badge: pending },
+      ]
+    : all;
+  const moreItems = all.filter((i) => !tabs.some((t) => t.to === i.to));
+  const moreActive = moreItems.some((i) => location.pathname.startsWith(i.to));
+
+  const displayName = employee ? fullName(employee) : profile?.full_name || profile?.email || 'Usuario';
+
+  return (
+    <div className="min-h-dvh">
+      {/* Barra lateral (escritorio) */}
+      <aside className="glass fixed inset-y-0 left-0 z-30 hidden w-[260px] flex-col border-r border-line lg:flex">
+        <div className="flex items-center gap-2.5 px-5 pb-4 pt-6">
+          <Logo size={34} />
+          <div className="leading-tight">
+            <div className="text-[17px] font-semibold tracking-tight">{APP_NAME}</div>
+            <div className="text-[12px] text-ink-2">Staff & Finance</div>
+          </div>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto px-3 pb-4">
+          {sections.map((s, i) => (
+            <div key={i} className="mt-4 first:mt-1">
+              {s.title && <div className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-ink-3">{s.title}</div>}
+              {s.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cx(
+                      'group flex h-9 items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium transition',
+                      isActive ? 'bg-accent text-white shadow-sm' : 'text-ink hover:bg-fill',
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <item.icon className={cx('h-[18px] w-[18px]', isActive ? 'text-white' : 'text-accent')} strokeWidth={2} />
+                      <span className="flex-1">{item.label}</span>
+                      {!!item.badge && (
+                        <span className={cx('tabular rounded-full px-1.5 text-[12px] font-semibold', isActive ? 'bg-white/25' : 'bg-red text-white')}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+
+        <div className="border-t border-line p-3">
+          {IS_DEMO && (
+            <div className="mb-2 rounded-[10px] bg-orange/15 px-3 py-2 text-[12px] font-medium text-orange">
+              Modo demo · datos de ejemplo
+            </div>
+          )}
+          <div className="flex items-center gap-3 rounded-[10px] px-2 py-1.5">
+            <Avatar name={displayName} color={employee?.color ?? '#8e8e93'} size={34} />
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="truncate text-[14px] font-medium">{displayName}</div>
+              <div className="truncate text-[12px] text-ink-2">{isAdmin ? 'Administrador' : employee?.position ?? 'Trabajador'}</div>
+            </div>
+            <button
+              onClick={async () => {
+                await signOut();
+                navigate('/login');
+              }}
+              className="grid h-8 w-8 place-items-center rounded-full text-ink-2 hover:bg-fill hover:text-ink"
+              title="Cerrar sesión"
+              aria-label="Cerrar sesión"
+            >
+              <LogOut className="h-[17px] w-[17px]" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Contenido */}
+      <main className="lg:pl-[260px]">
+        {IS_DEMO && (
+          <div className="bg-orange/15 px-4 pb-1.5 pt-[calc(env(safe-area-inset-top)+6px)] text-center text-[12px] font-medium text-orange lg:hidden">
+            Modo demo · conecta Supabase para usar datos reales
+          </div>
+        )}
+        <div className="mx-auto max-w-6xl px-4 pb-[calc(env(safe-area-inset-bottom)+96px)] pt-[calc(env(safe-area-inset-top)+20px)] sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
+          <Outlet />
+        </div>
+      </main>
+
+      {/* Barra de pestañas (móvil) */}
+      <nav className="glass fixed inset-x-0 bottom-0 z-30 border-t border-line pb-[env(safe-area-inset-bottom)] lg:hidden">
+        <div className="mx-auto grid max-w-lg grid-cols-5">
+          {tabs.map((t) => {
+            const content = (active: boolean) => (
+              <span className={cx('relative flex flex-col items-center gap-0.5 pb-1.5 pt-2', active ? 'text-accent' : 'text-ink-3')}>
+                <t.icon className="h-[25px] w-[25px]" strokeWidth={active ? 2.2 : 1.8} />
+                <span className="text-[10px] font-medium">{t.label}</span>
+                {!!t.badge && (
+                  <span className="tabular absolute left-1/2 top-1 ml-2 min-w-[18px] rounded-full bg-red px-1 text-center text-[11px] font-semibold leading-[18px] text-white">
+                    {t.badge}
+                  </span>
+                )}
+              </span>
+            );
+            if (t.to === '#more')
+              return (
+                <button key={t.to} onClick={() => setMoreOpen(true)}>
+                  {content(moreActive)}
+                </button>
+              );
+            return (
+              <NavLink key={t.to} to={t.to}>
+                {({ isActive }) => content(isActive)}
+              </NavLink>
+            );
+          })}
+        </div>
+      </nav>
+
+      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="Más">
+        <div className="divide-y divide-line overflow-hidden rounded-xl bg-fill/50">
+          {moreItems.map((i) => (
+            <NavLink key={i.to} to={i.to} className="flex items-center gap-3 px-4 py-3.5 text-[16px] font-medium">
+              <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-accent text-white">
+                <i.icon className="h-[18px] w-[18px]" />
+              </span>
+              <span className="flex-1">{i.label}</span>
+              {!!i.badge && <span className="tabular rounded-full bg-red px-2 text-[13px] font-semibold text-white">{i.badge}</span>}
+            </NavLink>
+          ))}
+        </div>
+        <button
+          onClick={async () => {
+            await signOut();
+            navigate('/login');
+          }}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-red/10 py-3 text-[16px] font-medium text-red"
+        >
+          <LogOut className="h-[18px] w-[18px]" /> Cerrar sesión
+        </button>
+      </Modal>
+    </div>
+  );
+}
