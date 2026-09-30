@@ -9,7 +9,7 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { METHODS, PAYROLL_CATEGORY } from '../../lib/constants';
 import { addDays, addMonths, businessDate, daysBetween, isoDate, makePeriod, parseDate, periodRange, startOfWeek } from '../../lib/dates';
-import { fmtDate, fmtDateLong, fmtMoney, fmtMoney0, fmtPercent, fmtWeekday } from '../../lib/format';
+import { fmtDate, fmtDateLong, fmtMoney, fmtMoney0, fmtPercent, fmtWeekday, fmtMoneyExact } from '../../lib/format';
 import type { Transaction } from '../../lib/types';
 import { byId, cx, downloadCSV, entryCost, fullName, groupBy, sumBy } from '../../lib/utils';
 
@@ -148,7 +148,7 @@ export default function Finance() {
         <StatCard label="Coste de personal" value={fmtMoney0(s.staff)} sub={`Pagado en nóminas ${fmtMoney0(s.paid)}`} />
         <StatCard
           label="Resultado"
-          value={<span className={s.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney0(s.result)}</span>}
+          value={<span className={s.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoneyExact(s.result)}</span>}
           sub={s.income ? `Margen ${fmtPercent(s.result / s.income)}` : undefined}
         />
       </div>

@@ -8,7 +8,7 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { EVENT_KINDS, METHODS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, isoDate, parseDate } from '../../lib/dates';
-import { fmtDateFull, fmtHours, fmtMoney, fmtMoney0, fmtNum, fmtTime } from '../../lib/format';
+import { fmtDateFull, fmtHours, fmtMoney, fmtMoney0, fmtNum, fmtTime, fmtMoneyExact } from '../../lib/format';
 import type { Transaction } from '../../lib/types';
 import { byId, cx, entryCost, entryHours, fullName, groupBy, shiftHours, sumBy } from '../../lib/utils';
 
@@ -91,7 +91,7 @@ export default function EventDetail() {
         />
         <StatCard
           label="Resultado"
-          value={<span className={result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney0(result)}</span>}
+          value={<span className={result >= 0 ? 'text-green' : 'text-red'}>{fmtMoneyExact(result)}</span>}
           sub={totalIncome ? `Margen ${Math.round((result / totalIncome) * 100)}%` : undefined}
         />
       </div>

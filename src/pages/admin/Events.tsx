@@ -7,7 +7,7 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
-import { fmtDate, fmtMoney0, fmtNum, fmtWeekday } from '../../lib/format';
+import { fmtDate, fmtMoney0, fmtNum, fmtWeekday, fmtMoneyExact } from '../../lib/format';
 import { byId, cx, entryCost, groupBy, shiftHours, sumBy } from '../../lib/utils';
 
 type Tab = 'upcoming' | 'past';
@@ -106,7 +106,7 @@ export default function Events() {
                   <>
                     <div className={cx('tabular text-[17px] font-semibold', result >= 0 ? 'text-green' : 'text-red')}>
                       {result >= 0 ? '+' : ''}
-                      {fmtMoney0(result)}
+                      {fmtMoneyExact(result)}
                     </div>
                     <div className="tabular text-[12px] text-ink-2">{fmtMoney0(income)} ingresos</div>
                   </>

@@ -8,7 +8,7 @@ import { useInterval, useLoad, useNow } from '../../hooks';
 import { api } from '../../lib/api';
 import { DEPARTMENTS, EVENT_KINDS, PAYROLL_CATEGORY, REQUEST_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange, startOfWeek } from '../../lib/dates';
-import { fmtDate, fmtDateFull, fmtDuration, fmtHours, fmtMoney, fmtMoney0, fmtPercent, fmtTime, fmtWeekday } from '../../lib/format';
+import { fmtDate, fmtDateFull, fmtDuration, fmtHours, fmtMoney, fmtMoney0, fmtPercent, fmtTime, fmtWeekday, fmtMoneyExact } from '../../lib/format';
 import { byId, entryCost, entryHours, fullName, groupBy, shiftHours, sumBy } from '../../lib/utils';
 
 const WEEKS = 8;
@@ -93,7 +93,7 @@ export default function Dashboard() {
         <StatCard label="Coste de personal" value={fmtMoney0(stats.staff)} icon={<Users />} tone="purple" sub={`${fmtHours(stats.hours)} trabajadas`} />
         <StatCard
           label="Resultado"
-          value={<span className={stats.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney0(stats.result)}</span>}
+          value={<span className={stats.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoneyExact(stats.result)}</span>}
           icon={<Euro />}
           tone={stats.result >= 0 ? 'green' : 'red'}
           sub={stats.income ? `Margen ${fmtPercent(stats.result / stats.income)}` : '—'}

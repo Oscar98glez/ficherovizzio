@@ -8,6 +8,11 @@ const compact = new Intl.NumberFormat(LOCALE, { notation: 'compact', maximumFrac
 
 export const fmtMoney = (n: number) => money2.format(n || 0);
 export const fmtMoney0 = (n: number) => money0.format(Math.round(n || 0));
+/** Importe exacto: con céntimos si los tiene, sin decimales si es una cifra redonda. */
+export const fmtMoneyExact = (n: number) => {
+  const cents = Math.round((n || 0) * 100);
+  return cents % 100 === 0 ? money0.format(cents / 100) : money2.format(cents / 100);
+};
 export const fmtCompactMoney = (n: number) => `${compact.format(n || 0)} €`;
 
 export const fmtNum = (n: number, digits = 1) =>
