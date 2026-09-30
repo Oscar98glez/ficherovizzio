@@ -136,6 +136,7 @@ export default function Employees() {
                       <div className="truncate text-[13px] text-ink-2">
                         {e.position}
                         {!e.user_id && <span className="text-ink-3"> · sin cuenta</span>}
+                        {e.hourly_rate === 0 && <span className="font-medium text-orange"> · falta tarifa</span>}
                       </div>
                     </div>
                   </div>

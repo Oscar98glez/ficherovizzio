@@ -40,7 +40,7 @@ El esquema está en `supabase/migrations/`. El proyecto de Supabase está enlaza
 1. **El primer usuario que se registra es administrador.**
 2. El administrador da de alta a cada empleado en *Personal* con su email.
 3. El empleado se registra en `/registro` con ese mismo email y queda vinculado a su ficha automáticamente.
-4. Los emails que no están en ninguna ficha no pueden registrarse.
+4. Cualquier otra persona puede registrarse también: se le crea una ficha de **Camarero/a** con tarifa 0 €/h (en Personal aparece como "falta tarifa" para que el administrador la complete).
 
 ### Seguridad
 Todas las tablas usan Row Level Security: el trabajador solo puede leer sus propios fichajes, turnos y solicitudes; las finanzas solo son visibles para administradores. El fichaje se hace mediante las funciones `clock_in()` / `clock_out()` con la hora del servidor.

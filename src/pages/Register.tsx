@@ -48,7 +48,7 @@ export default function Register() {
     );
 
   return (
-    <AuthLayout title="Crea tu cuenta" subtitle="Usa el mismo email que te ha dado de alta tu responsable.">
+    <AuthLayout title="Crea tu cuenta" subtitle="Regístrate para fichar, ver tus turnos e indicar tu disponibilidad.">
       <form onSubmit={submit} className="card space-y-4 p-6">
         <Field label="Nombre completo">
           <Input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />

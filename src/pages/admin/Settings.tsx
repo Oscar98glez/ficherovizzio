@@ -118,7 +118,7 @@ export default function Settings() {
             </div>
           </Card>
           <p className="mt-3 px-1 text-[12px] text-ink-3">
-            {APP_NAME} · v0.1 · El primer usuario registrado es administrador. El resto sólo puede registrarse si su email está en una ficha de empleado.
+            {APP_NAME} · v0.1 · El primer usuario registrado es administrador. Cualquiera puede registrarse como trabajador: si su email no está en ninguna ficha, se le crea una como Camarero/a (revisa su tarifa en Personal).
           </p>
         </div>
       </div>

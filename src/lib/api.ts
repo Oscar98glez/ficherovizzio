@@ -27,7 +27,8 @@ export interface Repo<T extends { id: string }> {
 // ---------- Mensajes de error legibles ----------
 
 const ERRORS: [RegExp, string][] = [
-  [/EMAIL_NOT_AUTHORIZED|Database error saving new user/i, 'Este email no está autorizado. Pide al administrador que te dé de alta primero.'],
+  [/EMAIL_NOT_AUTHORIZED/i, 'Este email no está autorizado. Pide al administrador que te dé de alta primero.'],
+  [/Database error saving new user/i, 'No se ha podido crear la cuenta. Inténtalo de nuevo o avisa al administrador.'],
   [/ALREADY_CLOCKED_IN|time_entries_one_open/i, 'Ya hay un fichaje abierto para este empleado.'],
   [/NOT_CLOCKED_IN/i, 'No tienes ningún fichaje abierto.'],
   [/NO_EMPLOYEE/i, 'Tu usuario no está vinculado a ninguna ficha de empleado activa.'],
