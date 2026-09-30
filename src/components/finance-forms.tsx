@@ -8,6 +8,7 @@ import {
   INCOME_CATEGORIES,
   METHODS,
   PAYROLL_CATEGORY,
+  PRIVATE_EVENT_CATEGORY,
   REQUEST_KINDS,
 } from '../lib/constants';
 import { businessToday, isoDate, monthKey } from '../lib/dates';
@@ -172,14 +173,19 @@ export function TransactionForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, tx]);
 
-  const categories = f.kind === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const baseCategories = f.kind === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  // Conserva categorías antiguas (p. ej. "Barra") al editar movimientos anteriores
+  const categories = baseCategories.includes(f.category) ? baseCategories : [...baseCategories, f.category];
   const isPayroll = f.kind === 'expense' && f.category === PAYROLL_CATEGORY;
+  const isPrivateEvent = f.kind === 'income' && f.category === PRIVATE_EVENT_CATEGORY;
+  const privateEventSuggestions = events.filter((e) => e.kind === 'evento_privado').map((e) => e.name);
   const nearEvents = events.filter((e) => Math.abs(Date.parse(e.date) - Date.parse(f.date)) < 8 * 86400000);
 
   async function submit() {
     const amount = parseAmount(f.amount);
     if (amount <= 0) return toast.error('Introduce un importe mayor que 0');
     if (isPayroll && !f.employee_id) return toast.error('Selecciona el empleado de la nómina');
+    if (isPrivateEvent && !f.description.trim()) return toast.error('Indica de qué evento privado se trata');
     setSaving(true);
     try {
       const values: Partial<Transaction> = {
@@ -298,9 +304,26 @@ export function TransactionForm({
             </Field>
           </div>
         )}
-        <Field label="Concepto">
-          <Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Opcional" />
-        </Field>
+        {isPrivateEvent ? (
+          <Field label="¿Qué evento privado es?" hint="Por ejemplo: cena de empresa, boda, cumpleaños… con el nombre del cliente.">
+            <Input
+              list="private-events"
+              value={f.description}
+              onChange={(e) => setF({ ...f, description: e.target.value })}
+              placeholder="Ej. Boda García-López"
+              required
+            />
+            <datalist id="private-events">
+              {[...new Set(privateEventSuggestions)].map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          </Field>
+        ) : (
+          <Field label="Concepto">
+            <Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Opcional" />
+          </Field>
+        )}
       </div>
     </Modal>
   );

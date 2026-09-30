@@ -30,7 +30,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v3';
+const DB_KEY = 'vizzio.demo.db.v4';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -267,6 +267,8 @@ function seed(): DB {
 
   const saturdayNames = ['Saturday Night', 'Noche Latina', 'Techno Session', 'Remember 2000s', 'Neon Party'];
   let satIdx = 0;
+  const privateNames = ['Cena de empresa · Grupo Acme', 'Boda García-López', 'Cumpleaños 30 · Marta R.', 'Fiesta fin de curso · Universidad'];
+  let privateIdx = 0;
 
   const HOUR = 3_600_000;
   const start = addDays(today, -63);
@@ -359,17 +361,20 @@ function seed(): DB {
     const vip = privateEvent ? round(between(3000, 6000), 50) : round(dow === 4 ? between(250, 900) : between(1500, 5200), 50);
     const cloak = round(people * 0.45 * 2, 5);
     const cardShare = between(0.52, 0.68);
-    const addIncome = (category: string, amount: number, method: PaymentMethod) =>
-      amount > 0 && txAdd({ date, kind: 'income', category, amount, method, event_id: event.id });
+    const addIncome = (category: string, amount: number, method: PaymentMethod, description?: string) =>
+      amount > 0 && txAdd({ date, kind: 'income', category, amount, method, event_id: event.id, description });
+    // Reparto de la barra entre las tres barras del local
+    const addBars = (total: number, method: PaymentMethod) =>
+      [0.45, 0.35, 0.2].forEach((w, i) => addIncome(`Barra ${i + 1}`, round(total * w), method));
 
     if (privateEvent) {
-      addIncome('Eventos privados', vip, 'transferencia');
-      addIncome('Barra', round(bar * 0.4), 'tarjeta');
+      addIncome('Eventos privados', vip, 'transferencia', privateNames[privateIdx++ % privateNames.length]);
+      addIncome('Barra 1', round(bar * 0.4), 'tarjeta');
     } else {
       addIncome('Taquilla', round(door * cardShare), 'tarjeta');
       addIncome('Taquilla', round(door * (1 - cardShare)), 'efectivo');
-      addIncome('Barra', round(bar * cardShare), 'tarjeta');
-      addIncome('Barra', round(bar * (1 - cardShare)), 'efectivo');
+      addBars(bar * cardShare, 'tarjeta');
+      addBars(bar * (1 - cardShare), 'efectivo');
       addIncome('Reservados VIP', vip, 'tarjeta');
       addIncome('Guardarropa', cloak, 'efectivo');
     }

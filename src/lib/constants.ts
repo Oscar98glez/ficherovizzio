@@ -67,12 +67,16 @@ export const METHODS: Record<PaymentMethod, string> = {
 
 export const PAYROLL_CATEGORY = 'Nóminas';
 
+export const PRIVATE_EVENT_CATEGORY = 'Eventos privados';
+
+export const BAR_CATEGORIES = ['Barra 1', 'Barra 2', 'Barra 3'];
+
 export const INCOME_CATEGORIES = [
   'Taquilla',
-  'Barra',
+  ...BAR_CATEGORIES,
   'Reservados VIP',
   'Guardarropa',
-  'Eventos privados',
+  PRIVATE_EVENT_CATEGORY,
   'Patrocinios',
   'Otros ingresos',
 ];
@@ -92,7 +96,7 @@ export const EXPENSE_CATEGORIES = [
 ];
 
 /** Categorías que se desglosan en el cierre de caja de cada noche */
-export const CLOSEOUT_CATEGORIES = ['Taquilla', 'Barra', 'Reservados VIP', 'Guardarropa'];
+export const CLOSEOUT_CATEGORIES = ['Taquilla', ...BAR_CATEGORIES, 'Reservados VIP', 'Guardarropa'];
 
 export const REQUEST_KINDS: Record<RequestKind, string> = {
   vacaciones: 'Vacaciones',
