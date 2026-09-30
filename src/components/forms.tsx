@@ -4,7 +4,8 @@ import { api, errorMessage } from '../lib/api';
 import { CONTRACTS, DEPARTMENTS, EMPLOYEE_COLORS, POSITIONS, SHIFT_STATUS } from '../lib/constants';
 import { businessDate, businessToday, combineRange, fromLocalInput, isoDate, toLocalInput, toTimeInput } from '../lib/dates';
 import { fmtHours, fmtMoney } from '../lib/format';
-import type { ClubEvent, ContractType, Department, Employee, Shift, ShiftStatus, TimeEntry } from '../lib/types';
+import type { Availability, ClubEvent, ContractType, Department, Employee, Shift, ShiftStatus, TimeEntry } from '../lib/types';
+import { availabilityLabel, hhmm } from '../lib/availability';
 import { cx, entryHours, fullName, parseAmount, shiftHours } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
 import { Avatar, Button, Field, Input, Segmented, Select, Switch, Textarea } from './ui';
@@ -348,6 +349,8 @@ export function EntryForm({
   );
 }
 
+const availRank = (a: Availability | undefined) => (!a ? 1 : a.available ? 0 : 2);
+
 // =====================================================================
 //  Turno planificado (permite asignar varios empleados a la vez)
 // =====================================================================
@@ -360,6 +363,8 @@ export function ShiftForm({
   employees,
   events,
   onSaved,
+  employeeIds,
+  availability,
 }: {
   open: boolean;
   onClose: () => void;
@@ -368,17 +373,24 @@ export function ShiftForm({
   employees: Employee[];
   events: ClubEvent[];
   onSaved: () => void;
+  /** Empleados preseleccionados al crear (p. ej. desde la tabla de disponibilidad) */
+  employeeIds?: string[];
+  /** Disponibilidad de la semana para mostrarla junto a cada empleado */
+  availability?: Availability[];
 }) {
   const { toast } = useFeedback();
   const del = useDelete();
   const [saving, setSaving] = useState(false);
+  const availFor = (employeeId: string, day: string) => availability?.find((a) => a.employee_id === employeeId && a.date === day);
   const init = () => {
     const d = shift ? businessDate(shift.start_at) : date ?? isoDate(businessToday());
+    // Si se crea para una sola persona que ha indicado horario, se usa ese horario
+    const only = !shift && employeeIds?.length === 1 ? availFor(employeeIds[0], d) : undefined;
     return {
-      selected: new Set<string>(shift ? [shift.employee_id] : []),
+      selected: new Set<string>(shift ? [shift.employee_id] : employeeIds ?? []),
       date: d,
-      start: shift ? toTimeInput(shift.start_at) : '23:30',
-      end: shift ? toTimeInput(shift.end_at) : '06:00',
+      start: shift ? toTimeInput(shift.start_at) : hhmm(only?.available ? only.start_time : null) || '23:30',
+      end: shift ? toTimeInput(shift.end_at) : hhmm(only?.available ? only.end_time : null) || '06:00',
       position: shift?.position ?? '',
       event_id: shift?.event_id ?? events.find((e) => e.date === d)?.id ?? '',
       status: (shift?.status ?? 'planned') as ShiftStatus,
@@ -389,7 +401,7 @@ export function ShiftForm({
   useEffect(() => {
     if (open) setF(init());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, shift, date]);
+  }, [open, shift, date, employeeIds?.join(',')]);
 
   const toggle = (id: string) =>
     setF((s) => {
@@ -498,18 +510,22 @@ export function ShiftForm({
                 onClick={() =>
                   setF((s) => ({
                     ...s,
-                    selected: s.selected.size ? new Set() : new Set(employees.filter((e) => e.active).map((e) => e.id)),
+                    selected: s.selected.size
+                      ? new Set()
+                      : new Set(employees.filter((e) => e.active && (!availability || availFor(e.id, s.date)?.available)).map((e) => e.id)),
                   }))
                 }
               >
-                {f.selected.size ? 'Quitar todos' : 'Seleccionar todos'}
+                {f.selected.size ? 'Quitar todos' : availability ? 'Seleccionar disponibles' : 'Seleccionar todos'}
               </button>
             )}
           </div>
           <div className="grid max-h-64 grid-cols-1 gap-1.5 overflow-y-auto rounded-xl bg-fill/50 p-1.5 sm:grid-cols-2">
             {employees
               .filter((e) => e.active || f.selected.has(e.id))
-              .map((e) => {
+              .map((e) => ({ e, a: availFor(e.id, f.date) }))
+              .sort((x, y) => (availability ? availRank(x.a) - availRank(y.a) : 0))
+              .map(({ e, a }) => {
                 const on = f.selected.has(e.id);
                 return (
                   <button
@@ -524,7 +540,13 @@ export function ShiftForm({
                     <Avatar name={fullName(e)} color={e.color} size={28} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium">{fullName(e)}</span>
-                      <span className="block truncate text-[12px] text-ink-2">{e.position}</span>
+                      {availability ? (
+                        <span className={cx('block truncate text-[12px]', !a ? 'text-ink-3' : a.available ? 'text-green' : 'text-red')} title={a?.note ?? undefined}>
+                          {availabilityLabel(a)}
+                        </span>
+                      ) : (
+                        <span className="block truncate text-[12px] text-ink-2">{e.position}</span>
+                      )}
                     </span>
                     <span className={cx('grid h-5 w-5 place-items-center rounded-full border-2', on ? 'border-accent bg-accent text-on-accent' : 'border-ink-3/50')}>
                       {on && <Check className="h-3 w-3" strokeWidth={3.5} />}

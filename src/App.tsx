@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './auth';
 import { AppShell } from './components/AppShell';
 import { FeedbackProvider } from './components/overlay';
 import { Button, Card, EmptyState, Loading } from './components/ui';
+import AvailabilityAdmin from './pages/admin/Availability';
 import Dashboard from './pages/admin/Dashboard';
 import EmployeeDetail from './pages/admin/EmployeeDetail';
 import Employees from './pages/admin/Employees';
@@ -18,6 +19,7 @@ import TimeEntries from './pages/admin/TimeEntries';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Clock from './pages/worker/Clock';
+import MyAvailability from './pages/worker/MyAvailability';
 import MyHours from './pages/worker/MyHours';
 import MyRequests from './pages/worker/MyRequests';
 import MyShifts from './pages/worker/MyShifts';
@@ -83,6 +85,7 @@ export default function App() {
                 <Route path="personal/:id" element={<EmployeeDetail />} />
                 <Route path="fichajes" element={<TimeEntries />} />
                 <Route path="turnos" element={<Schedule />} />
+                <Route path="disponibilidad" element={<AvailabilityAdmin />} />
                 <Route path="noches" element={<Events />} />
                 <Route path="noches/:id" element={<EventDetail />} />
                 <Route path="finanzas" element={<Finance />} />
@@ -93,6 +96,7 @@ export default function App() {
               <Route path="fichar" element={<Clock />} />
               <Route path="mis-horas" element={<MyHours />} />
               <Route path="mis-turnos" element={<MyShifts />} />
+              <Route path="mi-disponibilidad" element={<MyAvailability />} />
               <Route path="mis-solicitudes" element={<MyRequests />} />
               <Route path="perfil" element={<Profile />} />
             </Route>

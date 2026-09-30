@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+  CalendarCheck,
   CalendarDays,
   Clock,
   Ellipsis,
@@ -62,6 +63,7 @@ export function AppShell() {
             { to: '/personal', label: 'Personal', icon: Users },
             { to: '/fichajes', label: 'Fichajes', icon: Clock },
             { to: '/turnos', label: 'Turnos', icon: CalendarDays },
+            { to: '/disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
             { to: '/solicitudes', label: 'Solicitudes', icon: Inbox, badge: pending },
           ],
         },
@@ -87,6 +89,7 @@ export function AppShell() {
             { to: '/fichar', label: 'Fichar', icon: Fingerprint },
             { to: '/mis-horas', label: 'Mis horas', icon: Clock },
             { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays },
+            { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
             { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
             { to: '/perfil', label: 'Perfil', icon: User },
           ],
@@ -102,7 +105,9 @@ export function AppShell() {
         all.find((i) => i.to === '/finanzas')!,
         { to: '#more', label: 'Más', icon: Ellipsis, badge: pending },
       ]
-    : all;
+    : all.length > 5
+      ? [...all.slice(0, 4), { to: '#more', label: 'Más', icon: Ellipsis }]
+      : all;
   const moreItems = all.filter((i) => !tabs.some((t) => t.to === i.to));
   const moreActive = moreItems.some((i) => location.pathname.startsWith(i.to));
 

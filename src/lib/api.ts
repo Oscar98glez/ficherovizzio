@@ -2,7 +2,7 @@ import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
 import { demoClockIn, demoClockOut, demoRepo, type TableName } from './demo';
 import { supabase } from './supabase';
-import type { ClubEvent, Employee, LeaveRequest, Profile, Shift, TimeEntry, Transaction } from './types';
+import type { Availability, ClubEvent, Employee, LeaveRequest, Profile, Shift, TimeEntry, Transaction } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -37,6 +37,8 @@ const ERRORS: [RegExp, string][] = [
   [/Password should be at least/i, 'La contraseña debe tener al menos 6 caracteres.'],
   [/employees_email_unique/i, 'Ya existe un empleado con ese email.'],
   [/out_after_in|end_after_start/i, 'La hora de salida debe ser posterior a la de entrada.'],
+  [/public.availability/i, 'Falta crear la tabla de disponibilidad en Supabase (ejecuta la migración 20260930130000_availability.sql).'],
+  [/availability_one_per_day/i, 'Ya hay disponibilidad guardada para ese día.'],
   [/row-level security|permission denied/i, 'No tienes permisos para realizar esta acción.'],
   [/Failed to fetch|NetworkError/i, 'Sin conexión con el servidor. Revisa tu conexión a internet.'],
 ];
@@ -144,6 +146,7 @@ export const api = {
   shifts: repo<Shift>('shifts'),
   transactions: mapped(repo<Transaction>('transactions'), withCurrentCategory),
   requests: repo<LeaveRequest>('leave_requests'),
+  availability: repo<Availability>('availability'),
 
   /** Fichar entrada del usuario conectado (hora del servidor). */
   clockIn: (notes?: string) =>

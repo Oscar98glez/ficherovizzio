@@ -103,3 +103,16 @@ export interface LeaveRequest {
   reviewed_at: string | null;
   created_at: string;
 }
+
+export interface Availability {
+  id: string;
+  employee_id: string;
+  /** YYYY-MM-DD: la noche de ese día */
+  date: string;
+  available: boolean;
+  /** HH:MM(:SS) o null = toda la noche */
+  start_time: string | null;
+  end_time: string | null;
+  note: string | null;
+  updated_at: string;
+}

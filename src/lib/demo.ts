@@ -4,8 +4,9 @@
  */
 import type { Query, Repo } from './api';
 import { PAYROLL_CATEGORY } from './constants';
-import { addDays, addMonths, businessDate, isoDate, monthKey, startOfDay, startOfMonth } from './dates';
+import { addDays, addMonths, businessDate, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
 import type {
+  Availability,
   ClubEvent,
   ContractType,
   Department,
@@ -26,11 +27,12 @@ export type TableName =
   | 'time_entries'
   | 'shifts'
   | 'transactions'
-  | 'leave_requests';
+  | 'leave_requests'
+  | 'availability';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v6';
+const DB_KEY = 'vizzio.demo.db.v7';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -100,7 +102,7 @@ function matches(row: Record<string, unknown>, q: Query) {
 }
 
 export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
-  const rows = () => getDb()[table];
+  const rows = () => (getDb()[table] ??= []);
   return {
     async list(q = {}) {
       await wait();
@@ -453,6 +455,31 @@ function seed(): DB {
     });
   });
 
+  // Disponibilidad de esta semana y la siguiente (Lucía deja la próxima sin rellenar para probarlo)
+  const availability: Availability[] = [];
+  const weekStart = startOfWeek(today);
+  for (const emp of employees.filter((e) => e.active)) {
+    for (let i = 0; i < 14; i++) {
+      if (emp.id === 'emp-3' && i >= 7) continue;
+      if (r() < 0.12) continue; // sin indicar
+      const day = addDays(weekStart, i);
+      const dow = day.getDay();
+      const clubNight = dow === 4 || dow === 5 || dow === 6;
+      const available = r() < (clubNight ? 0.85 : 0.35);
+      const late = available && r() < 0.2;
+      availability.push({
+        id: uid(),
+        employee_id: emp.id,
+        date: isoDate(day),
+        available,
+        start_time: late ? '01:00' : null,
+        end_time: null,
+        note: !available && r() < 0.3 ? 'Examen / compromiso personal' : late ? 'Llego más tarde' : null,
+        updated_at: stamp,
+      });
+    }
+  }
+
   const leave: LeaveRequest[] = [
     { id: uid(), employee_id: 'emp-3', kind: 'vacaciones', start_date: isoDate(addDays(today, 18)), end_date: isoDate(addDays(today, 21)), reason: 'Viaje familiar', status: 'pending', reviewed_at: null, created_at: stamp },
     { id: uid(), employee_id: 'emp-4', kind: 'cambio_turno', start_date: isoDate(addDays(today, 5)), end_date: isoDate(addDays(today, 5)), reason: 'Cambio con Nerea el viernes', status: 'pending', reviewed_at: null, created_at: stamp },
@@ -468,5 +495,6 @@ function seed(): DB {
     shifts,
     transactions: tx,
     leave_requests: leave,
+    availability,
   } as unknown as DB;
 }

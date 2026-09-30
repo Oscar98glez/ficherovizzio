@@ -18,12 +18,14 @@ export default function Schedule() {
 
   const { data, loading, error, reload } = useLoad(async () => {
     const { start, end } = periodRange(period);
-    const [employees, shifts, events] = await Promise.all([
+    const [employees, shifts, events, availability] = await Promise.all([
       api.employees.list({ order: ['first_name', 'asc'] }),
       api.shifts.list({ gte: ['start_at', start], lt: ['start_at', end], order: ['start_at', 'asc'] }),
       api.events.list({ gte: ['date', period.from], lt: ['date', period.to] }),
+      // Si aún no existe la tabla de disponibilidad, los turnos siguen funcionando
+      api.availability.list({ gte: ['date', period.from], lt: ['date', period.to] }).catch(() => []),
     ]);
-    return { employees, shifts, events };
+    return { employees, shifts, events, availability };
   }, [period]);
 
   if (loading && !data) return <Loading />;
@@ -112,6 +114,11 @@ export default function Schedule() {
                 <div className="flex items-baseline gap-1.5">
                   <span className={cx('text-[12px] font-semibold uppercase', isToday ? 'text-accent' : 'text-ink-2')}>{fmtWeekday(d)}</span>
                   <span className={cx('text-[20px] font-semibold', isToday && 'text-accent')}>{Number(d.slice(8))}</span>
+                  {data.availability.length > 0 && (
+                    <span className="text-[11px] font-medium text-green" title="Personas disponibles ese día">
+                      {data.availability.filter((a) => a.date === d && a.available).length} disp.
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={() => setModal({ shift: null, date: d })}
@@ -171,6 +178,7 @@ export default function Schedule() {
         date={modal?.date}
         employees={data.employees}
         events={data.events}
+        availability={data.availability}
         onSaved={reload}
       />
     </>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, Fingerprint, LogIn, LogOut, UserX } from 'lucide-react';
+import { CalendarCheck, CalendarDays, ChevronRight, Fingerprint, LogIn, LogOut, UserX } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { useFeedback } from '../../components/overlay';
 import { Card, CardHeader, EmptyState, ErrorBox, ListRow, Loading, StatCard } from '../../components/ui';
@@ -43,7 +43,16 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
       api.shifts.list({ eq: { employee_id: employeeId }, gte: ['start_at', businessStart(today)], lt: ['start_at', businessStart(isoDate(addDays(businessToday(), 30)))], order: ['start_at', 'asc'] }),
     ]);
     const openEntries = entries.some((e) => !e.clock_out) ? [] : await api.timeEntries.list({ eq: { employee_id: employeeId, clock_out: null } });
-    return { entries: [...openEntries, ...entries], shifts: shifts.filter((s) => s.status !== 'cancelled') };
+    // ¿Ha indicado ya su disponibilidad para la semana que viene?
+    const next = makePeriod('week', addDays(businessToday(), 7));
+    const nextAvailability = await api.availability
+      .list({ eq: { employee_id: employeeId }, gte: ['date', next.from], lt: ['date', next.to] })
+      .catch(() => null);
+    return {
+      entries: [...openEntries, ...entries],
+      shifts: shifts.filter((s) => s.status !== 'cancelled'),
+      missingAvailability: nextAvailability !== null && nextAvailability.length === 0,
+    };
   }, [employeeId]);
 
   if (loading && !data) return <Loading />;
@@ -132,6 +141,21 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
         <StatCard label="Esta semana" value={fmtHours(sumBy(weekEntries, (e) => entryHours(e, now)))} sub={fmtMoney(sumBy(weekEntries, (e) => entryCost(e, now)))} />
         <StatCard label={month.label} value={fmtHours(sumBy(monthEntries, (e) => entryHours(e, now)))} sub={fmtMoney(sumBy(monthEntries, (e) => entryCost(e, now)))} />
       </div>
+
+      {data.missingAvailability && (
+        <Link to="/mi-disponibilidad">
+          <Card className="mt-4 flex items-center gap-4 p-4 ring-1 ring-accent/40 transition hover:bg-fill/40">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent">
+              <CalendarCheck className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[16px] font-semibold">Indica tu disponibilidad</div>
+              <div className="text-[13px] text-ink-2">Aún no has dicho qué días puedes trabajar la semana que viene.</div>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-ink-3" />
+          </Card>
+        </Link>
+      )}
 
       {nextShift && !todayShift && (
         <Link to="/mis-turnos">
