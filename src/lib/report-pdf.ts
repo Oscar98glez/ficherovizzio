@@ -79,22 +79,12 @@ export async function renderReportPdf(r: FinanceReport) {
     [
       { label: 'Ingresos', value: money(t.income), color: GREEN },
       { label: 'Gastos operativos', value: money(t.expenses) },
-      { label: 'Coste de personal', value: money(t.staff) },
+      { label: 'Gastos de personal', value: money(t.staff) },
     ],
     19,
     13,
   );
-  kpiRow(
-    59,
-    [
-      { label: 'Horas trabajadas', value: clean(fmtHours(t.hours)) },
-      { label: 'Noches con personal', value: fmtNum(t.nights, 0) },
-      { label: 'Nóminas pagadas', value: money(r.payroll.total) },
-    ],
-    15,
-    10.5,
-  );
-  y = 84;
+  y = 66;
 
   // ---------- Tablas ----------
   const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
@@ -197,7 +187,7 @@ export async function renderReportPdf(r: FinanceReport) {
     y = Math.max(endA, endB) + 11;
   }
 
-  section('Gastos', 'Incluye el coste de personal devengado según fichajes');
+  section('Gastos', 'Incluye los gastos de personal: nóminas y camareros');
   const totalOut = t.expenses + t.staff;
   y = table({
     head: ['Concepto', 'Importe', '%'],
@@ -223,40 +213,43 @@ export async function renderReportPdf(r: FinanceReport) {
     columnWidths: { 0: 26 },
   }) + 11;
 
-  section('Coste de personal', 'Según fichajes cerrados del periodo');
-  y = table({
-    head: ['Empleado', 'Puesto', 'Noches', 'Horas', '€/hora', 'Coste'],
-    body: r.staff.map((s) => [s.name, s.position, fmtNum(s.nights, 0), clean(fmtHours(s.hours)), money(s.rate), money(s.cost)]),
-    foot: ['Total', '', '', clean(fmtHours(t.hours)), '', money(t.staff)],
-    right: [2, 3, 4, 5],
-  }) + 11;
-
-  // Nóminas: detalle por trabajador en el informe semanal; sólo totales en el resto
-  const p = r.payroll;
+  // Gastos de personal (nóminas + camareros): detalle por persona en el semanal; sólo totales en el resto
+  const p = r.staffPayments;
   if (p.detailed) {
-    section('Nóminas pagadas', 'Pagos realizados durante la semana');
+    section('Gastos de personal', 'Nóminas y camareros pagados durante la semana');
     y = table({
-      head: ['Fecha', 'Trabajador', 'Nómina de', 'Método', 'Importe'],
-      body: p.rows.map((x) => [shortDate(x.date), x.name, x.period, x.method, money(x.amount)]),
-      foot: ['Total', `${p.workers} ${p.workers === 1 ? 'trabajador' : 'trabajadores'}`, '', '', money(p.total)],
+      head: ['Fecha', 'Persona', 'Concepto', 'Método', 'Importe'],
+      body: p.rows.map((x) => [shortDate(x.date), x.name, x.concept, x.method, money(x.amount)]),
+      foot: ['Total', '', '', '', money(p.total)],
       right: [4],
       columnWidths: { 0: 26 },
-      empty: 'No se han pagado nóminas en este periodo',
+      empty: 'No se han pagado nóminas ni camareros en este periodo',
     }) + 11;
   } else {
-    section('Nóminas pagadas', 'Totales del periodo');
+    section('Gastos de personal', 'Totales del periodo');
     ensureSpace(17);
     kpiRow(
       y,
       [
-        { label: 'Total pagado', value: money(p.total) },
-        { label: 'Trabajadores pagados', value: fmtNum(p.workers, 0) },
-        { label: 'Pagos realizados', value: fmtNum(p.payments, 0) },
+        { label: 'Nóminas', value: money(p.payroll) },
+        { label: 'Camareros', value: money(p.waiters) },
+        { label: 'Total gastos de personal', value: money(p.total) },
       ],
       15,
       10.5,
     );
     y += 15 + 11;
+  }
+
+  // Horas según fichajes: sólo si se usan los fichajes. Informativo, no se resta del resultado.
+  if (r.staff.length) {
+    section('Horas trabajadas según fichajes', 'Informativo · no se resta del resultado');
+    y = table({
+      head: ['Empleado', 'Puesto', 'Noches', 'Horas', '€/hora', 'Coste estimado'],
+      body: r.staff.map((s) => [s.name, s.position, fmtNum(s.nights, 0), clean(fmtHours(s.hours)), money(s.rate), money(s.cost)]),
+      foot: ['Total', '', '', clean(fmtHours(t.hours)), '', money(t.accrued)],
+      right: [2, 3, 4, 5],
+    }) + 11;
   }
 
   // Mensual/anual: detalle de movimientos ordenado por categoría. El semanal ya va agrupado por apartado.
@@ -286,7 +279,7 @@ export async function renderReportPdf(r: FinanceReport) {
     body: [
       ['Ingresos', money(t.income)],
       ['Gastos operativos', money(-t.expenses)],
-      ['Coste de personal (según fichajes)', money(-t.staff)],
+      ['Gastos de personal (nóminas y camareros)', money(-t.staff)],
     ],
     right: [1],
   }) + 4;
@@ -306,8 +299,9 @@ export async function renderReportPdf(r: FinanceReport) {
   doc.text(
     doc.splitTextToSize(
       clean(
-        'Resultado = ingresos - gastos operativos - coste de personal devengado (horas fichadas × tarifa). ' +
-          'Los pagos de nóminas se muestran como información y no se descuentan dos veces. ' +
+        'Resultado = ingresos - gastos operativos - gastos de personal (nóminas y camareros pagados en el periodo). ' +
+          'El coste estimado según fichajes es informativo y no se resta. ' +
+          'En el resultado por noche, "Personal" incluye los fichajes y los camareros asociados a esa noche. ' +
           'Las noches van de 06:00 a 06:00.',
       ),
       contentW,

@@ -9,6 +9,7 @@ import {
   METHODS,
   PAYROLL_CATEGORY,
   PRIVATE_EVENT_CATEGORY,
+  WAITERS_CATEGORY,
   REQUEST_KINDS,
 } from '../lib/constants';
 import { businessToday, isoDate, monthKey } from '../lib/dates';
@@ -129,6 +130,8 @@ export function EventForm({
   );
 }
 
+const DEFAULT_EXPENSE_CATEGORY = 'Proveedores bebida';
+
 // =====================================================================
 //  Movimiento (ingreso / gasto)
 // =====================================================================
@@ -158,7 +161,7 @@ export function TransactionForm({
     return {
       kind,
       amount: src.amount != null ? String(src.amount).replace('.', ',') : '',
-      category: src.category ?? (kind === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[1]),
+      category: src.category ?? (kind === 'income' ? INCOME_CATEGORIES[0] : DEFAULT_EXPENSE_CATEGORY),
       date: src.date ?? isoDate(businessToday()),
       method: (src.method ?? (kind === 'income' ? 'tarjeta' : 'transferencia')) as PaymentMethod,
       event_id: src.event_id ?? '',
@@ -178,6 +181,7 @@ export function TransactionForm({
   const categories = baseCategories.includes(f.category) ? baseCategories : [...baseCategories, f.category];
   const isPayroll = f.kind === 'expense' && f.category === PAYROLL_CATEGORY;
   const isPrivateEvent = f.kind === 'income' && f.category === PRIVATE_EVENT_CATEGORY;
+  const isWaiters = f.kind === 'expense' && f.category === WAITERS_CATEGORY;
   const privateEventSuggestions = events.filter((e) => e.kind === 'evento_privado').map((e) => e.name);
   const nearEvents = events.filter((e) => Math.abs(Date.parse(e.date) - Date.parse(f.date)) < 8 * 86400000);
 
@@ -195,7 +199,7 @@ export function TransactionForm({
         date: f.date,
         method: f.method,
         event_id: f.event_id || null,
-        employee_id: isPayroll ? f.employee_id : null,
+        employee_id: isPayroll || isWaiters ? f.employee_id || null : null,
         period: isPayroll ? f.period || monthKey(f.date) : null,
         description: f.description.trim() || null,
       };
@@ -237,7 +241,7 @@ export function TransactionForm({
           full
           value={f.kind}
           onChange={(kind) =>
-            setF({ ...f, kind, category: kind === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[1], method: kind === 'income' ? 'tarjeta' : 'transferencia' })
+            setF({ ...f, kind, category: kind === 'income' ? INCOME_CATEGORIES[0] : DEFAULT_EXPENSE_CATEGORY, method: kind === 'income' ? 'tarjeta' : 'transferencia' })
           }
           options={[
             { value: 'income', label: 'Ingreso' },
@@ -303,6 +307,18 @@ export function TransactionForm({
               <Input type="month" value={f.period || monthKey(f.date)} onChange={(e) => setF({ ...f, period: e.target.value })} />
             </Field>
           </div>
+        )}
+        {isWaiters && (
+          <Field label="Camarero/a (opcional)" hint="Cuenta como gasto de personal junto con las nóminas.">
+            <Select value={f.employee_id} onChange={(e) => setF({ ...f, employee_id: e.target.value })}>
+              <option value="">Sin especificar</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {fullName(e)}
+                </option>
+              ))}
+            </Select>
+          </Field>
         )}
         {isPrivateEvent ? (
           <Field label="¿Qué evento privado es?" hint="Por ejemplo: cena de empresa, boda, cumpleaños… con el nombre del cliente.">

@@ -7,8 +7,8 @@ import { ReportDialog } from '../../components/ReportDialog';
 import { Button, Card, EmptyState, ErrorBox, Loading, PageHeader, SearchInput, Segmented, StatCard } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
-import { METHODS, PAYROLL_CATEGORY } from '../../lib/constants';
-import { addDays, addMonths, businessDate, daysBetween, isoDate, makePeriod, parseDate, periodRange, startOfWeek } from '../../lib/dates';
+import { isStaffExpense, METHODS } from '../../lib/constants';
+import { addDays, addMonths, daysBetween, isoDate, makePeriod, parseDate, periodRange, startOfWeek } from '../../lib/dates';
 import { fmtDate, fmtDateLong, fmtMoney, fmtPercent, fmtWeekday } from '../../lib/format';
 import type { Transaction } from '../../lib/types';
 import { byId, categoryRank, compareByCategory, cx, downloadCSV, entryCost, fullName, groupBy, sumBy } from '../../lib/utils';
@@ -37,11 +37,12 @@ export default function Finance() {
   const s = useMemo(() => {
     if (!data) return null;
     const inc = data.tx.filter((t) => t.kind === 'income');
-    const exp = data.tx.filter((t) => t.kind === 'expense' && t.category !== PAYROLL_CATEGORY);
-    const payroll = data.tx.filter((t) => t.kind === 'expense' && t.category === PAYROLL_CATEGORY);
+    // Gastos operativos por un lado y gastos de personal (nóminas + camareros) por otro
+    const exp = data.tx.filter((t) => t.kind === 'expense' && !isStaffExpense(t));
+    const staffTx = data.tx.filter(isStaffExpense);
     const income = sumBy(inc, (t) => t.amount);
     const expenses = sumBy(exp, (t) => t.amount);
-    const staff = sumBy(data.entries, (e) => entryCost(e));
+    const staff = sumBy(staffTx, (t) => t.amount);
     const result = income - expenses - staff;
 
     // Desglose en el orden de las categorías (Taquilla, Barra 1, Barra 2…)
@@ -71,7 +72,7 @@ export default function Finance() {
         detail: b.detail,
         values: [
           sumBy(inc.filter((t) => inRange(t.date)), (t) => t.amount),
-          sumBy(exp.filter((t) => inRange(t.date)), (t) => t.amount) + sumBy(data.entries.filter((e) => inRange(businessDate(e.clock_in))), (e) => entryCost(e)),
+          sumBy([...exp, ...staffTx].filter((t) => inRange(t.date)), (t) => t.amount),
         ],
       };
     });
@@ -81,9 +82,9 @@ export default function Finance() {
       expenses,
       staff,
       result,
-      paid: sumBy(payroll, (t) => t.amount),
+      accrued: sumBy(data.entries, (e) => entryCost(e)),
       incomeByCat: cat(inc, 'income'),
-      expenseByCat: [...cat(exp, 'expense'), { label: 'Personal (fichajes)', value: staff }].filter((x) => x.value > 0),
+      expenseByCat: cat([...exp, ...staffTx], 'expense').filter((x) => x.value > 0),
       series,
     };
   }, [data, period]);
@@ -146,7 +147,7 @@ export default function Finance() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <StatCard label="Ingresos" value={fmtMoney(s.income)} tone="green" />
         <StatCard label="Gastos operativos" value={fmtMoney(s.expenses)} />
-        <StatCard label="Coste de personal" value={fmtMoney(s.staff)} sub={`Pagado en nóminas ${fmtMoney(s.paid)}`} />
+        <StatCard label="Gastos de personal" value={fmtMoney(s.staff)} sub={s.accrued > 0 ? `Según fichajes ${fmtMoney(s.accrued)}` : 'Nóminas y camareros'} />
         <StatCard
           label="Resultado"
           value={<span className={s.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney(s.result)}</span>}
@@ -178,7 +179,7 @@ export default function Finance() {
       </div>
 
       <p className="mt-3 px-1 text-[12px] text-ink-3">
-        El resultado usa el coste de personal devengado según los fichajes. Los pagos de nóminas se muestran en movimientos pero no se descuentan dos veces.
+        Resultado = ingresos - gastos operativos - gastos de personal (nóminas y camareros pagados). El coste según fichajes es sólo informativo.
       </p>
 
       <div className="mb-3 mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

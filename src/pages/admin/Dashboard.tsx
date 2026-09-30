@@ -6,7 +6,7 @@ import { BarChart, HBarList } from '../../components/charts';
 import { Avatar, Badge, Card, CardHeader, EmptyState, ErrorBox, ListRow, LiveDot, Loading, PageHeader, StatCard } from '../../components/ui';
 import { useInterval, useLoad, useNow } from '../../hooks';
 import { api } from '../../lib/api';
-import { DEPARTMENTS, EVENT_KINDS, PAYROLL_CATEGORY, REQUEST_KINDS } from '../../lib/constants';
+import { DEPARTMENTS, EVENT_KINDS, isStaffExpense, REQUEST_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange, startOfWeek } from '../../lib/dates';
 import { fmtDate, fmtDateFull, fmtDuration, fmtHours, fmtMoney, fmtMoney0, fmtPercent, fmtTime, fmtWeekday, fmtMoneyExact } from '../../lib/format';
 import { byId, entryCost, entryHours, fullName, groupBy, shiftHours, sumBy } from '../../lib/utils';
@@ -45,8 +45,9 @@ export default function Dashboard() {
     const monthEntries = data.entries.filter((e) => e.clock_in >= start && e.clock_in < end);
     const monthTx = data.tx.filter((t) => t.date >= month.from && t.date < month.to);
     const income = sumBy(monthTx.filter((t) => t.kind === 'income'), (t) => t.amount);
-    const expenses = sumBy(monthTx.filter((t) => t.kind === 'expense' && t.category !== PAYROLL_CATEGORY), (t) => t.amount);
-    const staff = sumBy(monthEntries, (e) => entryCost(e));
+    // Gastos de personal = nóminas + camareros pagados; los fichajes sólo informan de las horas
+    const expenses = sumBy(monthTx.filter((t) => t.kind === 'expense' && !isStaffExpense(t)), (t) => t.amount);
+    const staff = sumBy(monthTx.filter(isStaffExpense), (t) => t.amount);
     const hours = sumBy(monthEntries, (e) => entryHours(e));
     const result = income - expenses - staff;
 
@@ -63,9 +64,7 @@ export default function Dashboard() {
       const t = isoDate(to);
       const wtx = data.tx.filter((x) => x.date >= f && x.date < t);
       const inc = sumBy(wtx.filter((x) => x.kind === 'income'), (x) => x.amount);
-      const exp =
-        sumBy(wtx.filter((x) => x.kind === 'expense' && x.category !== PAYROLL_CATEGORY), (x) => x.amount) +
-        sumBy(data.entries.filter((e) => businessDate(e.clock_in) >= f && businessDate(e.clock_in) < t), (e) => entryCost(e));
+      const exp = sumBy(wtx.filter((x) => x.kind === 'expense'), (x) => x.amount);
       return { label: fmtDate(from, { day: 'numeric', month: 'numeric' }), detail: `Semana del ${fmtDate(from)}`, values: [inc, exp] };
     });
 
@@ -90,7 +89,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <StatCard label="Ingresos del mes" value={fmtMoney0(stats.income)} icon={<TrendingUp />} tone="green" sub={month.label} />
         <StatCard label="Gastos operativos" value={fmtMoney0(stats.expenses)} icon={<TrendingDown />} tone="red" sub="Sin incluir personal" />
-        <StatCard label="Coste de personal" value={fmtMoney0(stats.staff)} icon={<Users />} tone="purple" sub={`${fmtHours(stats.hours)} trabajadas`} />
+        <StatCard label="Gastos de personal" value={fmtMoney0(stats.staff)} icon={<Users />} tone="purple" sub={`${fmtHours(stats.hours)} trabajadas`} />
         <StatCard
           label="Resultado"
           value={<span className={stats.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoneyExact(stats.result)}</span>}
@@ -145,7 +144,7 @@ export default function Dashboard() {
 
         <Card className="p-5 lg:col-span-3">
           <h3 className="mb-1 text-[17px] font-semibold tracking-tight">Ingresos vs. gastos</h3>
-          <p className="mb-4 text-[13px] text-ink-2">Últimas {WEEKS} semanas · gastos incluye coste de personal</p>
+          <p className="mb-4 text-[13px] text-ink-2">Últimas {WEEKS} semanas · gastos incluye nóminas y camareros</p>
           <BarChart
             data={stats.weeks}
             series={[

@@ -135,10 +135,7 @@ export async function renderReportXlsx(r: FinanceReport) {
   const kpis: [string, number, Fmt][] = [
     ['Ingresos', t.income, 'money'],
     ['Gastos operativos', t.expenses, 'money'],
-    ['Coste de personal (fichajes)', Math.round(t.staff * 100) / 100, 'money'],
-    ['Horas trabajadas', t.hours, 'hours'],
-    ['Noches con personal', t.nights, 'int'],
-    ['Nóminas pagadas', r.payroll.total, 'money'],
+    ['Gastos de personal (nóminas y camareros)', t.staff, 'money'],
   ];
   const kpiStart = row + 1;
   const cell = { income: `B${kpiStart}`, expenses: `B${kpiStart + 1}`, staff: `B${kpiStart + 2}` };
@@ -174,40 +171,57 @@ export async function renderReportXlsx(r: FinanceReport) {
   }
   row = amountTable(ws, row, 'Gastos por concepto', 'Concepto', r.expenseByCategory);
 
-  // Nóminas: detalle por trabajador en el informe semanal; sólo totales en el resto
-  const p = r.payroll;
+  // Gastos de personal (nóminas + camareros): detalle por persona en el semanal; sólo totales en el resto
+  const p = r.staffPayments;
   if (p.detailed) {
-    row = sectionTitle(ws, row, 'Nóminas pagadas');
+    row = sectionTitle(ws, row, 'Gastos de personal (nóminas y camareros)');
     if (p.rows.length) {
       row = writeTable(
         ws,
         row,
-        ['Fecha', 'Trabajador', 'Nómina de', 'Método', 'Importe'],
-        p.rows.map((x) => [excelDate(x.date), x.name, x.period, x.method, x.amount]),
+        ['Fecha', 'Persona', 'Concepto', 'Método', 'Importe'],
+        p.rows.map((x) => [excelDate(x.date), x.name, x.concept, x.method, x.amount]),
         ['date', undefined, undefined, undefined, 'money'],
         [5],
       );
     } else {
-      ws.getCell(`A${row}`).value = 'No se han pagado nóminas en este periodo';
+      ws.getCell(`A${row}`).value = 'No se han pagado nóminas ni camareros en este periodo';
       ws.getCell(`A${row}`).font = { color: { argb: 'FF8E8E93' } };
       row++;
     }
     row += 1;
   } else {
-    row = sectionTitle(ws, row, 'Nóminas pagadas (totales)');
+    row = sectionTitle(ws, row, 'Gastos de personal (totales)');
+    row = writeTable(
+      ws,
+      row,
+      ['Concepto', 'Importe'],
+      [
+        ['Nóminas', p.payroll],
+        ['Camareros', p.waiters],
+      ],
+      [undefined, 'money'],
+      [2],
+    );
+    row += 1;
+  }
+
+  // Coste estimado según fichajes (informativo): sólo si se usan los fichajes
+  if (r.staff.length) {
+    row = sectionTitle(ws, row, 'Según fichajes (informativo, no se resta del resultado)');
     const start = row + 1;
     row = writeTable(
       ws,
       row,
       ['Concepto', 'Valor'],
       [
-        ['Total pagado', p.total],
-        ['Trabajadores pagados', p.workers],
-        ['Pagos realizados', p.payments],
+        ['Coste estimado (horas × tarifa)', Math.round(t.accrued * 100) / 100],
+        ['Horas trabajadas', t.hours],
+        ['Noches con personal', t.nights],
       ],
       [undefined, 'money'],
     );
-    ws.getCell(`B${start + 1}`).numFmt = '0';
+    ws.getCell(`B${start + 1}`).numFmt = HOURS;
     ws.getCell(`B${start + 2}`).numFmt = '0';
     row += 1;
   }
@@ -222,7 +236,7 @@ export async function renderReportXlsx(r: FinanceReport) {
     [
       ['Ingresos', { formula: cell.income, result: t.income }],
       ['Gastos operativos', { formula: `-${cell.expenses}`, result: -t.expenses }],
-      ['Coste de personal (fichajes)', { formula: `-${cell.staff}`, result: -Math.round(t.staff * 100) / 100 }],
+      ['Gastos de personal (nóminas y camareros)', { formula: `-${cell.staff}`, result: -t.staff }],
       [t.result >= 0 ? 'Beneficio' : 'Pérdida', { formula: `SUM(B${resStart}:B${resStart + 2})`, result: t.result }],
       ['Margen sobre ingresos', { formula: `IF(B${resStart}=0,0,B${resStart + 3}/B${resStart})`, result: t.margin }],
     ],
@@ -237,7 +251,7 @@ export async function renderReportXlsx(r: FinanceReport) {
 
   const note = ws.getCell(`A${row}`);
   note.value =
-    'Resultado = ingresos - gastos operativos - coste de personal devengado (horas fichadas × tarifa). Los pagos de nóminas no se descuentan dos veces.';
+    'Resultado = ingresos - gastos operativos - gastos de personal (nóminas y camareros pagados en el periodo). El coste según fichajes es informativo.';
   note.font = { size: 9, italic: true, color: { argb: 'FF8E8E93' } };
 
   // ---------- Por noche ----------
@@ -253,18 +267,20 @@ export async function renderReportXlsx(r: FinanceReport) {
   );
   freezeAndFilter(wn, 1, 6, r.nights.length);
 
-  // ---------- Personal ----------
-  const wp = wb.addWorksheet('Personal');
-  wp.columns = [{ width: 24 }, { width: 22 }, { width: 20 }, { width: 9 }, { width: 10 }, { width: 11 }, { width: 14 }];
-  writeTable(
-    wp,
-    1,
-    ['Empleado', 'Puesto', 'Departamento', 'Noches', 'Horas', '€/hora', 'Coste'],
-    r.staff.map((s) => [s.name, s.position, s.department, s.nights, Math.round(s.hours * 100) / 100, s.rate, Math.round(s.cost * 100) / 100]),
-    [undefined, undefined, undefined, 'int', 'hours', 'money', 'money'],
-    [4, 5, 7],
-  );
-  freezeAndFilter(wp, 1, 7, r.staff.length);
+  // ---------- Horas según fichajes (informativo; sólo si se usan los fichajes) ----------
+  if (r.staff.length) {
+    const wp = wb.addWorksheet('Horas (fichajes)');
+    wp.columns = [{ width: 24 }, { width: 22 }, { width: 20 }, { width: 9 }, { width: 10 }, { width: 11 }, { width: 16 }];
+    writeTable(
+      wp,
+      1,
+      ['Empleado', 'Puesto', 'Departamento', 'Noches', 'Horas', '€/hora', 'Coste estimado'],
+      r.staff.map((s) => [s.name, s.position, s.department, s.nights, Math.round(s.hours * 100) / 100, s.rate, Math.round(s.cost * 100) / 100]),
+      [undefined, undefined, undefined, 'int', 'hours', 'money', 'money'],
+      [4, 5, 7],
+    );
+    freezeAndFilter(wp, 1, 7, r.staff.length);
+  }
 
   // ---------- Movimientos ----------
   if (weekly) {

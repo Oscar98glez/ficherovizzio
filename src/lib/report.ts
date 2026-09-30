@@ -1,5 +1,5 @@
 import { api } from './api';
-import { DEPARTMENTS, METHODS, PAYROLL_CATEGORY } from './constants';
+import { DEPARTMENTS, isStaffExpense, METHODS, PAYROLL_CATEGORY, WAITERS_CATEGORY } from './constants';
 import { addDays, businessDate, capitalize, isoDate, parseDate, periodRange } from './dates';
 import { fmtDate } from './format';
 import type { Transaction, TxKind } from './types';
@@ -36,8 +36,14 @@ export interface FinanceReport {
   generatedAt: Date;
   totals: {
     income: number;
+    /** Gastos operativos (sin nóminas ni camareros) */
     expenses: number;
+    /** Gastos de personal: nóminas + camareros pagados */
     staff: number;
+    payroll: number;
+    waiters: number;
+    /** Coste según fichajes (horas × tarifa). Informativo: no se resta del resultado. */
+    accrued: number;
     result: number;
     margin: number;
     hours: number;
@@ -49,14 +55,17 @@ export interface FinanceReport {
   incomeByMethod: Amount[];
   expenseByCategory: Amount[];
   nights: { date: string; name: string; income: number; expenses: number; staff: number; result: number }[];
+  /** Horas y coste por empleado según fichajes (informativo) */
   staff: { name: string; position: string; department: string; nights: number; hours: number; rate: number; cost: number }[];
-  /** Nóminas pagadas en el periodo: con detalle por trabajador sólo en informes semanales. */
-  payroll: {
+  /** Gastos de personal pagados (nóminas y camareros): con detalle por persona sólo en informes semanales. */
+  staffPayments: {
     detailed: boolean;
+    payroll: number;
+    waiters: number;
     total: number;
     workers: number;
     payments: number;
-    rows: { date: string; name: string; period: string; method: string; amount: number }[];
+    rows: { date: string; name: string; concept: string; method: string; amount: number }[];
   };
   movements: Movement[];
 }
@@ -89,7 +98,8 @@ function byCategory(items: Transaction[], kind: TxKind): Amount[] {
 
 const compareMovements = (a: Movement, b: Movement) =>
   compareByCategory({ kind: a.kind, category: a.category }, { kind: b.kind, category: b.category }) ||
-  a.date.localeCompare(b.date) || methodLabelRank(a.method) - methodLabelRank(b.method);
+  a.date.localeCompare(b.date) ||
+  methodLabelRank(a.method) - methodLabelRank(b.method);
 
 const payrollMonth = (period: string | null, date: string) =>
   capitalize(fmtDate(`${period ?? date.slice(0, 7)}-01`, { month: 'long', year: 'numeric' }));
@@ -110,23 +120,25 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
   const emps = byId(employees);
   const eventsById = byId(events);
   const closed = entries.filter((e) => e.clock_out);
-  const isPayroll = (t: Transaction) => t.kind === 'expense' && t.category === PAYROLL_CATEGORY;
   const income = tx.filter((t) => t.kind === 'income');
-  const expenses = tx.filter((t) => t.kind === 'expense' && !isPayroll(t));
-  const payroll = tx.filter(isPayroll);
+  const expenses = tx.filter((t) => t.kind === 'expense' && !isStaffExpense(t));
+  const staffTx = tx.filter(isStaffExpense);
+  const payroll = staffTx.filter((t) => t.category === PAYROLL_CATEGORY);
+  const waiters = staffTx.filter((t) => t.category === WAITERS_CATEGORY);
 
   const totalIncome = sumBy(income, (t) => t.amount);
   const totalExpenses = sumBy(expenses, (t) => t.amount);
-  const staffCost = sumBy(closed, (e) => entryCost(e));
-  const result = totalIncome - totalExpenses - staffCost;
+  const staffPaid = sumBy(staffTx, (t) => t.amount);
+  const result = totalIncome - totalExpenses - staffPaid;
 
+  // Por noche: gastos asociados a la noche + coste de su personal (fichajes y camareros de esa noche)
   const txByEvent = groupBy(tx.filter((t) => t.event_id), (t) => t.event_id!);
   const entriesByNight = groupBy(closed, (e) => businessDate(e.clock_in));
   const nights = events.map((ev) => {
     const t = txByEvent[ev.id] ?? [];
     const inc = sumBy(t.filter((x) => x.kind === 'income'), (x) => x.amount);
-    const exp = sumBy(t.filter((x) => x.kind === 'expense' && !isPayroll(x)), (x) => x.amount);
-    const staff = sumBy(entriesByNight[ev.date] ?? [], (e) => entryCost(e));
+    const exp = sumBy(t.filter((x) => x.kind === 'expense' && !isStaffExpense(x)), (x) => x.amount);
+    const staff = sumBy(entriesByNight[ev.date] ?? [], (e) => entryCost(e)) + sumBy(t.filter(isStaffExpense), (x) => x.amount);
     return { date: ev.date, name: ev.name, income: inc, expenses: exp, staff, result: inc - exp - staff };
   });
 
@@ -158,22 +170,24 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
     description: t.description ?? '',
   });
 
-  // En informes mensuales/anuales las nóminas se agrupan por día y sin nombres
+  // En informes mensuales/anuales los pagos al personal se agrupan por día y sin nombres
   const movements: Movement[] = detailed
     ? tx.map(toMovement).sort(compareMovements)
     : [
-        ...tx.filter((t) => !isPayroll(t)).map(toMovement),
-        ...Object.entries(groupBy(payroll, (t) => t.date)).map(([date, ps]) => ({
-          date,
+        ...tx.filter((t) => !isStaffExpense(t)).map(toMovement),
+        ...Object.values(groupBy(staffTx, (t) => `${t.date}|${t.category}`)).map((ps) => ({
+          date: ps[0].date,
           kind: 'expense' as const,
-          category: PAYROLL_CATEGORY,
+          category: ps[0].category,
           amount: sumBy(ps, (t) => t.amount),
           method: [...new Set(ps.map((t) => METHODS[t.method] ?? t.method))].join(', '),
           night: '',
           employee: '',
-          description: `${ps.length} ${ps.length === 1 ? 'nómina' : 'nóminas'}`,
+          description: `${ps.length} ${ps.length === 1 ? 'pago' : 'pagos'}`,
         })),
       ].sort(compareMovements);
+
+  const staffName = (t: Transaction) => (t.employee_id ? fullName(emps.get(t.employee_id)) : t.description || 'Sin especificar');
 
   return {
     from,
@@ -183,7 +197,10 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
     totals: {
       income: totalIncome,
       expenses: totalExpenses,
-      staff: staffCost,
+      staff: staffPaid,
+      payroll: sumBy(payroll, (t) => t.amount),
+      waiters: sumBy(waiters, (t) => t.amount),
+      accrued: sumBy(closed, (e) => entryCost(e)),
       result,
       margin: totalIncome ? result / totalIncome : 0,
       hours: sumBy(closed, (e) => entryHours(e)),
@@ -199,22 +216,26 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
     incomeByMethod: Object.entries(groupBy(income, (t) => METHODS[t.method] ?? t.method))
       .map(([label, xs]) => ({ label, value: sumBy(xs, (t) => t.amount) }))
       .sort((a, b) => methodLabelRank(a.label) - methodLabelRank(b.label)),
-    expenseByCategory: [...byCategory(expenses, 'expense'), { label: 'Personal (según fichajes)', value: staffCost }].filter((x) => x.value > 0),
+    expenseByCategory: byCategory([...expenses, ...staffTx], 'expense'),
     nights,
     staff,
-    payroll: {
+    staffPayments: {
       detailed,
-      total: sumBy(payroll, (t) => t.amount),
-      workers: new Set(payroll.map((t) => t.employee_id ?? t.id)).size,
-      payments: payroll.length,
+      payroll: sumBy(payroll, (t) => t.amount),
+      waiters: sumBy(waiters, (t) => t.amount),
+      total: staffPaid,
+      workers: new Set(staffTx.filter((t) => t.employee_id).map((t) => t.employee_id)).size,
+      payments: staffTx.length,
       rows: detailed
-        ? payroll.map((t) => ({
-            date: t.date,
-            name: t.employee_id ? fullName(emps.get(t.employee_id)) : t.description ?? '—',
-            period: payrollMonth(t.period, t.date),
-            method: METHODS[t.method] ?? t.method,
-            amount: t.amount,
-          })).sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name, 'es'))
+        ? staffTx
+            .map((t) => ({
+              date: t.date,
+              name: staffName(t),
+              concept: t.category === PAYROLL_CATEGORY ? `Nómina de ${payrollMonth(t.period, t.date).toLowerCase()}` : WAITERS_CATEGORY,
+              method: METHODS[t.method] ?? t.method,
+              amount: t.amount,
+            }))
+            .sort((a, b) => a.date.localeCompare(b.date) || a.concept.localeCompare(b.concept, 'es') || a.name.localeCompare(b.name, 'es'))
         : [],
     },
     movements,

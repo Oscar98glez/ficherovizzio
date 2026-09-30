@@ -66,6 +66,13 @@ export const METHODS: Record<PaymentMethod, string> = {
 };
 
 export const PAYROLL_CATEGORY = 'Nóminas';
+export const WAITERS_CATEGORY = 'Camareros';
+
+/** Gastos que cuentan como "gastos de personal" (lo pagado al personal) en lugar de gastos operativos. */
+export const STAFF_EXPENSE_CATEGORIES = [PAYROLL_CATEGORY, WAITERS_CATEGORY];
+
+export const isStaffExpense = (t: { kind: string; category: string }) =>
+  t.kind === 'expense' && STAFF_EXPENSE_CATEGORIES.includes(t.category);
 
 export const PRIVATE_EVENT_CATEGORY = 'Eventos privados';
 
@@ -83,6 +90,7 @@ export const INCOME_CATEGORIES = [
 
 export const EXPENSE_CATEGORIES = [
   PAYROLL_CATEGORY,
+  WAITERS_CATEGORY,
   'Proveedores bebida',
   'DJ / Artistas',
   'Seguridad externa',
