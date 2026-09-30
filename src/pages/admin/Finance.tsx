@@ -11,7 +11,7 @@ import { METHODS, PAYROLL_CATEGORY } from '../../lib/constants';
 import { addDays, addMonths, businessDate, daysBetween, isoDate, makePeriod, parseDate, periodRange, startOfWeek } from '../../lib/dates';
 import { fmtDate, fmtDateLong, fmtMoney, fmtPercent, fmtWeekday } from '../../lib/format';
 import type { Transaction } from '../../lib/types';
-import { byId, cx, downloadCSV, entryCost, fullName, groupBy, sumBy } from '../../lib/utils';
+import { byId, categoryRank, compareByCategory, cx, downloadCSV, entryCost, fullName, groupBy, sumBy } from '../../lib/utils';
 
 type KindFilter = 'all' | 'income' | 'expense';
 
@@ -44,10 +44,11 @@ export default function Finance() {
     const staff = sumBy(data.entries, (e) => entryCost(e));
     const result = income - expenses - staff;
 
-    const cat = (ts: Transaction[]) =>
+    // Desglose en el orden de las categorías (Taquilla, Barra 1, Barra 2…)
+    const cat = (ts: Transaction[], kind: Transaction['kind']) =>
       Object.entries(groupBy(ts, (t) => t.category))
         .map(([label, xs]) => ({ label, value: sumBy(xs, (t) => t.amount) }))
-        .sort((a, b) => b.value - a.value);
+        .sort((a, b) => categoryRank(kind, a.label) - categoryRank(kind, b.label) || a.label.localeCompare(b.label, 'es'));
 
     // Serie temporal: por día (semana), por semana (mes) o por mes (año)
     let buckets: { label: string; detail: string; from: string; to: string }[] = [];
@@ -81,8 +82,8 @@ export default function Finance() {
       staff,
       result,
       paid: sumBy(payroll, (t) => t.amount),
-      incomeByCat: cat(inc),
-      expenseByCat: [...cat(exp), { label: 'Personal (fichajes)', value: staff }].filter((x) => x.value > 0).sort((a, b) => b.value - a.value),
+      incomeByCat: cat(inc, 'income'),
+      expenseByCat: [...cat(exp, 'expense'), { label: 'Personal (fichajes)', value: staff }].filter((x) => x.value > 0),
       series,
     };
   }, [data, period]);
@@ -214,7 +215,7 @@ export default function Finance() {
                   </span>
                 </div>
                 <Card className="divide-y divide-line overflow-hidden">
-                  {ts.map((t) => (
+                  {[...ts].sort(compareByCategory).map((t) => (
                     <button key={t.id} onClick={() => setTxModal({ tx: t })} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-fill/60">
                       <span
                         className={cx(

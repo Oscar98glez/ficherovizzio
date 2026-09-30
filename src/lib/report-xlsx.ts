@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { APP_NAME } from './config';
 import { periodLabel, reportFileName, reportTitle, type Amount, type FinanceReport } from './report';
-import { downloadBlob } from './utils';
+import { downloadBlob, groupBy } from './utils';
 
 const MONEY = '#,##0.00 "€";[Red]-#,##0.00 "€"';
 const PCT = '0.0%';
@@ -146,8 +146,32 @@ export async function renderReportXlsx(r: FinanceReport) {
   kpis.forEach(([, , f], i) => (ws.getCell(`B${kpiStart + i}`).numFmt = FORMATS[f!]));
   row += 1;
 
-  row = amountTable(ws, row, 'Ingresos por concepto', 'Concepto', r.incomeByCategory);
-  row = amountTable(ws, row, 'Ingresos por método de cobro', 'Método', r.incomeByMethod);
+  const weekly = r.scope === 'semanal';
+  if (weekly) {
+    // Semanal: cada apartado en una fila, con lo cobrado en efectivo y con tarjeta
+    const hasOther = r.incomeBreakdown.some((x) => Math.abs(x.other) >= 0.005);
+    const lastCol = hasOther ? 5 : 4;
+    row = sectionTitle(ws, row, 'Ingresos por apartado');
+    const start = row + 1;
+    row = writeTable(
+      ws,
+      row,
+      ['Concepto', 'Efectivo', 'Tarjeta', ...(hasOther ? ['Otros'] : []), 'Total'],
+      r.incomeBreakdown.map((x, i) => [
+        x.label,
+        x.cash,
+        x.card,
+        ...(hasOther ? [x.other] : []),
+        { formula: `SUM(B${start + i}:${col(lastCol - 1)}${start + i})`, result: x.total },
+      ]),
+      [undefined, 'money', 'money', ...(hasOther ? (['money'] as Fmt[]) : []), 'money'],
+      hasOther ? [2, 3, 4, 5] : [2, 3, 4],
+    );
+    row += 1;
+  } else {
+    row = amountTable(ws, row, 'Ingresos por concepto', 'Concepto', r.incomeByCategory);
+    row = amountTable(ws, row, 'Ingresos por método de cobro', 'Método', r.incomeByMethod);
+  }
   row = amountTable(ws, row, 'Gastos por concepto', 'Concepto', r.expenseByCategory);
 
   // Nóminas: detalle por trabajador en el informe semanal; sólo totales en el resto
@@ -243,26 +267,51 @@ export async function renderReportXlsx(r: FinanceReport) {
   freezeAndFilter(wp, 1, 7, r.staff.length);
 
   // ---------- Movimientos ----------
-  const wm = wb.addWorksheet('Movimientos');
-  wm.columns = [{ width: 12 }, { width: 10 }, { width: 22 }, { width: 14 }, { width: 14 }, { width: 26 }, { width: 22 }, { width: 40 }];
-  writeTable(
-    wm,
-    1,
-    ['Fecha', 'Tipo', 'Categoría', 'Importe', 'Método', 'Noche', 'Empleado', 'Concepto'],
-    r.movements.map((m) => [
-      excelDate(m.date),
-      m.kind === 'income' ? 'Ingreso' : 'Gasto',
-      m.category,
-      m.kind === 'income' ? m.amount : -m.amount,
-      m.method,
-      m.night || null,
-      m.employee || null,
-      m.description || null,
-    ]),
-    ['date', undefined, undefined, 'money'],
-    [4],
-  );
-  freezeAndFilter(wm, 1, 8, r.movements.length);
+  if (weekly) {
+    // Semanal: agrupado por apartado, con efectivo y tarjeta por separado
+    const wm = wb.addWorksheet('Movimientos por concepto');
+    wm.columns = [{ width: 10 }, { width: 26 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 16 }];
+    const groups = Object.values(groupBy(r.movements, (m) => `${m.kind}|${m.category}`));
+    const sumMethod = (ms: typeof r.movements, method?: string) =>
+      ms.filter((m) => (method ? m.method === method : m.method !== 'Efectivo' && m.method !== 'Tarjeta')).reduce((a, m) => a + m.amount, 0);
+    writeTable(
+      wm,
+      1,
+      ['Tipo', 'Concepto', 'Efectivo', 'Tarjeta', 'Otros', 'Total'],
+      groups.map((ms, i) => [
+        ms[0].kind === 'income' ? 'Ingreso' : 'Gasto',
+        ms[0].category,
+        sumMethod(ms, 'Efectivo'),
+        sumMethod(ms, 'Tarjeta'),
+        sumMethod(ms),
+        { formula: `SUM(C${i + 2}:E${i + 2})`, result: ms.reduce((a, m) => a + m.amount, 0) },
+      ]),
+      [undefined, undefined, 'money', 'money', 'money', 'money'],
+    );
+    freezeAndFilter(wm, 1, 6, groups.length);
+  } else {
+    // Mensual/anual: detalle ordenado por categoría
+    const wm = wb.addWorksheet('Movimientos');
+    wm.columns = [{ width: 22 }, { width: 12 }, { width: 10 }, { width: 14 }, { width: 14 }, { width: 26 }, { width: 22 }, { width: 40 }];
+    writeTable(
+      wm,
+      1,
+      ['Categoría', 'Fecha', 'Tipo', 'Importe', 'Método', 'Noche', 'Empleado', 'Concepto'],
+      r.movements.map((m) => [
+        m.category,
+        excelDate(m.date),
+        m.kind === 'income' ? 'Ingreso' : 'Gasto',
+        m.kind === 'income' ? m.amount : -m.amount,
+        m.method,
+        m.night || null,
+        m.employee || null,
+        m.description || null,
+      ]),
+      [undefined, 'date', undefined, 'money'],
+      [4],
+    );
+    freezeAndFilter(wm, 1, 8, r.movements.length);
+  }
 
   const buffer = await wb.xlsx.writeBuffer();
   downloadBlob(reportFileName(r, 'xlsx'), new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));

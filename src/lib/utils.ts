@@ -1,4 +1,5 @@
-import type { Employee, Shift, TimeEntry } from './types';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './constants';
+import type { Employee, PaymentMethod, Shift, TimeEntry, TxKind } from './types';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -36,6 +37,35 @@ export const parseAmount = (s: string) => {
   const n = Number(String(s).replace(/\s/g, '').replace(',', '.'));
   return Number.isFinite(n) ? n : 0;
 };
+
+// ---------- Orden de movimientos por categoría ----------
+
+const METHOD_ORDER: PaymentMethod[] = ['efectivo', 'tarjeta', 'bizum', 'transferencia', 'otro'];
+
+/** Posición de una categoría según el orden de las listas (Taquilla, Barra 1, Barra 2…). */
+export function categoryRank(kind: TxKind, category: string) {
+  const list = kind === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  const i = list.indexOf(category);
+  return i < 0 ? list.length : i;
+}
+
+export const methodRank = (m: PaymentMethod) => {
+  const i = METHOD_ORDER.indexOf(m);
+  return i < 0 ? METHOD_ORDER.length : i;
+};
+
+/** Ingresos primero, después por categoría y, dentro de cada una, efectivo antes que tarjeta. */
+export function compareByCategory(
+  a: { kind: TxKind; category: string; method?: PaymentMethod },
+  b: { kind: TxKind; category: string; method?: PaymentMethod },
+) {
+  return (
+    (a.kind === b.kind ? 0 : a.kind === 'income' ? -1 : 1) ||
+    categoryRank(a.kind, a.category) - categoryRank(b.kind, b.category) ||
+    a.category.localeCompare(b.category, 'es') ||
+    (a.method && b.method ? methodRank(a.method) - methodRank(b.method) : 0)
+  );
+}
 
 // ---------- Cálculos de horas y coste ----------
 

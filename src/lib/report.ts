@@ -3,7 +3,7 @@ import { DEPARTMENTS, METHODS, PAYROLL_CATEGORY } from './constants';
 import { addDays, businessDate, capitalize, isoDate, parseDate, periodRange } from './dates';
 import { fmtDate } from './format';
 import type { Transaction, TxKind } from './types';
-import { byId, entryCost, entryHours, fullName, groupBy, sumBy } from './utils';
+import { byId, categoryRank, compareByCategory, entryCost, entryHours, fullName, groupBy, sumBy } from './utils';
 
 export type ReportFormat = 'pdf' | 'xlsx';
 export type ReportScope = 'semanal' | 'mensual' | 'trimestral' | 'anual' | 'personalizado';
@@ -44,6 +44,8 @@ export interface FinanceReport {
     nights: number;
   };
   incomeByCategory: Amount[];
+  /** Ingresos de cada apartado (Taquilla, Barra 1…) separados en efectivo y tarjeta */
+  incomeBreakdown: { label: string; cash: number; card: number; other: number; total: number }[];
   incomeByMethod: Amount[];
   expenseByCategory: Amount[];
   nights: { date: string; name: string; income: number; expenses: number; staff: number; result: number }[];
@@ -71,11 +73,23 @@ export function reportScope(from: string, to: string): ReportScope {
   return 'personalizado';
 }
 
-const byValue = (xs: Amount[]) => xs.filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+const METHOD_LABELS = ['efectivo', 'tarjeta', 'bizum', 'transferencia', 'otro'].map((m) => METHODS[m as keyof typeof METHODS]);
+const methodLabelRank = (label: string) => {
+  const i = METHOD_LABELS.indexOf(label);
+  return i < 0 ? METHOD_LABELS.length : i;
+};
 
-function totalsBy<T>(items: T[], key: (t: T) => string, value: (t: T) => number): Amount[] {
-  return byValue(Object.entries(groupBy(items, key)).map(([label, xs]) => ({ label, value: sumBy(xs, value) })));
+/** Totales por categoría, en el orden de las listas de categorías (Taquilla, Barra 1, Barra 2…). */
+function byCategory(items: Transaction[], kind: TxKind): Amount[] {
+  return Object.entries(groupBy(items, (t) => t.category))
+    .map(([label, xs]) => ({ label, value: sumBy(xs, (t) => t.amount) }))
+    .filter((x) => x.value > 0)
+    .sort((a, b) => categoryRank(kind, a.label) - categoryRank(kind, b.label) || a.label.localeCompare(b.label, 'es'));
 }
+
+const compareMovements = (a: Movement, b: Movement) =>
+  compareByCategory({ kind: a.kind, category: a.category }, { kind: b.kind, category: b.category }) ||
+  a.date.localeCompare(b.date) || methodLabelRank(a.method) - methodLabelRank(b.method);
 
 const payrollMonth = (period: string | null, date: string) =>
   capitalize(fmtDate(`${period ?? date.slice(0, 7)}-01`, { month: 'long', year: 'numeric' }));
@@ -146,7 +160,7 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
 
   // En informes mensuales/anuales las nóminas se agrupan por día y sin nombres
   const movements: Movement[] = detailed
-    ? tx.map(toMovement)
+    ? tx.map(toMovement).sort(compareMovements)
     : [
         ...tx.filter((t) => !isPayroll(t)).map(toMovement),
         ...Object.entries(groupBy(payroll, (t) => t.date)).map(([date, ps]) => ({
@@ -159,7 +173,7 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
           employee: '',
           description: `${ps.length} ${ps.length === 1 ? 'nómina' : 'nóminas'}`,
         })),
-      ].sort((a, b) => a.date.localeCompare(b.date));
+      ].sort(compareMovements);
 
   return {
     from,
@@ -175,9 +189,17 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
       hours: sumBy(closed, (e) => entryHours(e)),
       nights: new Set(closed.map((e) => businessDate(e.clock_in))).size,
     },
-    incomeByCategory: totalsBy(income, (t) => t.category, (t) => t.amount),
-    incomeByMethod: totalsBy(income, (t) => METHODS[t.method] ?? t.method, (t) => t.amount),
-    expenseByCategory: byValue([...totalsBy(expenses, (t) => t.category, (t) => t.amount), { label: 'Personal (según fichajes)', value: staffCost }]),
+    incomeByCategory: byCategory(income, 'income'),
+    incomeBreakdown: byCategory(income, 'income').map(({ label, value }) => {
+      const xs = income.filter((t) => t.category === label);
+      const cash = sumBy(xs.filter((t) => t.method === 'efectivo'), (t) => t.amount);
+      const card = sumBy(xs.filter((t) => t.method === 'tarjeta'), (t) => t.amount);
+      return { label, cash, card, other: value - cash - card, total: value };
+    }),
+    incomeByMethod: Object.entries(groupBy(income, (t) => METHODS[t.method] ?? t.method))
+      .map(([label, xs]) => ({ label, value: sumBy(xs, (t) => t.amount) }))
+      .sort((a, b) => methodLabelRank(a.label) - methodLabelRank(b.label)),
+    expenseByCategory: [...byCategory(expenses, 'expense'), { label: 'Personal (según fichajes)', value: staffCost }].filter((x) => x.value > 0),
     nights,
     staff,
     payroll: {

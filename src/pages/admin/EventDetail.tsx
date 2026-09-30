@@ -10,7 +10,7 @@ import { EVENT_KINDS, METHODS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, isoDate, parseDate } from '../../lib/dates';
 import { fmtDateFull, fmtHours, fmtMoney, fmtMoney0, fmtNum, fmtTime, fmtMoneyExact } from '../../lib/format';
 import type { Transaction } from '../../lib/types';
-import { byId, cx, entryCost, entryHours, fullName, groupBy, shiftHours, sumBy } from '../../lib/utils';
+import { byId, cx, entryCost, entryHours, fullName, groupBy, shiftHours, sumBy, categoryRank, compareByCategory } from '../../lib/utils';
 
 export default function EventDetail() {
   const { id = '' } = useParams();
@@ -49,7 +49,7 @@ export default function EventDetail() {
   const plannedCost = sumBy(plannedShifts, (s) => shiftHours(s) * (emps.get(s.employee_id)?.hourly_rate ?? 0));
   const incomeByCat = Object.entries(groupBy(income, (t) => t.category))
     .map(([label, ts]) => ({ label, value: sumBy(ts, (t) => t.amount) }))
-    .sort((a, b) => b.value - a.value);
+    .sort((a, b) => categoryRank('income', a.label) - categoryRank('income', b.label));
   const cash = sumBy(income.filter((t) => t.method === 'efectivo'), (t) => t.amount);
   const isFuture = ev.date > businessDate(Date.now());
 
@@ -143,7 +143,7 @@ export default function EventDetail() {
         {data.tx.length ? (
           <div className="divide-y divide-line pb-2">
             {[...data.tx]
-              .sort((a, b) => a.kind.localeCompare(b.kind) || b.amount - a.amount)
+              .sort(compareByCategory)
               .map((t) => (
                 <ListRow
                   key={t.id}

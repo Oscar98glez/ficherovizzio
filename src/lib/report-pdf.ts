@@ -160,27 +160,42 @@ export async function renderReportPdf(r: FinanceReport) {
   const pct = (v: number, total: number) => (total ? clean(fmtPercent(v / total)) : '—');
   const amountRows = (xs: Amount[], total: number) => xs.map((x) => [x.label, money(x.value), pct(x.value, total)]);
 
-  // Ingresos: por concepto y por método, en paralelo
-  section('Ingresos');
-  const half = (contentW - 6) / 2;
-  const y0 = y;
-  const endA = table({
-    head: ['Concepto', 'Importe', '%'],
-    body: amountRows(r.incomeByCategory, t.income),
-    foot: ['Total', money(t.income), ''],
-    right: [1, 2],
-    width: half,
-  });
-  y = y0;
-  const endB = table({
-    head: ['Método de cobro', 'Importe', '%'],
-    body: amountRows(r.incomeByMethod, t.income),
-    foot: ['Total', money(t.income), ''],
-    right: [1, 2],
-    left: M + half + 6,
-    width: half,
-  });
-  y = Math.max(endA, endB) + 11;
+  const weekly = r.scope === 'semanal';
+
+  if (weekly) {
+    // Semanal: cada apartado en una fila, con lo cobrado en efectivo y con tarjeta
+    const hasOther = r.incomeBreakdown.some((x) => Math.abs(x.other) >= 0.005);
+    const sumOf = (k: 'cash' | 'card' | 'other') => r.incomeBreakdown.reduce((a, x) => a + x[k], 0);
+    section('Ingresos', 'Efectivo y tarjeta por apartado');
+    y = table({
+      head: ['Concepto', 'Efectivo', 'Tarjeta', ...(hasOther ? ['Otros'] : []), 'Total'],
+      body: r.incomeBreakdown.map((x) => [x.label, money(x.cash), money(x.card), ...(hasOther ? [money(x.other)] : []), money(x.total)]),
+      foot: ['Total', money(sumOf('cash')), money(sumOf('card')), ...(hasOther ? [money(sumOf('other'))] : []), money(t.income)],
+      right: hasOther ? [1, 2, 3, 4] : [1, 2, 3],
+    }) + 11;
+  } else {
+    // Ingresos: por concepto y por método, en paralelo
+    section('Ingresos');
+    const half = (contentW - 6) / 2;
+    const y0 = y;
+    const endA = table({
+      head: ['Concepto', 'Importe', '%'],
+      body: amountRows(r.incomeByCategory, t.income),
+      foot: ['Total', money(t.income), ''],
+      right: [1, 2],
+      width: half,
+    });
+    y = y0;
+    const endB = table({
+      head: ['Método de cobro', 'Importe', '%'],
+      body: amountRows(r.incomeByMethod, t.income),
+      foot: ['Total', money(t.income), ''],
+      right: [1, 2],
+      left: M + half + 6,
+      width: half,
+    });
+    y = Math.max(endA, endB) + 11;
+  }
 
   section('Gastos', 'Incluye el coste de personal devengado según fichajes');
   const totalOut = t.expenses + t.staff;
@@ -244,21 +259,24 @@ export async function renderReportPdf(r: FinanceReport) {
     y += 15 + 11;
   }
 
-  section('Movimientos', `${r.movements.length} registros`);
-  y = table({
-    head: ['Fecha', 'Categoría', 'Método', 'Detalle', 'Importe'],
-    body: r.movements.map((m) => [
-      fmtDate(m.date, { day: '2-digit', month: '2-digit', year: '2-digit' }),
-      m.category,
-      m.method,
-      [m.night, m.employee, m.description].filter(Boolean).join(' · '),
-      `${m.kind === 'income' ? '' : '-'}${money(m.amount)}`,
-    ]),
-    right: [4],
-    signed: [4],
-    fontSize: 7.5,
-    columnWidths: { 0: 17, 1: 32, 2: 24, 4: 26 },
-  }) + 11;
+  // Mensual/anual: detalle de movimientos ordenado por categoría. El semanal ya va agrupado por apartado.
+  if (!weekly) {
+    section('Movimientos', `${r.movements.length} registros · ordenados por categoría`);
+    y = table({
+      head: ['Categoría', 'Fecha', 'Método', 'Detalle', 'Importe'],
+      body: r.movements.map((m) => [
+        m.category,
+        fmtDate(m.date, { day: '2-digit', month: '2-digit', year: '2-digit' }),
+        m.method,
+        [m.night, m.employee, m.description].filter(Boolean).join(' · '),
+        `${m.kind === 'income' ? '' : '-'}${money(m.amount)}`,
+      ]),
+      right: [4],
+      signed: [4],
+      fontSize: 7.5,
+      columnWidths: { 0: 32, 1: 17, 2: 24, 4: 26 },
+    }) + 11;
+  }
 
   // ---------- Resultado del periodo (al final) ----------
   ensureSpace(75);
