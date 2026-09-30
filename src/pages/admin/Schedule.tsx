@@ -7,9 +7,9 @@ import { Button, Card, ErrorBox, Loading, PageHeader, StatCard } from '../../com
 import { useLoad } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { businessDate, businessToday, daysBetween, isoDate, makePeriod, periodRange, shiftPeriod } from '../../lib/dates';
-import { fmtHours, fmtMoney0, fmtTime, fmtWeekday } from '../../lib/format';
+import { fmtWeekday, fmtShiftTimes } from '../../lib/format';
 import type { Shift } from '../../lib/types';
-import { byId, cx, fullName, groupBy, shiftHours, sumBy } from '../../lib/utils';
+import { byId, cx, fullName, groupBy } from '../../lib/utils';
 
 export default function Schedule() {
   const { toast, confirm } = useFeedback();
@@ -36,8 +36,8 @@ export default function Schedule() {
   const days = daysBetween(period.from, period.to);
   const byDay = groupBy(data.shifts, (s) => businessDate(s.start_at));
   const active = data.shifts.filter((s) => s.status !== 'cancelled');
-  const hours = sumBy(active, shiftHours);
-  const cost = sumBy(active, (s) => shiftHours(s) * (emps.get(s.employee_id)?.hourly_rate ?? 0));
+  const people = new Set(active.map((s) => s.employee_id)).size;
+  const closed = active.filter((s) => s.end_at).length;
   const today = isoDate(businessToday());
 
   async function copyPrevious() {
@@ -60,7 +60,7 @@ export default function Schedule() {
           return {
             employee_id: s.employee_id,
             start_at,
-            end_at: new Date(Date.parse(s.end_at) + week).toISOString(),
+            end_at: null,
             position: s.position,
             status: 'planned' as const,
             notes: s.notes,
@@ -99,8 +99,8 @@ export default function Schedule() {
 
       <div className="mb-5 grid grid-cols-3 gap-3 lg:gap-4">
         <StatCard label="Turnos" value={active.length} />
-        <StatCard label="Horas planificadas" value={fmtHours(hours)} />
-        <StatCard label="Coste previsto" value={fmtMoney0(cost)} />
+        <StatCard label="Personas" value={people} />
+        <StatCard label="Salidas fichadas" value={`${closed} / ${active.length}`} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-7 lg:gap-2.5">
@@ -151,7 +151,7 @@ export default function Schedule() {
                       </div>
                       <div className="tabular flex items-center justify-between gap-1 text-[11px] text-ink-2">
                         <span>
-                          {fmtTime(s.start_at)}–{fmtTime(s.end_at)}
+                          {fmtShiftTimes(s)}
                         </span>
                         {s.status === 'confirmed' && <span className="h-1.5 w-1.5 rounded-full bg-green" title="Confirmado" />}
                       </div>
@@ -162,8 +162,7 @@ export default function Schedule() {
               </div>
               {list.length > 0 && (
                 <div className="tabular border-t border-line px-3 py-1.5 text-[11px] text-ink-2">
-                  {list.filter((s) => s.status !== 'cancelled').length} pers. ·{' '}
-                  {fmtMoney0(sumBy(list.filter((s) => s.status !== 'cancelled'), (s) => shiftHours(s) * (emps.get(s.employee_id)?.hourly_rate ?? 0)))}
+                  {list.filter((s) => s.status !== 'cancelled').length} pers.
                 </div>
               )}
             </Card>

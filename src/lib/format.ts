@@ -27,6 +27,11 @@ export function fmtTime(iso: string | Date) {
   return new Date(iso).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Horario de un turno: "23:30–05:42", o "desde 23:30" si aún no se ha fichado la salida. */
+export function fmtShiftTimes(s: { start_at: string; end_at: string | null }) {
+  return s.end_at ? `${fmtTime(s.start_at)}–${fmtTime(s.end_at)}` : `desde ${fmtTime(s.start_at)}`;
+}
+
 type DateInput = string | Date;
 const toDate = (d: DateInput) => (typeof d === 'string' ? (d.length <= 10 ? parseDate(d) : new Date(d)) : d);
 

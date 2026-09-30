@@ -32,7 +32,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v7';
+const DB_KEY = 'vizzio.demo.db.v8';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -134,6 +134,8 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
         }
       }
       rows().push(...created);
+      if (table === 'time_entries') created.forEach((c) => syncShiftEnd(c as unknown as TimeEntry));
+      if (table === 'shifts') created.forEach((c) => fillShiftEnd(c as unknown as Shift));
       persist();
       return clone(created) as unknown as T[];
     },
@@ -142,6 +144,7 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
       const r = rows().find((x) => x.id === id);
       if (!r) throw new Error('Registro no encontrado');
       Object.assign(r, patch);
+      if (table === 'time_entries') syncShiftEnd(r as unknown as TimeEntry);
       persist();
       return clone(r) as unknown as T;
     },
@@ -151,6 +154,26 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
       persist();
     },
   };
+}
+
+/** Copia la hora de salida fichada al turno de esa noche (como el trigger de Supabase). */
+function syncShiftEnd(entry: TimeEntry) {
+  if (!entry.clock_out) return;
+  const night = businessDate(entry.clock_in);
+  for (const sh of getDb().shifts as unknown as Shift[]) {
+    if (sh.employee_id === entry.employee_id && sh.status !== 'cancelled' && businessDate(sh.start_at) === night && entry.clock_out > sh.start_at)
+      sh.end_at = entry.clock_out;
+  }
+}
+
+/** Al crear un turno de una noche ya fichada, toma la salida del fichaje. */
+function fillShiftEnd(shift: Shift) {
+  if (shift.end_at) return;
+  const night = businessDate(shift.start_at);
+  const entry = (getDb().time_entries as unknown as TimeEntry[]).find(
+    (e) => e.employee_id === shift.employee_id && e.clock_out && businessDate(e.clock_in) === night && e.clock_out > shift.start_at,
+  );
+  if (entry) shift.end_at = entry.clock_out;
 }
 
 function currentEmployee(): Employee {
@@ -188,6 +211,7 @@ export async function demoClockOut(notes?: string): Promise<TimeEntry> {
   const open = getDb().time_entries.find((t) => t.employee_id === emp.id && !t.clock_out);
   if (!open) throw new Error('NOT_CLOCKED_IN');
   open.clock_out = new Date().toISOString();
+  syncShiftEnd(open as unknown as TimeEntry);
   if (notes) open.notes = notes;
   persist();
   await wait();
@@ -434,6 +458,12 @@ function seed(): DB {
           description: `Nómina ${key} · ${emp.first_name} ${emp.last_name}`,
         });
     }
+  }
+
+  for (const sh of shifts) {
+    const night = businessDate(sh.start_at);
+    const entry = entries.find((e) => e.employee_id === sh.employee_id && e.clock_out && businessDate(e.clock_in) === night);
+    sh.end_at = entry?.clock_out ?? null;
   }
 
   // Personas fichadas ahora mismo (para ver el panel "En turno")

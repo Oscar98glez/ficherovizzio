@@ -6,7 +6,7 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { SHIFT_STATUS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
-import { fmtDate, fmtHours, fmtMoney, fmtTime, fmtWeekday } from '../../lib/format';
+import { fmtDate, fmtHours, fmtMoney, fmtWeekday, fmtShiftTimes } from '../../lib/format';
 import { byId, cx, shiftHours } from '../../lib/utils';
 import { NotLinked } from './Clock';
 
@@ -65,13 +65,14 @@ export default function MyShifts() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[16px] font-semibold">{ev?.name ?? s.position ?? 'Turno'}</div>
                   <div className="tabular text-[14px] text-ink-2">
-                    {fmtTime(s.start_at)} – {fmtTime(s.end_at)} · {fmtHours(shiftHours(s))}
+                    {fmtShiftTimes(s)}
+                    {s.end_at && ` · ${fmtHours(shiftHours(s))}`}
                   </div>
                   {s.notes && <div className="mt-1 text-[13px] text-ink-2">{s.notes}</div>}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <Badge tone={SHIFT_STATUS[s.status].tone}>{SHIFT_STATUS[s.status].label}</Badge>
-                  <span className="tabular text-[12px] text-ink-2">{fmtMoney(shiftHours(s) * employee.hourly_rate)}</span>
+                  {s.end_at && <span className="tabular text-[12px] text-ink-2">{fmtMoney(shiftHours(s) * employee.hourly_rate)}</span>}
                 </div>
               </Card>
             );

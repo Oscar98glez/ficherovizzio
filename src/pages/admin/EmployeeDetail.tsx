@@ -9,7 +9,7 @@ import { useLoad, useNow } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { CONTRACTS, DEPARTMENTS, SHIFT_STATUS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange } from '../../lib/dates';
-import { fmtDate, fmtDateLong, fmtDuration, fmtHours, fmtMoney, fmtTime } from '../../lib/format';
+import { fmtDate, fmtDateLong, fmtDuration, fmtHours, fmtMoney, fmtTime, fmtShiftTimes } from '../../lib/format';
 import type { Role, TimeEntry } from '../../lib/types';
 import { entryCost, entryHours, fullName, sumBy } from '../../lib/utils';
 
@@ -237,7 +237,7 @@ export default function EmployeeDetail() {
                   <ListRow
                     key={s.id}
                     title={fmtDate(businessDate(s.start_at), { weekday: 'long', day: 'numeric', month: 'short' })}
-                    subtitle={`${fmtTime(s.start_at)} – ${fmtTime(s.end_at)}`}
+                    subtitle={fmtShiftTimes(s)}
                     trailing={<Badge tone={SHIFT_STATUS[s.status].tone}>{SHIFT_STATUS[s.status].label}</Badge>}
                   />
                 ))}

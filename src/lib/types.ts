@@ -71,7 +71,8 @@ export interface Shift {
   employee_id: string;
   event_id: string | null;
   start_at: string;
-  end_at: string;
+  /** Hora de salida: se rellena sola cuando el empleado ficha la salida */
+  end_at: string | null;
   position: string | null;
   status: ShiftStatus;
   notes: string | null;

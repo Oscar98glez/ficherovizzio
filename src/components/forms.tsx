@@ -2,11 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Check, Trash2 } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { CONTRACTS, DEPARTMENTS, EMPLOYEE_COLORS, POSITIONS, SHIFT_STATUS } from '../lib/constants';
-import { businessDate, businessToday, combineRange, fromLocalInput, isoDate, toLocalInput, toTimeInput } from '../lib/dates';
-import { fmtHours, fmtMoney } from '../lib/format';
+import { businessDate, businessToday, fromLocalInput, isoDate, nightStart, toLocalInput, toTimeInput } from '../lib/dates';
+import { fmtHours, fmtMoney, fmtTime } from '../lib/format';
 import type { Availability, ClubEvent, ContractType, Department, Employee, Shift, ShiftStatus, TimeEntry } from '../lib/types';
 import { availabilityLabel, hhmm } from '../lib/availability';
-import { cx, entryHours, fullName, parseAmount, shiftHours } from '../lib/utils';
+import { cx, entryHours, fullName, parseAmount } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
 import { Avatar, Button, Field, Input, Segmented, Select, Switch, Textarea } from './ui';
 
@@ -384,15 +384,12 @@ export function ShiftForm({
   const availFor = (employeeId: string, day: string) => availability?.find((a) => a.employee_id === employeeId && a.date === day);
   const init = () => {
     const d = shift ? businessDate(shift.start_at) : date ?? isoDate(businessToday());
-    // Si se crea para una sola persona que ha indicado horario, se usa ese horario
+    // Si se crea para una sola persona que ha indicado desde qué hora puede, se usa esa hora
     const only = !shift && employeeIds?.length === 1 ? availFor(employeeIds[0], d) : undefined;
     return {
       selected: new Set<string>(shift ? [shift.employee_id] : employeeIds ?? []),
       date: d,
       start: shift ? toTimeInput(shift.start_at) : hhmm(only?.available ? only.start_time : null) || '23:30',
-      end: shift ? toTimeInput(shift.end_at) : hhmm(only?.available ? only.end_time : null) || '06:00',
-      position: shift?.position ?? '',
-      event_id: shift?.event_id ?? events.find((e) => e.date === d)?.id ?? '',
       status: (shift?.status ?? 'planned') as ShiftStatus,
       notes: shift?.notes ?? '',
     };
@@ -411,22 +408,23 @@ export function ShiftForm({
       return { ...s, selected };
     });
 
-  const dayEvents = events.filter((e) => e.date === f.date);
-  const range = f.start && f.end ? combineRange(f.date, f.start, f.end) : null;
-  const hours = range ? shiftHours(range) : 0;
   const selectedEmps = employees.filter((e) => f.selected.has(e.id));
-  const cost = selectedEmps.reduce((a, e) => a + e.hourly_rate * hours, 0);
 
   async function submit() {
     if (!f.selected.size) return toast.error('Selecciona al menos un empleado');
-    if (!range) return toast.error('Indica el horario');
+    if (!f.start) return toast.error('Indica la hora de entrada');
     setSaving(true);
     try {
-      const base = { ...range, event_id: f.event_id || null, status: f.status, notes: f.notes.trim() || null };
+      const start_at = nightStart(f.date, f.start);
+      // La noche se asocia sola al evento de ese día (si existe)
+      const event_id = events.find((e) => e.date === f.date)?.id ?? null;
+      const base = { start_at, event_id, status: f.status, notes: f.notes.trim() || null };
       if (shift) {
-        await api.shifts.update(shift.id, { ...base, employee_id: [...f.selected][0], position: f.position.trim() || null });
+        // Si cambia la entrada y la salida fichada queda antes, se descarta la salida
+        const end_at = shift.end_at && shift.end_at > start_at ? shift.end_at : null;
+        await api.shifts.update(shift.id, { ...base, end_at, employee_id: [...f.selected][0] });
       } else {
-        await api.shifts.createMany(selectedEmps.map((e) => ({ ...base, employee_id: e.id, position: f.position.trim() || e.position })));
+        await api.shifts.createMany(selectedEmps.map((e) => ({ ...base, end_at: null, employee_id: e.id, position: e.position })));
       }
       toast.success(shift ? 'Turno actualizado' : f.selected.size > 1 ? `${f.selected.size} turnos creados` : 'Turno creado');
       onSaved();
@@ -453,43 +451,19 @@ export function ShiftForm({
       }
     >
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Noche" className="col-span-2">
-            <Input
-              type="date"
-              value={f.date}
-              onChange={(e) => setF({ ...f, date: e.target.value, event_id: events.find((ev) => ev.date === e.target.value)?.id ?? '' })}
-              required
-            />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Noche">
+            <Input type="date" value={f.date} onChange={(e) => setF({ ...f, date: e.target.value })} required />
           </Field>
-          <Field label="Entrada">
+          <Field label="Hora de entrada">
             <Input type="time" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} required />
           </Field>
-          <Field label="Salida">
-            <Input type="time" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} required />
-          </Field>
         </div>
-
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Evento">
-            <Select value={f.event_id} onChange={(e) => setF({ ...f, event_id: e.target.value })}>
-              <option value="">Sin evento</option>
-              {dayEvents.map((ev) => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Puesto" hint={shift ? undefined : 'Vacío = el puesto habitual de cada empleado.'}>
-            <Input list="positions-shift" value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} />
-            <datalist id="positions-shift">
-              {POSITIONS.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
-          </Field>
-        </div>
+        <p className="-mt-1 text-[12px] text-ink-3">
+          {shift?.end_at
+            ? `Salida registrada a las ${fmtTime(shift.end_at)} (se toma del fichaje de salida).`
+            : 'La hora de salida se rellena sola cuando el empleado fiche la salida.'}
+        </p>
 
         <Field label="Estado">
           <Segmented
@@ -560,13 +534,6 @@ export function ShiftForm({
         <Field label="Notas">
           <Input value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="Opcional" />
         </Field>
-
-        <div className="flex items-center justify-between rounded-xl bg-fill/60 px-4 py-3 text-[14px]">
-          <span className="text-ink-2">
-            {fmtHours(hours)} por persona{selectedEmps.length > 1 && ` · ${selectedEmps.length} personas`}
-          </span>
-          <span className="tabular font-semibold">Coste previsto {fmtMoney(cost)}</span>
-        </div>
       </div>
     </Modal>
   );

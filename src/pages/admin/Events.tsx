@@ -8,7 +8,7 @@ import { api } from '../../lib/api';
 import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
 import { fmtDate, fmtMoney0, fmtNum, fmtWeekday, fmtMoneyExact } from '../../lib/format';
-import { byId, cx, entryCost, groupBy, shiftHours, sumBy } from '../../lib/utils';
+import { cx, entryCost, groupBy, sumBy } from '../../lib/utils';
 
 type Tab = 'upcoming' | 'past';
 
@@ -33,7 +33,6 @@ export default function Events() {
 
   const rows = useMemo(() => {
     if (!data) return [];
-    const emps = byId(data.employees);
     const entriesByDate = groupBy(data.entries, (e) => businessDate(e.clock_in));
     const shiftsByDate = groupBy(data.shifts.filter((s) => s.status !== 'cancelled'), (s) => businessDate(s.start_at));
     const txByEvent = groupBy(data.tx.filter((t) => t.event_id), (t) => t.event_id!);
@@ -46,8 +45,7 @@ export default function Events() {
         const expenses = sumBy(t.filter((x) => x.kind === 'expense'), (x) => x.amount);
         const staff = sumBy(entriesByDate[ev.date] ?? [], (e) => entryCost(e));
         const planned = shiftsByDate[ev.date] ?? [];
-        const plannedCost = sumBy(planned, (s) => shiftHours(s) * (emps.get(s.employee_id)?.hourly_rate ?? 0));
-        return { ev, income, result: income - expenses - staff, staffCount: planned.length, plannedCost };
+        return { ev, income, result: income - expenses - staff, staffCount: planned.length };
       });
   }, [data, tab, today]);
 
@@ -78,7 +76,7 @@ export default function Events() {
 
       {rows.length ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {rows.map(({ ev, income, result, staffCount, plannedCost }) => (
+          {rows.map(({ ev, income, result, staffCount }) => (
             <Card
               key={ev.id}
               role="button"
@@ -113,7 +111,6 @@ export default function Events() {
                 ) : (
                   <>
                     <div className="tabular text-[17px] font-semibold">{staffCount} pers.</div>
-                    <div className="tabular text-[12px] text-ink-2">{fmtMoney0(plannedCost)} previsto</div>
                   </>
                 )}
               </div>

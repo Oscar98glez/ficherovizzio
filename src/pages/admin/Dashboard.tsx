@@ -9,7 +9,7 @@ import { api } from '../../lib/api';
 import { DEPARTMENTS, EVENT_KINDS, isStaffExpense, REQUEST_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange, startOfWeek } from '../../lib/dates';
 import { fmtDate, fmtDateFull, fmtDuration, fmtHours, fmtMoney, fmtMoney0, fmtPercent, fmtTime, fmtWeekday, fmtMoneyExact } from '../../lib/format';
-import { byId, entryCost, entryHours, fullName, groupBy, shiftHours, sumBy } from '../../lib/utils';
+import { byId, entryCost, entryHours, fullName, groupBy, sumBy } from '../../lib/utils';
 
 const WEEKS = 8;
 
@@ -169,7 +169,6 @@ export default function Dashboard() {
             <div className="divide-y divide-line pb-2">
               {data.events.map((ev) => {
                 const s = shiftsByDate[ev.date] ?? [];
-                const cost = sumBy(s, (x) => shiftHours(x) * (emps.get(x.employee_id)?.hourly_rate ?? 0));
                 return (
                   <ListRow
                     key={ev.id}
@@ -181,7 +180,7 @@ export default function Dashboard() {
                       </div>
                     }
                     title={ev.name}
-                    subtitle={`${s.length} en turno · ${fmtMoney0(cost)} previsto`}
+                    subtitle={`${s.length} ${s.length === 1 ? 'persona' : 'personas'} en turno`}
                     trailing={<Badge tone={EVENT_KINDS[ev.kind].tone}>{EVENT_KINDS[ev.kind].label}</Badge>}
                   />
                 );

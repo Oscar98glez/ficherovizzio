@@ -8,9 +8,9 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { EVENT_KINDS, METHODS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, isoDate, parseDate } from '../../lib/dates';
-import { fmtDateFull, fmtHours, fmtMoney, fmtMoney0, fmtNum, fmtTime, fmtMoneyExact } from '../../lib/format';
+import { fmtDateFull, fmtHours, fmtMoney, fmtMoney0, fmtNum, fmtTime, fmtMoneyExact, fmtShiftTimes } from '../../lib/format';
 import type { Transaction } from '../../lib/types';
-import { byId, cx, entryCost, entryHours, fullName, groupBy, shiftHours, sumBy, categoryRank, compareByCategory } from '../../lib/utils';
+import { byId, cx, entryCost, entryHours, fullName, groupBy, sumBy, categoryRank, compareByCategory } from '../../lib/utils';
 
 export default function EventDetail() {
   const { id = '' } = useParams();
@@ -46,7 +46,6 @@ export default function EventDetail() {
   const staffCost = sumBy(data.entries, (e) => entryCost(e));
   const result = totalIncome - totalExpenses - staffCost;
   const plannedShifts = data.shifts.filter((s) => s.status !== 'cancelled');
-  const plannedCost = sumBy(plannedShifts, (s) => shiftHours(s) * (emps.get(s.employee_id)?.hourly_rate ?? 0));
   const incomeByCat = Object.entries(groupBy(income, (t) => t.category))
     .map(([label, ts]) => ({ label, value: sumBy(ts, (t) => t.amount) }))
     .sort((a, b) => categoryRank('income', a.label) - categoryRank('income', b.label));
@@ -86,8 +85,8 @@ export default function EventDetail() {
         <StatCard label="Gastos" value={fmtMoney0(totalExpenses)} sub={`${expenses.length} movimientos`} />
         <StatCard
           label={isFuture ? 'Personal previsto' : 'Coste de personal'}
-          value={fmtMoney0(isFuture ? plannedCost : staffCost)}
-          sub={isFuture ? `${plannedShifts.length} turnos` : `${new Set(data.entries.map((e) => e.employee_id)).size} personas`}
+          value={isFuture ? `${plannedShifts.length} personas` : fmtMoney0(staffCost)}
+          sub={isFuture ? 'Turnos asignados' : `${new Set(data.entries.map((e) => e.employee_id)).size} personas`}
         />
         <StatCard
           label="Resultado"
@@ -114,8 +113,7 @@ export default function EventDetail() {
                       key={s.id}
                       leading={<Avatar name={fullName(emp)} color={emp?.color} size={32} />}
                       title={fullName(emp)}
-                      subtitle={`${s.position ?? emp?.position ?? ''} · ${fmtTime(s.start_at)}–${fmtTime(s.end_at)}`}
-                      trailing={<span className="tabular text-[14px] text-ink-2">{fmtMoney0(shiftHours(s) * (emp?.hourly_rate ?? 0))}</span>}
+                      subtitle={`${s.position ?? emp?.position ?? ''} · ${fmtShiftTimes(s)}`}
                     />
                   );
                 })

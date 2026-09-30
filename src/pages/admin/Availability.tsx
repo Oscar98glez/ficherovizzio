@@ -8,7 +8,7 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { availabilityHours } from '../../lib/availability';
 import { addDays, businessDate, businessToday, daysBetween, isoDate, makePeriod, periodRange } from '../../lib/dates';
-import { fmtTime, fmtWeekday } from '../../lib/format';
+import { fmtWeekday, fmtShiftTimes } from '../../lib/format';
 import type { Availability as AvailabilityRow, Shift } from '../../lib/types';
 import { cx, fullName } from '../../lib/utils';
 
@@ -140,7 +140,7 @@ export default function Availability() {
                               <>
                                 <span className="text-[11px] font-semibold uppercase">Turno</span>
                                 <span className="tabular text-[12px] font-medium">
-                                  {fmtTime(s.start_at)}–{fmtTime(s.end_at)}
+                                  {fmtShiftTimes(s)}
                                 </span>
                               </>
                             ) : !a ? (

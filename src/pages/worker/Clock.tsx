@@ -114,7 +114,7 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
             {open ? fmtDuration(elapsed) : new Date(now).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           </div>
           <div className="tabular mt-2 h-5 text-[15px] text-ink-2">
-            {open ? `${fmtMoney(entryCost(open, now))} generados en este turno` : todayShift ? `Tu turno de hoy: ${fmtTime(todayShift.start_at)} – ${fmtTime(todayShift.end_at)}` : ''}
+            {open ? `${fmtMoney(entryCost(open, now))} generados en este turno` : todayShift ? `Tu turno de hoy: entrada a las ${fmtTime(todayShift.start_at)}` : ''}
           </div>
 
           <div className="relative mx-auto mt-8 h-44 w-44">
@@ -170,7 +170,7 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
               </div>
             </div>
             <div className="tabular text-right text-[15px] font-medium">
-              {fmtTime(nextShift.start_at)} – {fmtTime(nextShift.end_at)}
+              Entrada {fmtTime(nextShift.start_at)}
             </div>
           </Card>
         </Link>

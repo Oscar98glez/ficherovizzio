@@ -76,8 +76,9 @@ export function entryHours(e: Pick<TimeEntry, 'clock_in' | 'clock_out' | 'break_
 
 export const entryCost = (e: TimeEntry, now = Date.now()) => entryHours(e, now) * (e.hourly_rate || 0);
 
+/** Horas del turno (0 mientras no tenga salida fichada) */
 export const shiftHours = (s: Pick<Shift, 'start_at' | 'end_at'>) =>
-  Math.max(0, (Date.parse(s.end_at) - Date.parse(s.start_at)) / 3_600_000);
+  s.end_at ? Math.max(0, (Date.parse(s.end_at) - Date.parse(s.start_at)) / 3_600_000) : 0;
 
 // ---------- Exportar CSV (formato Excel en español) ----------
 

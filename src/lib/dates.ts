@@ -76,6 +76,16 @@ export function toTimeInput(iso: string): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/**
+ * Instante de entrada de un turno a partir de la noche y la hora: las horas de madrugada
+ * (antes de las 06:00) pertenecen al día siguiente. Noche del 7 a las 00:30 → 8 a las 00:30.
+ */
+export function nightStart(date: string, time: string): string {
+  const d = new Date(`${date}T${time}`);
+  if (d.getHours() < BUSINESS_DAY_OFFSET_HOURS) d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
 /** Combina fecha + horas; si el fin es anterior al inicio, pasa al día siguiente. */
 export function combineRange(date: string, start: string, end: string) {
   const s = new Date(`${date}T${start}`);
