@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { FileSpreadsheet, FileText } from 'lucide-react';
 import { errorMessage } from '../lib/api';
-import { addDays, addMonths, businessToday, isoDate, startOfMonth } from '../lib/dates';
-import { exportFinanceReport, type ReportFormat } from '../lib/report';
+import { addDays, addMonths, businessToday, isoDate, startOfMonth, startOfWeek } from '../lib/dates';
+import { exportFinanceReport, reportDays, reportScope, PAYROLL_DETAIL_MAX_DAYS, type ReportFormat } from '../lib/report';
 import { cx } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
 import { Field, Input } from './ui';
@@ -17,7 +17,10 @@ function presets(): { label: string; range: Range }[] {
   const month = startOfMonth(today);
   const quarter = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1);
   const lastDay = (start: Date, months: number) => isoDate(addDays(addMonths(start, months), -1));
+  const week = startOfWeek(today);
   return [
+    { label: 'Esta semana', range: { from: isoDate(week), to: isoDate(addDays(week, 6)) } },
+    { label: 'Semana anterior', range: { from: isoDate(addDays(week, -7)), to: isoDate(addDays(week, -1)) } },
     { label: 'Este mes', range: { from: isoDate(month), to: lastDay(month, 1) } },
     { label: 'Mes anterior', range: { from: isoDate(addMonths(month, -1)), to: lastDay(addMonths(month, -1), 1) } },
     { label: 'Últimos 30 días', range: { from: isoDate(addDays(today, -29)), to: isoDate(today) } },
@@ -70,6 +73,11 @@ export function ReportDialog({ open, onClose, initial }: { open: boolean; onClos
     if (open) setRange(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  const valid = !!range.from && !!range.to && range.to >= range.from;
+  const days = valid ? reportDays(range.from, range.to) : 0;
+  const scope = valid ? reportScope(range.from, range.to) : 'personalizado';
+  const detailed = days <= PAYROLL_DETAIL_MAX_DAYS;
 
   async function submit() {
     if (!range.from || !range.to) return toast.error('Indica las dos fechas');
@@ -139,10 +147,18 @@ export function ReportDialog({ open, onClose, initial }: { open: boolean; onClos
           </div>
         </div>
 
-        <p className="rounded-xl bg-fill/60 px-4 py-3 text-[13px] text-ink-2">
-          Incluye indicadores, ingresos por concepto y método de cobro, gastos, resultado por noche, coste de personal por
-          empleado y el detalle de todos los movimientos.
-        </p>
+        {valid && (
+          <div className="rounded-xl bg-fill px-4 py-3 text-[13px] text-ink-2">
+            <div className="mb-1 font-semibold text-ink">
+              Informe {scope === 'personalizado' ? 'personalizado' : scope} · {days} {days === 1 ? 'día' : 'días'}
+            </div>
+            Indicadores, ingresos, gastos, resultado por noche, coste de personal y movimientos, con el beneficio del periodo al
+            final.{' '}
+            {detailed
+              ? 'Las nóminas pagadas aparecen con el nombre de cada trabajador y su importe.'
+              : `Las nóminas pagadas aparecen sólo con los totales (el detalle por trabajador se incluye en informes de ${PAYROLL_DETAIL_MAX_DAYS} días o menos).`}
+          </div>
+        )}
       </div>
     </Modal>
   );

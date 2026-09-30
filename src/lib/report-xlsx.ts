@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { APP_NAME } from './config';
-import { periodLabel, reportFileName, type Amount, type FinanceReport } from './report';
+import { periodLabel, reportFileName, reportTitle, type Amount, type FinanceReport } from './report';
 import { downloadBlob } from './utils';
 
 const MONEY = '#,##0.00 "€";[Red]-#,##0.00 "€"';
@@ -123,8 +123,8 @@ export async function renderReportXlsx(r: FinanceReport) {
 
   // ---------- Resumen ----------
   const ws = wb.addWorksheet('Resumen', { properties: { tabColor: { argb: 'FF0071E3' } }, views: [{ showGridLines: false }] });
-  ws.columns = [{ width: 34 }, { width: 18 }, { width: 10 }];
-  ws.getCell('A1').value = `${APP_NAME} · Informe financiero`;
+  ws.columns = [{ width: 34 }, { width: 18 }, { width: 18 }, { width: 16 }, { width: 16 }];
+  ws.getCell('A1').value = `${APP_NAME} · ${reportTitle(r)}`;
   ws.getCell('A1').font = { bold: true, size: 18 };
   ws.getCell('A2').value = `Periodo: ${periodLabel(r)}`;
   ws.getCell('A2').font = { size: 11, color: { argb: 'FF3A3A3C' } };
@@ -136,24 +136,81 @@ export async function renderReportXlsx(r: FinanceReport) {
     ['Ingresos', t.income, 'money'],
     ['Gastos operativos', t.expenses, 'money'],
     ['Coste de personal (fichajes)', Math.round(t.staff * 100) / 100, 'money'],
-    ['Resultado', t.result, 'money'],
-    ['Margen', t.margin, 'pct'],
     ['Horas trabajadas', t.hours, 'hours'],
     ['Noches con personal', t.nights, 'int'],
-    ['Nóminas pagadas', t.payrollPaid, 'money'],
+    ['Nóminas pagadas', r.payroll.total, 'money'],
   ];
   const kpiStart = row + 1;
+  const cell = { income: `B${kpiStart}`, expenses: `B${kpiStart + 1}`, staff: `B${kpiStart + 2}` };
   row = writeTable(ws, row, ['Indicador', 'Valor'], kpis.map(([k, v]) => [k, v]), [undefined, 'money']);
   kpis.forEach(([, , f], i) => (ws.getCell(`B${kpiStart + i}`).numFmt = FORMATS[f!]));
-  // Resultado como fórmula para que se recalcule si se editan los datos
-  ws.getCell(`B${kpiStart + 3}`).value = { formula: `B${kpiStart}-B${kpiStart + 1}-B${kpiStart + 2}`, result: t.result };
-  ws.getCell(`B${kpiStart + 4}`).value = { formula: `IF(B${kpiStart}=0,0,B${kpiStart + 3}/B${kpiStart})`, result: t.margin };
-  ws.getRow(kpiStart + 3).font = { bold: true };
   row += 1;
 
   row = amountTable(ws, row, 'Ingresos por concepto', 'Concepto', r.incomeByCategory);
   row = amountTable(ws, row, 'Ingresos por método de cobro', 'Método', r.incomeByMethod);
   row = amountTable(ws, row, 'Gastos por concepto', 'Concepto', r.expenseByCategory);
+
+  // Nóminas: detalle por trabajador en el informe semanal; sólo totales en el resto
+  const p = r.payroll;
+  if (p.detailed) {
+    row = sectionTitle(ws, row, 'Nóminas pagadas');
+    if (p.rows.length) {
+      row = writeTable(
+        ws,
+        row,
+        ['Fecha', 'Trabajador', 'Nómina de', 'Método', 'Importe'],
+        p.rows.map((x) => [excelDate(x.date), x.name, x.period, x.method, x.amount]),
+        ['date', undefined, undefined, undefined, 'money'],
+        [5],
+      );
+    } else {
+      ws.getCell(`A${row}`).value = 'No se han pagado nóminas en este periodo';
+      ws.getCell(`A${row}`).font = { color: { argb: 'FF8E8E93' } };
+      row++;
+    }
+    row += 1;
+  } else {
+    row = sectionTitle(ws, row, 'Nóminas pagadas (totales)');
+    const start = row + 1;
+    row = writeTable(
+      ws,
+      row,
+      ['Concepto', 'Valor'],
+      [
+        ['Total pagado', p.total],
+        ['Trabajadores pagados', p.workers],
+        ['Pagos realizados', p.payments],
+      ],
+      [undefined, 'money'],
+    );
+    ws.getCell(`B${start + 1}`).numFmt = '0';
+    ws.getCell(`B${start + 2}`).numFmt = '0';
+    row += 1;
+  }
+
+  // ---------- Resultado del periodo (al final) ----------
+  row = sectionTitle(ws, row, 'Resultado del periodo');
+  const resStart = row + 1;
+  row = writeTable(
+    ws,
+    row,
+    ['Concepto', 'Importe'],
+    [
+      ['Ingresos', { formula: cell.income, result: t.income }],
+      ['Gastos operativos', { formula: `-${cell.expenses}`, result: -t.expenses }],
+      ['Coste de personal (fichajes)', { formula: `-${cell.staff}`, result: -Math.round(t.staff * 100) / 100 }],
+      [t.result >= 0 ? 'Beneficio' : 'Pérdida', { formula: `SUM(B${resStart}:B${resStart + 2})`, result: t.result }],
+      ['Margen sobre ingresos', { formula: `IF(B${resStart}=0,0,B${resStart + 3}/B${resStart})`, result: t.margin }],
+    ],
+    [undefined, 'money'],
+  );
+  ws.getCell(`B${resStart + 4}`).numFmt = PCT;
+  const resultRow = ws.getRow(resStart + 3);
+  styleTotal(resultRow);
+  resultRow.font = { bold: true, size: 13, color: { argb: t.result >= 0 ? 'FF24A048' : 'FFE32D24' } };
+  resultRow.height = 22;
+  row += 1;
+
   const note = ws.getCell(`A${row}`);
   note.value =
     'Resultado = ingresos - gastos operativos - coste de personal devengado (horas fichadas × tarifa). Los pagos de nóminas no se descuentan dos veces.';
@@ -174,25 +231,16 @@ export async function renderReportXlsx(r: FinanceReport) {
 
   // ---------- Personal ----------
   const wp = wb.addWorksheet('Personal');
-  wp.columns = [{ width: 24 }, { width: 22 }, { width: 20 }, { width: 9 }, { width: 10 }, { width: 11 }, { width: 14 }, { width: 18 }];
+  wp.columns = [{ width: 24 }, { width: 22 }, { width: 20 }, { width: 9 }, { width: 10 }, { width: 11 }, { width: 14 }];
   writeTable(
     wp,
     1,
-    ['Empleado', 'Puesto', 'Departamento', 'Noches', 'Horas', '€/hora', 'Coste', 'Nóminas pagadas'],
-    r.staff.map((s) => [
-      s.name,
-      s.position,
-      s.department,
-      s.nights,
-      Math.round(s.hours * 100) / 100,
-      s.rate,
-      Math.round(s.cost * 100) / 100,
-      s.paid,
-    ]),
-    [undefined, undefined, undefined, 'int', 'hours', 'money', 'money', 'money'],
-    [4, 5, 7, 8],
+    ['Empleado', 'Puesto', 'Departamento', 'Noches', 'Horas', '€/hora', 'Coste'],
+    r.staff.map((s) => [s.name, s.position, s.department, s.nights, Math.round(s.hours * 100) / 100, s.rate, Math.round(s.cost * 100) / 100]),
+    [undefined, undefined, undefined, 'int', 'hours', 'money', 'money'],
+    [4, 5, 7],
   );
-  freezeAndFilter(wp, 1, 8, r.staff.length);
+  freezeAndFilter(wp, 1, 7, r.staff.length);
 
   // ---------- Movimientos ----------
   const wm = wb.addWorksheet('Movimientos');

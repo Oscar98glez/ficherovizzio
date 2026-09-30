@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import { autoTable, type CellInput, type RowInput, type UserOptions } from 'jspdf-autotable';
 import { APP_NAME } from './config';
 import { fmtDate, fmtHours, fmtMoney, fmtNum, fmtPercent } from './format';
-import { periodLabel, reportFileName, type Amount, type FinanceReport } from './report';
+import { periodLabel, reportFileName, reportTitle, type Amount, type FinanceReport } from './report';
 
 type RGB = [number, number, number];
 const INK: RGB = [29, 29, 31];
@@ -18,12 +18,14 @@ const M = 16; // margen lateral (mm)
 /** Las fuentes estándar de PDF no tienen los espacios finos que usa Intl. */
 const clean = (s: string) => s.replace(/[  ]/g, ' ');
 const money = (n: number) => clean(fmtMoney(n));
+const shortDate = (d: string) => fmtDate(d, { weekday: 'short', day: 'numeric', month: 'short' });
 
 export async function renderReportPdf(r: FinanceReport) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const contentW = W - 2 * M;
+  const t = r.totals;
   let y = 0;
 
   const text = (s: string, x: number, yy: number, opts: { size?: number; bold?: boolean; color?: RGB; align?: 'left' | 'right' | 'center' } = {}) => {
@@ -33,12 +35,19 @@ export async function renderReportPdf(r: FinanceReport) {
     doc.text(clean(s), x, yy, { align: opts.align ?? 'left' });
   };
 
+  const ensureSpace = (needed: number) => {
+    if (y > H - 18 - needed) {
+      doc.addPage();
+      y = 20;
+    }
+  };
+
   // ---------- Cabecera ----------
   doc.setFillColor(...INK);
   doc.roundedRect(M, 13, 12, 12, 2.8, 2.8, 'F');
   text('V', M + 6, 21.6, { size: 13, bold: true, color: [90, 200, 250], align: 'center' });
   text(APP_NAME, M + 16, 18.6, { size: 16, bold: true });
-  text('Informe financiero', M + 16, 24, { size: 9, color: INK2 });
+  text(reportTitle(r), M + 16, 24, { size: 9, color: INK2 });
 
   text('PERIODO', W - M, 16.5, { size: 7, bold: true, color: INK3, align: 'right' });
   text(periodLabel(r), W - M, 21.5, { size: 10.5, bold: true, align: 'right' });
@@ -65,25 +74,22 @@ export async function renderReportPdf(r: FinanceReport) {
     });
   };
 
-  const t = r.totals;
   kpiRow(
     36,
     [
       { label: 'Ingresos', value: money(t.income), color: GREEN },
       { label: 'Gastos operativos', value: money(t.expenses) },
       { label: 'Coste de personal', value: money(t.staff) },
-      { label: 'Resultado', value: money(t.result), color: t.result >= 0 ? GREEN : RED },
     ],
     19,
-    12.5,
+    13,
   );
   kpiRow(
     59,
     [
-      { label: 'Margen', value: clean(fmtPercent(t.margin)), color: t.margin >= 0 ? INK : RED },
       { label: 'Horas trabajadas', value: clean(fmtHours(t.hours)) },
       { label: 'Noches con personal', value: fmtNum(t.nights, 0) },
-      { label: 'Nóminas pagadas', value: money(t.payrollPaid) },
+      { label: 'Nóminas pagadas', value: money(r.payroll.total) },
     ],
     15,
     10.5,
@@ -94,13 +100,10 @@ export async function renderReportPdf(r: FinanceReport) {
   const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
   const section = (title: string, subtitle?: string) => {
-    if (y > H - 45) {
-      doc.addPage();
-      y = 20;
-    }
+    ensureSpace(27);
     text(title, M, y, { size: 12, bold: true });
     if (subtitle) text(subtitle, W - M, y, { size: 7.5, color: INK2, align: 'right' });
-    y += 3;
+    y += 5;
   };
 
   const table = (opts: {
@@ -113,17 +116,18 @@ export async function renderReportPdf(r: FinanceReport) {
     width?: number;
     fontSize?: number;
     columnWidths?: Record<number, number>;
+    empty?: string;
   }) => {
     const right = new Set(opts.right ?? []);
     const signed = new Set(opts.signed ?? []);
     const body: RowInput[] = opts.body.length
       ? opts.body
-      : [[{ content: 'Sin datos en este periodo', colSpan: opts.head.length, styles: { textColor: INK3, halign: 'center' } }]];
+      : [[{ content: opts.empty ?? 'Sin datos en este periodo', colSpan: opts.head.length, styles: { textColor: INK3, halign: 'center' } }]];
     const options: UserOptions = {
       startY: y,
       head: [opts.head],
       body,
-      foot: opts.foot ? [opts.foot] : undefined,
+      foot: opts.foot && opts.body.length ? [opts.foot] : undefined,
       showFoot: 'lastPage',
       theme: 'plain',
       tableWidth: opts.width ?? 'auto',
@@ -158,7 +162,6 @@ export async function renderReportPdf(r: FinanceReport) {
 
   // Ingresos: por concepto y por método, en paralelo
   section('Ingresos');
-  y += 2;
   const half = (contentW - 6) / 2;
   const y0 = y;
   const endA = table({
@@ -180,7 +183,6 @@ export async function renderReportPdf(r: FinanceReport) {
   y = Math.max(endA, endB) + 11;
 
   section('Gastos', 'Incluye el coste de personal devengado según fichajes');
-  y += 2;
   const totalOut = t.expenses + t.staff;
   y = table({
     head: ['Concepto', 'Importe', '%'],
@@ -190,38 +192,59 @@ export async function renderReportPdf(r: FinanceReport) {
   }) + 11;
 
   section('Resultado por noche');
-  y += 2;
   y = table({
     head: ['Fecha', 'Noche', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
-    body: r.nights.map((n) => [fmtDate(n.date, { weekday: 'short', day: 'numeric', month: 'short' }), n.name, money(n.income), money(n.expenses), money(n.staff), money(n.result)]),
-    foot: r.nights.length
-      ? [
-          'Total',
-          `${r.nights.length} noches`,
-          money(r.nights.reduce((a, n) => a + n.income, 0)),
-          money(r.nights.reduce((a, n) => a + n.expenses, 0)),
-          money(r.nights.reduce((a, n) => a + n.staff, 0)),
-          money(r.nights.reduce((a, n) => a + n.result, 0)),
-        ]
-      : undefined,
+    body: r.nights.map((n) => [shortDate(n.date), n.name, money(n.income), money(n.expenses), money(n.staff), money(n.result)]),
+    foot: [
+      'Total',
+      `${r.nights.length} noches`,
+      money(r.nights.reduce((a, n) => a + n.income, 0)),
+      money(r.nights.reduce((a, n) => a + n.expenses, 0)),
+      money(r.nights.reduce((a, n) => a + n.staff, 0)),
+      money(r.nights.reduce((a, n) => a + n.result, 0)),
+    ],
     right: [2, 3, 4, 5],
     signed: [5],
     columnWidths: { 0: 26 },
   }) + 11;
 
-  section('Coste de personal', 'Coste según fichajes cerrados · nóminas pagadas dentro del periodo');
-  y += 2;
+  section('Coste de personal', 'Según fichajes cerrados del periodo');
   y = table({
-    head: ['Empleado', 'Puesto', 'Noches', 'Horas', '€/hora', 'Coste', 'Nóminas pagadas'],
-    body: r.staff.map((s) => [s.name, s.position, fmtNum(s.nights, 0), clean(fmtHours(s.hours)), money(s.rate), money(s.cost), s.paid ? money(s.paid) : '—']),
-    foot: r.staff.length
-      ? ['Total', '', '', clean(fmtHours(t.hours)), '', money(t.staff), money(r.staff.reduce((a, s) => a + s.paid, 0))]
-      : undefined,
-    right: [2, 3, 4, 5, 6],
+    head: ['Empleado', 'Puesto', 'Noches', 'Horas', '€/hora', 'Coste'],
+    body: r.staff.map((s) => [s.name, s.position, fmtNum(s.nights, 0), clean(fmtHours(s.hours)), money(s.rate), money(s.cost)]),
+    foot: ['Total', '', '', clean(fmtHours(t.hours)), '', money(t.staff)],
+    right: [2, 3, 4, 5],
   }) + 11;
 
+  // Nóminas: detalle por trabajador en el informe semanal; sólo totales en el resto
+  const p = r.payroll;
+  if (p.detailed) {
+    section('Nóminas pagadas', 'Pagos realizados durante la semana');
+    y = table({
+      head: ['Fecha', 'Trabajador', 'Nómina de', 'Método', 'Importe'],
+      body: p.rows.map((x) => [shortDate(x.date), x.name, x.period, x.method, money(x.amount)]),
+      foot: ['Total', `${p.workers} ${p.workers === 1 ? 'trabajador' : 'trabajadores'}`, '', '', money(p.total)],
+      right: [4],
+      columnWidths: { 0: 26 },
+      empty: 'No se han pagado nóminas en este periodo',
+    }) + 11;
+  } else {
+    section('Nóminas pagadas', 'Totales del periodo');
+    ensureSpace(17);
+    kpiRow(
+      y,
+      [
+        { label: 'Total pagado', value: money(p.total) },
+        { label: 'Trabajadores pagados', value: fmtNum(p.workers, 0) },
+        { label: 'Pagos realizados', value: fmtNum(p.payments, 0) },
+      ],
+      15,
+      10.5,
+    );
+    y += 15 + 11;
+  }
+
   section('Movimientos', `${r.movements.length} registros`);
-  y += 2;
   y = table({
     head: ['Fecha', 'Categoría', 'Método', 'Detalle', 'Importe'],
     body: r.movements.map((m) => [
@@ -234,13 +257,31 @@ export async function renderReportPdf(r: FinanceReport) {
     right: [4],
     signed: [4],
     fontSize: 7.5,
-    columnWidths: { 0: 17, 1: 32, 2: 22, 4: 26 },
-  }) + 8;
+    columnWidths: { 0: 17, 1: 32, 2: 24, 4: 26 },
+  }) + 11;
 
-  if (y > H - 30) {
-    doc.addPage();
-    y = 20;
-  }
+  // ---------- Resultado del periodo (al final) ----------
+  ensureSpace(75);
+  section('Resultado del periodo');
+  y = table({
+    head: ['Concepto', 'Importe'],
+    body: [
+      ['Ingresos', money(t.income)],
+      ['Gastos operativos', money(-t.expenses)],
+      ['Coste de personal (según fichajes)', money(-t.staff)],
+    ],
+    right: [1],
+  }) + 4;
+
+  const good = t.result >= 0;
+  doc.setFillColor(...(good ? ([232, 246, 236] as RGB) : ([252, 234, 233] as RGB)));
+  doc.roundedRect(M, y, contentW, 24, 3, 3, 'F');
+  text(good ? 'BENEFICIO DEL PERIODO' : 'PÉRDIDA DEL PERIODO', M + 6, y + 8, { size: 7.5, bold: true, color: INK2 });
+  text(money(t.result), M + 6, y + 18.5, { size: 20, bold: true, color: good ? GREEN : RED });
+  text('MARGEN SOBRE INGRESOS', W - M - 6, y + 8, { size: 7.5, bold: true, color: INK2, align: 'right' });
+  text(clean(fmtPercent(t.margin)), W - M - 6, y + 18.5, { size: 16, bold: true, color: good ? INK : RED, align: 'right' });
+  y += 24 + 8;
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(...INK3);
@@ -264,7 +305,7 @@ export async function renderReportPdf(r: FinanceReport) {
     doc.setDrawColor(...LINE);
     doc.setLineWidth(0.2);
     doc.line(M, H - 12, W - M, H - 12);
-    text(`${APP_NAME} · Informe financiero · ${periodLabel(r)}`, M, H - 7.5, { size: 7, color: INK3 });
+    text(`${APP_NAME} · ${reportTitle(r)} · ${periodLabel(r)}`, M, H - 7.5, { size: 7, color: INK3 });
     text(`Página ${i} de ${pages}`, W - M, H - 7.5, { size: 7, color: INK3, align: 'right' });
   }
 
