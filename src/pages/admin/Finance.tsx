@@ -9,7 +9,7 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { METHODS, PAYROLL_CATEGORY } from '../../lib/constants';
 import { addDays, addMonths, businessDate, daysBetween, isoDate, makePeriod, parseDate, periodRange, startOfWeek } from '../../lib/dates';
-import { fmtDate, fmtDateLong, fmtMoney, fmtMoney0, fmtPercent, fmtWeekday, fmtMoneyExact } from '../../lib/format';
+import { fmtDate, fmtDateLong, fmtMoney, fmtPercent, fmtWeekday } from '../../lib/format';
 import type { Transaction } from '../../lib/types';
 import { byId, cx, downloadCSV, entryCost, fullName, groupBy, sumBy } from '../../lib/utils';
 
@@ -125,14 +125,14 @@ export default function Finance() {
         subtitle="Ingresos, gastos y resultado del negocio"
         actions={
           <>
-            <Button variant="secondary" icon={<FileDown />} onClick={() => setReportOpen(true)}>
-              Exportar informe
-            </Button>
             <Button variant="secondary" icon={<Plus />} onClick={() => setTxModal({ tx: null, kind: 'expense' })}>
-              Movimiento
+              Añadir movimiento
             </Button>
             <Button icon={<Banknote />} onClick={() => setCloseout(true)}>
               Cierre de caja
+            </Button>
+            <Button variant="secondary" icon={<FileDown />} onClick={() => setReportOpen(true)}>
+              Exportar informe
             </Button>
           </>
         }
@@ -143,12 +143,12 @@ export default function Finance() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        <StatCard label="Ingresos" value={fmtMoney0(s.income)} tone="green" />
-        <StatCard label="Gastos operativos" value={fmtMoney0(s.expenses)} />
-        <StatCard label="Coste de personal" value={fmtMoney0(s.staff)} sub={`Pagado en nóminas ${fmtMoney0(s.paid)}`} />
+        <StatCard label="Ingresos" value={fmtMoney(s.income)} tone="green" />
+        <StatCard label="Gastos operativos" value={fmtMoney(s.expenses)} />
+        <StatCard label="Coste de personal" value={fmtMoney(s.staff)} sub={`Pagado en nóminas ${fmtMoney(s.paid)}`} />
         <StatCard
           label="Resultado"
-          value={<span className={s.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoneyExact(s.result)}</span>}
+          value={<span className={s.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney(s.result)}</span>}
           sub={s.income ? `Margen ${fmtPercent(s.result / s.income)}` : undefined}
         />
       </div>
@@ -156,6 +156,7 @@ export default function Finance() {
       <Card className="mt-4 p-5 lg:mt-5">
         <h3 className="mb-4 text-[17px] font-semibold">Evolución</h3>
         <BarChart
+          format={fmtMoney}
           data={s.series}
           series={[
             { name: 'Ingresos', color: 'rgb(var(--green))' },
@@ -167,11 +168,11 @@ export default function Finance() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:mt-5 lg:grid-cols-2 lg:gap-5">
         <Card className="p-5">
           <h3 className="mb-4 text-[17px] font-semibold">Ingresos por concepto</h3>
-          <HBarList items={s.incomeByCat} color="rgb(var(--green))" />
+          <HBarList format={fmtMoney} items={s.incomeByCat} color="rgb(var(--green))" />
         </Card>
         <Card className="p-5">
           <h3 className="mb-4 text-[17px] font-semibold">Gastos por concepto</h3>
-          <HBarList items={s.expenseByCat} color="rgb(var(--orange))" />
+          <HBarList format={fmtMoney} items={s.expenseByCat} color="rgb(var(--orange))" />
         </Card>
       </div>
 

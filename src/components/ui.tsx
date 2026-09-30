@@ -458,7 +458,7 @@ export function StatCard({
           </span>
         )}
       </div>
-      <div className="tabular mt-1.5 truncate text-[22px] font-semibold tracking-tight sm:text-[26px]">{value}</div>
+      <div className="tabular mt-1.5 truncate text-[20px] font-semibold tracking-tight sm:text-[26px]">{value}</div>
       {sub && <div className="mt-0.5 truncate text-[13px] text-ink-2">{sub}</div>}
     </Card>
   );
