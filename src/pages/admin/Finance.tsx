@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Banknote, Download, Plus, Wallet } from 'lucide-react';
+import { Banknote, Download, FileDown, Plus, Wallet } from 'lucide-react';
 import { BarChart, HBarList } from '../../components/charts';
 import { CloseoutForm, TransactionForm } from '../../components/finance-forms';
 import { PeriodPicker } from '../../components/PeriodPicker';
+import { ReportDialog } from '../../components/ReportDialog';
 import { Button, Card, EmptyState, ErrorBox, Loading, PageHeader, SearchInput, Segmented, StatCard } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
@@ -20,6 +21,7 @@ export default function Finance() {
   const [q, setQ] = useState('');
   const [txModal, setTxModal] = useState<{ tx: Transaction | null; kind?: 'income' | 'expense' } | null>(null);
   const [closeout, setCloseout] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const { data, loading, error, reload } = useLoad(async () => {
     const { start, end } = periodRange(period);
@@ -123,6 +125,9 @@ export default function Finance() {
         subtitle="Ingresos, gastos y resultado del negocio"
         actions={
           <>
+            <Button variant="secondary" icon={<FileDown />} onClick={() => setReportOpen(true)}>
+              Exportar informe
+            </Button>
             <Button variant="secondary" icon={<Plus />} onClick={() => setTxModal({ tx: null, kind: 'expense' })}>
               Movimiento
             </Button>
@@ -258,6 +263,11 @@ export default function Finance() {
         onSaved={reload}
       />
       <CloseoutForm open={closeout} onClose={() => setCloseout(false)} events={data.events} onSaved={reload} />
+      <ReportDialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        initial={{ from: period.from, to: isoDate(addDays(parseDate(period.to), -1)) }}
+      />
     </>
   );
 }
