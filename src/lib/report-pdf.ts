@@ -45,7 +45,7 @@ export async function renderReportPdf(r: FinanceReport) {
   // ---------- Cabecera ----------
   doc.setFillColor(...INK);
   doc.roundedRect(M, 13, 12, 12, 2.8, 2.8, 'F');
-  text('V', M + 6, 21.6, { size: 13, bold: true, color: [90, 200, 250], align: 'center' });
+  text('V', M + 6, 21.6, { size: 13, bold: true, color: [214, 176, 64], align: 'center' });
   text(APP_NAME, M + 16, 18.6, { size: 16, bold: true });
   text(reportTitle(r), M + 16, 24, { size: 9, color: INK2 });
 
@@ -196,22 +196,32 @@ export async function renderReportPdf(r: FinanceReport) {
     right: [1, 2],
   }) + 11;
 
-  section('Resultado por noche');
-  y = table({
-    head: ['Fecha', 'Noche', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
-    body: r.nights.map((n) => [shortDate(n.date), n.name, money(n.income), money(n.expenses), money(n.staff), money(n.result)]),
-    foot: [
-      'Total',
-      `${r.nights.length} noches`,
-      money(r.nights.reduce((a, n) => a + n.income, 0)),
-      money(r.nights.reduce((a, n) => a + n.expenses, 0)),
-      money(r.nights.reduce((a, n) => a + n.staff, 0)),
-      money(r.nights.reduce((a, n) => a + n.result, 0)),
-    ],
-    right: [2, 3, 4, 5],
-    signed: [5],
-    columnWidths: { 0: 26 },
-  }) + 11;
+  // Resultado por fechas: por día (semanal), por semana (mensual) o por mes (anual)
+  const bd = r.breakdown;
+  const sumRows = (k: 'income' | 'expenses' | 'staff' | 'result') => money(bd.rows.reduce((a, x) => a + x[k], 0));
+  const amounts = (x: (typeof bd.rows)[number]) => [money(x.income), money(x.expenses), money(x.staff), money(x.result)];
+  const bdTitle = { day: 'Resultado por día', week: 'Resultado por semana', month: 'Resultado por mes' }[bd.unit];
+  section(bdTitle, 'Según los movimientos introducidos · Personal = nóminas y camareros');
+  y = table(
+    bd.unit === 'day'
+      ? {
+          head: ['Fecha', 'Noche', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
+          body: bd.rows.map((x) => [shortDate(x.from), x.night || '—', ...amounts(x)]),
+          foot: ['Total', `${bd.rows.length} ${bd.rows.length === 1 ? 'día' : 'días'}`, sumRows('income'), sumRows('expenses'), sumRows('staff'), sumRows('result')],
+          right: [2, 3, 4, 5],
+          signed: [5],
+          columnWidths: { 0: 26 },
+          empty: 'No hay movimientos en este periodo',
+        }
+      : {
+          head: [bd.unit === 'week' ? 'Semana' : 'Mes', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
+          body: bd.rows.map((x) => [x.label, ...amounts(x)]),
+          foot: ['Total', sumRows('income'), sumRows('expenses'), sumRows('staff'), sumRows('result')],
+          right: [1, 2, 3, 4],
+          signed: [4],
+          empty: 'No hay movimientos en este periodo',
+        },
+  ) + 11;
 
   // Gastos de personal (nóminas + camareros): detalle por persona en el semanal; sólo totales en el resto
   const p = r.staffPayments;

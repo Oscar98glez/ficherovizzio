@@ -144,7 +144,7 @@ export default function Finance() {
         <PeriodPicker period={period} onChange={setPeriod} />
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
         <StatCard label="Ingresos" value={fmtMoney(s.income)} tone="green" />
         <StatCard label="Gastos operativos" value={fmtMoney(s.expenses)} />
         <StatCard label="Gastos de personal" value={fmtMoney(s.staff)} sub={s.accrued > 0 ? `Según fichajes ${fmtMoney(s.accrued)}` : 'Nóminas y camareros'} />

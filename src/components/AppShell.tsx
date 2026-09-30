@@ -131,16 +131,16 @@ export function AppShell() {
                   className={({ isActive }) =>
                     cx(
                       'group flex h-9 items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium transition',
-                      isActive ? 'bg-accent text-white shadow-sm' : 'text-ink hover:bg-fill',
+                      isActive ? 'bg-accent text-on-accent shadow-sm' : 'text-ink hover:bg-fill',
                     )
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      <item.icon className={cx('h-[18px] w-[18px]', isActive ? 'text-white' : 'text-accent')} strokeWidth={2} />
+                      <item.icon className={cx('h-[18px] w-[18px]', isActive ? 'text-on-accent' : 'text-accent')} strokeWidth={2} />
                       <span className="flex-1">{item.label}</span>
                       {!!item.badge && (
-                        <span className={cx('tabular rounded-full px-1.5 text-[12px] font-semibold', isActive ? 'bg-white/25' : 'bg-red text-white')}>
+                        <span className={cx('tabular rounded-full px-1.5 text-[12px] font-semibold', isActive ? 'bg-on-accent/20' : 'bg-red text-white')}>
                           {item.badge}
                         </span>
                       )}
@@ -225,7 +225,7 @@ export function AppShell() {
         <div className="divide-y divide-line overflow-hidden rounded-xl bg-fill/50">
           {moreItems.map((i) => (
             <NavLink key={i.to} to={i.to} className="flex items-center gap-3 px-4 py-3.5 text-[16px] font-medium">
-              <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-accent text-white">
+              <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-accent text-on-accent">
                 <i.icon className="h-[18px] w-[18px]" />
               </span>
               <span className="flex-1">{i.label}</span>

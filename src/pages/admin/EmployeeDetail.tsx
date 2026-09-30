@@ -145,7 +145,7 @@ export default function EmployeeDetail() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
         <StatCard label="Coste por hora" value={fmtMoney(e.hourly_rate)} />
         <StatCard label={`Horas · ${month.label}`} value={fmtHours(hours)} />
         <StatCard label={`Coste · ${month.label}`} value={fmtMoney(cost)} tone="purple" />

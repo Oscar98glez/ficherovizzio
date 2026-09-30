@@ -1,11 +1,12 @@
 import { api } from './api';
 import { DEPARTMENTS, isStaffExpense, METHODS, PAYROLL_CATEGORY, WAITERS_CATEGORY } from './constants';
-import { addDays, businessDate, capitalize, isoDate, parseDate, periodRange } from './dates';
+import { addDays, addMonths, businessDate, capitalize, isoDate, parseDate, periodRange, startOfMonth, startOfWeek } from './dates';
 import { fmtDate } from './format';
 import type { Transaction, TxKind } from './types';
 import { byId, categoryRank, compareByCategory, entryCost, entryHours, fullName, groupBy, sumBy } from './utils';
 
 export type ReportFormat = 'pdf' | 'xlsx';
+export type BreakdownUnit = 'day' | 'week' | 'month';
 export type ReportScope = 'semanal' | 'mensual' | 'trimestral' | 'anual' | 'personalizado';
 
 /** Hasta este número de días el informe se considera semanal y detalla las nóminas por trabajador. */
@@ -54,7 +55,11 @@ export interface FinanceReport {
   incomeBreakdown: { label: string; cash: number; card: number; other: number; total: number }[];
   incomeByMethod: Amount[];
   expenseByCategory: Amount[];
-  nights: { date: string; name: string; income: number; expenses: number; staff: number; result: number }[];
+  /** Resultado por día (semanal), por semana (mensual/trimestral) o por mes (anual), según los movimientos introducidos */
+  breakdown: {
+    unit: BreakdownUnit;
+    rows: { label: string; from: string; to: string; night: string; income: number; expenses: number; staff: number; result: number }[];
+  };
   /** Horas y coste por empleado según fichajes (informativo) */
   staff: { name: string; position: string; department: string; nights: number; hours: number; rate: number; cost: number }[];
   /** Gastos de personal pagados (nóminas y camareros): con detalle por persona sólo en informes semanales. */
@@ -131,15 +136,33 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
   const staffPaid = sumBy(staffTx, (t) => t.amount);
   const result = totalIncome - totalExpenses - staffPaid;
 
-  // Por noche: gastos asociados a la noche + coste de su personal (fichajes y camareros de esa noche)
-  const txByEvent = groupBy(tx.filter((t) => t.event_id), (t) => t.event_id!);
-  const entriesByNight = groupBy(closed, (e) => businessDate(e.clock_in));
-  const nights = events.map((ev) => {
-    const t = txByEvent[ev.id] ?? [];
+  // Resultado por fechas según los movimientos introducidos: por día (semanal), por semana (mensual) o por mes (anual)
+  const unit: BreakdownUnit = detailed ? 'day' : reportDays(from, to) <= 92 ? 'week' : 'month';
+  const buckets: { label: string; from: string; to: string }[] = [];
+  if (unit === 'day') {
+    for (const d of [...new Set(tx.map((t) => t.date))].sort()) buckets.push({ label: d, from: d, to: d });
+  } else {
+    const first = unit === 'week' ? startOfWeek(parseDate(from)) : startOfMonth(parseDate(from));
+    for (let s = first; isoDate(s) <= to; s = unit === 'week' ? addDays(s, 7) : addMonths(s, 1)) {
+      const next = unit === 'week' ? addDays(s, 7) : addMonths(s, 1);
+      const bFrom = isoDate(s) < from ? from : isoDate(s);
+      const bTo = isoDate(addDays(next, -1)) > to ? to : isoDate(addDays(next, -1));
+      const label =
+        unit === 'month'
+          ? capitalize(fmtDate(bFrom, { month: 'long', year: 'numeric' }))
+          : bFrom.slice(0, 7) === bTo.slice(0, 7)
+            ? `${fmtDate(bFrom, { day: 'numeric' })} – ${fmtDate(bTo, { day: 'numeric', month: 'short' })}`
+            : `${fmtDate(bFrom, { day: 'numeric', month: 'short' })} – ${fmtDate(bTo, { day: 'numeric', month: 'short' })}`;
+      buckets.push({ label, from: bFrom, to: bTo });
+    }
+  }
+  const breakdownRows = buckets.map((b) => {
+    const t = tx.filter((x) => x.date >= b.from && x.date <= b.to);
     const inc = sumBy(t.filter((x) => x.kind === 'income'), (x) => x.amount);
     const exp = sumBy(t.filter((x) => x.kind === 'expense' && !isStaffExpense(x)), (x) => x.amount);
-    const staff = sumBy(entriesByNight[ev.date] ?? [], (e) => entryCost(e)) + sumBy(t.filter(isStaffExpense), (x) => x.amount);
-    return { date: ev.date, name: ev.name, income: inc, expenses: exp, staff, result: inc - exp - staff };
+    const staffPaidInBucket = sumBy(t.filter(isStaffExpense), (x) => x.amount);
+    const night = unit === 'day' ? events.filter((e) => e.date === b.from).map((e) => e.name).join(', ') : '';
+    return { ...b, night, income: inc, expenses: exp, staff: staffPaidInBucket, result: inc - exp - staffPaidInBucket };
   });
 
   const entriesByEmp = groupBy(closed, (e) => e.employee_id);
@@ -217,7 +240,7 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
       .map(([label, xs]) => ({ label, value: sumBy(xs, (t) => t.amount) }))
       .sort((a, b) => methodLabelRank(a.label) - methodLabelRank(b.label)),
     expenseByCategory: byCategory([...expenses, ...staffTx], 'expense'),
-    nights,
+    breakdown: { unit, rows: breakdownRows },
     staff,
     staffPayments: {
       detailed,

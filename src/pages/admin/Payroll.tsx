@@ -147,7 +147,7 @@ export default function Payroll() {
         <PeriodPicker period={period} onChange={setPeriod} units={['month']} />
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
         <StatCard label="Devengado" value={fmtMoney(totals.accrued)} sub={`${fmtHours(totals.hours)} · ${rows.length} personas`} />
         <StatCard label="Pagado" value={fmtMoney(totals.paid)} tone="green" />
         <StatCard label="Pendiente" value={<span className={totals.pending > 0 ? 'text-orange' : ''}>{fmtMoney(totals.pending)}</span>} />

@@ -52,7 +52,7 @@ function FormatOption({
         active ? 'border-accent bg-accent/5' : 'border-transparent bg-fill hover:bg-fill-2',
       )}
     >
-      <span className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-xl [&_svg]:h-5 [&_svg]:w-5', active ? 'bg-accent text-white' : 'bg-surface text-ink-2 dark:bg-elevated')}>
+      <span className={cx('grid h-10 w-10 shrink-0 place-items-center rounded-xl [&_svg]:h-5 [&_svg]:w-5', active ? 'bg-accent text-on-accent' : 'bg-surface text-ink-2 dark:bg-elevated')}>
         {icon}
       </span>
       <span className="min-w-0">
@@ -109,7 +109,7 @@ export function ReportDialog({ open, onClose, initial }: { open: boolean; onClos
                   onClick={() => setRange(p.range)}
                   className={cx(
                     'h-8 shrink-0 rounded-full px-3.5 text-[13px] font-medium transition',
-                    active ? 'bg-accent text-white' : 'bg-fill text-ink hover:bg-fill-2',
+                    active ? 'bg-accent text-on-accent' : 'bg-fill text-ink hover:bg-fill-2',
                   )}
                 >
                   {p.label}

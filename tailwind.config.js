@@ -12,6 +12,7 @@ export default {
         elevated: v('elevated'),
         ink: { DEFAULT: v('ink'), 2: v('ink-2'), 3: v('ink-3') },
         accent: v('accent'),
+        'on-accent': v('on-accent'),
         green: v('green'),
         red: v('red'),
         orange: v('orange'),

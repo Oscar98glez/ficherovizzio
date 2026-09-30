@@ -17,7 +17,7 @@ type Variant = 'primary' | 'secondary' | 'tinted' | 'ghost' | 'danger' | 'danger
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
-  primary: 'bg-accent text-white hover:brightness-110 shadow-sm',
+  primary: 'bg-accent text-on-accent hover:brightness-110 shadow-sm',
   secondary: 'bg-fill text-ink hover:bg-fill-2',
   tinted: 'bg-accent/10 text-accent hover:bg-accent/15',
   ghost: 'text-accent hover:bg-accent/10',
@@ -458,7 +458,7 @@ export function StatCard({
           </span>
         )}
       </div>
-      <div className="tabular mt-1.5 truncate text-[20px] font-semibold tracking-tight sm:text-[26px]">{value}</div>
+      <div className="tabular mt-1.5 truncate text-[clamp(19px,1.75vw,26px)] font-semibold tracking-tight">{value}</div>
       {sub && <div className="mt-0.5 truncate text-[13px] text-ink-2">{sub}</div>}
     </Card>
   );

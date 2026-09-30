@@ -526,7 +526,7 @@ export function ShiftForm({
                       <span className="block truncate text-[14px] font-medium">{fullName(e)}</span>
                       <span className="block truncate text-[12px] text-ink-2">{e.position}</span>
                     </span>
-                    <span className={cx('grid h-5 w-5 place-items-center rounded-full border-2', on ? 'border-accent bg-accent text-white' : 'border-ink-3/50')}>
+                    <span className={cx('grid h-5 w-5 place-items-center rounded-full border-2', on ? 'border-accent bg-accent text-on-accent' : 'border-ink-3/50')}>
                       {on && <Check className="h-3 w-3" strokeWidth={3.5} />}
                     </span>
                   </button>

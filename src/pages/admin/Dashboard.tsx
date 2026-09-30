@@ -86,7 +86,7 @@ export default function Dashboard() {
     <>
       <PageHeader title={`${greeting}${name ? `, ${name}` : ''}`} subtitle={fmtDateFull(new Date())} />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
         <StatCard label="Ingresos del mes" value={fmtMoney0(stats.income)} icon={<TrendingUp />} tone="green" sub={month.label} />
         <StatCard label="Gastos operativos" value={fmtMoney0(stats.expenses)} icon={<TrendingDown />} tone="red" sub="Sin incluir personal" />
         <StatCard label="Gastos de personal" value={fmtMoney0(stats.staff)} icon={<Users />} tone="purple" sub={`${fmtHours(stats.hours)} trabajadas`} />

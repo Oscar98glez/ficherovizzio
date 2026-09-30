@@ -122,7 +122,7 @@ export async function renderReportXlsx(r: FinanceReport) {
   const t = r.totals;
 
   // ---------- Resumen ----------
-  const ws = wb.addWorksheet('Resumen', { properties: { tabColor: { argb: 'FF0071E3' } }, views: [{ showGridLines: false }] });
+  const ws = wb.addWorksheet('Resumen', { properties: { tabColor: { argb: 'FFA07C1C' } }, views: [{ showGridLines: false }] });
   ws.columns = [{ width: 34 }, { width: 18 }, { width: 18 }, { width: 16 }, { width: 16 }];
   ws.getCell('A1').value = `${APP_NAME} · ${reportTitle(r)}`;
   ws.getCell('A1').font = { bold: true, size: 18 };
@@ -254,18 +254,32 @@ export async function renderReportXlsx(r: FinanceReport) {
     'Resultado = ingresos - gastos operativos - gastos de personal (nóminas y camareros pagados en el periodo). El coste según fichajes es informativo.';
   note.font = { size: 9, italic: true, color: { argb: 'FF8E8E93' } };
 
-  // ---------- Por noche ----------
-  const wn = wb.addWorksheet('Por noche');
-  wn.columns = [{ width: 13 }, { width: 30 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }];
-  writeTable(
-    wn,
-    1,
-    ['Fecha', 'Noche', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
-    r.nights.map((n, i) => [excelDate(n.date), n.name, n.income, n.expenses, Math.round(n.staff * 100) / 100, { formula: `C${i + 2}-D${i + 2}-E${i + 2}`, result: n.result }]),
-    ['date', undefined, 'money', 'money', 'money', 'money'],
-    [3, 4, 5, 6],
-  );
-  freezeAndFilter(wn, 1, 6, r.nights.length);
+  // ---------- Resultado por día / semana / mes ----------
+  const bd = r.breakdown;
+  const wn = wb.addWorksheet({ day: 'Por día', week: 'Por semana', month: 'Por mes' }[bd.unit]);
+  if (bd.unit === 'day') {
+    wn.columns = [{ width: 13 }, { width: 30 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }];
+    writeTable(
+      wn,
+      1,
+      ['Fecha', 'Noche', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
+      bd.rows.map((x, i) => [excelDate(x.from), x.night || null, x.income, x.expenses, x.staff, { formula: `C${i + 2}-D${i + 2}-E${i + 2}`, result: x.result }]),
+      ['date', undefined, 'money', 'money', 'money', 'money'],
+      [3, 4, 5, 6],
+    );
+    freezeAndFilter(wn, 1, 6, bd.rows.length);
+  } else {
+    wn.columns = [{ width: 22 }, { width: 12 }, { width: 12 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 15 }];
+    writeTable(
+      wn,
+      1,
+      [bd.unit === 'week' ? 'Semana' : 'Mes', 'Desde', 'Hasta', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
+      bd.rows.map((x, i) => [x.label, excelDate(x.from), excelDate(x.to), x.income, x.expenses, x.staff, { formula: `D${i + 2}-E${i + 2}-F${i + 2}`, result: x.result }]),
+      [undefined, 'date', 'date', 'money', 'money', 'money', 'money'],
+      [4, 5, 6, 7],
+    );
+    freezeAndFilter(wn, 1, 7, bd.rows.length);
+  }
 
   // ---------- Horas según fichajes (informativo; sólo si se usan los fichajes) ----------
   if (r.staff.length) {

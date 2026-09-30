@@ -81,7 +81,7 @@ export default function EventDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
         <StatCard label="Ingresos" value={fmtMoney0(totalIncome)} tone="green" sub={totalIncome ? `Efectivo ${fmtMoney0(cash)}` : 'Sin cierre de caja'} />
         <StatCard label="Gastos" value={fmtMoney0(totalExpenses)} sub={`${expenses.length} movimientos`} />
         <StatCard
