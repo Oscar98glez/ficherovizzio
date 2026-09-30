@@ -9,7 +9,7 @@ import {
   METHODS,
   PAYROLL_CATEGORY,
   PRIVATE_EVENT_CATEGORY,
-  WAITERS_CATEGORY,
+  STAFF_CATEGORY,
   REQUEST_KINDS,
 } from '../lib/constants';
 import { businessToday, isoDate, monthKey } from '../lib/dates';
@@ -181,7 +181,7 @@ export function TransactionForm({
   const categories = baseCategories.includes(f.category) ? baseCategories : [...baseCategories, f.category];
   const isPayroll = f.kind === 'expense' && f.category === PAYROLL_CATEGORY;
   const isPrivateEvent = f.kind === 'income' && f.category === PRIVATE_EVENT_CATEGORY;
-  const isWaiters = f.kind === 'expense' && f.category === WAITERS_CATEGORY;
+  const isStaffPayment = f.kind === 'expense' && f.category === STAFF_CATEGORY;
   const privateEventSuggestions = events.filter((e) => e.kind === 'evento_privado').map((e) => e.name);
   const nearEvents = events.filter((e) => Math.abs(Date.parse(e.date) - Date.parse(f.date)) < 8 * 86400000);
 
@@ -199,7 +199,7 @@ export function TransactionForm({
         date: f.date,
         method: f.method,
         event_id: f.event_id || null,
-        employee_id: isPayroll || isWaiters ? f.employee_id || null : null,
+        employee_id: isPayroll || isStaffPayment ? f.employee_id || null : null,
         period: isPayroll ? f.period || monthKey(f.date) : null,
         description: f.description.trim() || null,
       };
@@ -308,8 +308,8 @@ export function TransactionForm({
             </Field>
           </div>
         )}
-        {isWaiters && (
-          <Field label="Camarero/a (opcional)" hint="Cuenta como gasto de personal junto con las nóminas.">
+        {isStaffPayment && (
+          <Field label="Persona (opcional)" hint="Cuenta como gasto de personal junto con las nóminas.">
             <Select value={f.employee_id} onChange={(e) => setF({ ...f, employee_id: e.target.value })}>
               <option value="">Sin especificar</option>
               {employees.map((e) => (

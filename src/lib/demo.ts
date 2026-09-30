@@ -30,7 +30,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v5';
+const DB_KEY = 'vizzio.demo.db.v6';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -390,7 +390,7 @@ function seed(): DB {
         event_id: event.id,
       });
       txAdd({ date, kind: 'expense', category: 'Seguridad externa', amount: 480, method: 'transferencia', event_id: event.id, description: 'Refuerzo seguridad' });
-      txAdd({ date, kind: 'expense', category: 'Camareros', amount: round(between(180, 260), 5), method: 'efectivo', event_id: event.id, description: '2 camareros extra' });
+      txAdd({ date, kind: 'expense', category: 'Personal', amount: round(between(180, 260), 5), method: 'efectivo', event_id: event.id, description: '2 camareros extra' });
     }
   }
 

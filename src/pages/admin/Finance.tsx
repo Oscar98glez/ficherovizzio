@@ -37,7 +37,7 @@ export default function Finance() {
   const s = useMemo(() => {
     if (!data) return null;
     const inc = data.tx.filter((t) => t.kind === 'income');
-    // Gastos operativos por un lado y gastos de personal (nóminas + camareros) por otro
+    // Gastos operativos por un lado y gastos de personal (nóminas + personal) por otro
     const exp = data.tx.filter((t) => t.kind === 'expense' && !isStaffExpense(t));
     const staffTx = data.tx.filter(isStaffExpense);
     const income = sumBy(inc, (t) => t.amount);
@@ -147,7 +147,7 @@ export default function Finance() {
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
         <StatCard label="Ingresos" value={fmtMoney(s.income)} tone="green" />
         <StatCard label="Gastos operativos" value={fmtMoney(s.expenses)} />
-        <StatCard label="Gastos de personal" value={fmtMoney(s.staff)} sub={s.accrued > 0 ? `Según fichajes ${fmtMoney(s.accrued)}` : 'Nóminas y camareros'} />
+        <StatCard label="Gastos de personal" value={fmtMoney(s.staff)} sub={s.accrued > 0 ? `Según fichajes ${fmtMoney(s.accrued)}` : 'Nóminas y personal'} />
         <StatCard
           label="Resultado"
           value={<span className={s.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney(s.result)}</span>}
@@ -179,7 +179,7 @@ export default function Finance() {
       </div>
 
       <p className="mt-3 px-1 text-[12px] text-ink-3">
-        Resultado = ingresos - gastos operativos - gastos de personal (nóminas y camareros pagados). El coste según fichajes es sólo informativo.
+        Resultado = ingresos - gastos operativos - gastos de personal (nóminas y personal pagados). El coste según fichajes es sólo informativo.
       </p>
 
       <div className="mb-3 mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

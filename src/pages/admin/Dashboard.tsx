@@ -45,7 +45,7 @@ export default function Dashboard() {
     const monthEntries = data.entries.filter((e) => e.clock_in >= start && e.clock_in < end);
     const monthTx = data.tx.filter((t) => t.date >= month.from && t.date < month.to);
     const income = sumBy(monthTx.filter((t) => t.kind === 'income'), (t) => t.amount);
-    // Gastos de personal = nóminas + camareros pagados; los fichajes sólo informan de las horas
+    // Gastos de personal = nóminas + personal pagados; los fichajes sólo informan de las horas
     const expenses = sumBy(monthTx.filter((t) => t.kind === 'expense' && !isStaffExpense(t)), (t) => t.amount);
     const staff = sumBy(monthTx.filter(isStaffExpense), (t) => t.amount);
     const hours = sumBy(monthEntries, (e) => entryHours(e));
@@ -144,7 +144,7 @@ export default function Dashboard() {
 
         <Card className="p-5 lg:col-span-3">
           <h3 className="mb-1 text-[17px] font-semibold tracking-tight">Ingresos vs. gastos</h3>
-          <p className="mb-4 text-[13px] text-ink-2">Últimas {WEEKS} semanas · gastos incluye nóminas y camareros</p>
+          <p className="mb-4 text-[13px] text-ink-2">Últimas {WEEKS} semanas · gastos incluye nóminas y personal</p>
           <BarChart
             data={stats.weeks}
             series={[

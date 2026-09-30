@@ -1,4 +1,5 @@
 import { IS_DEMO } from './config';
+import { normalizeCategory } from './constants';
 import { demoClockIn, demoClockOut, demoRepo, type TableName } from './demo';
 import { supabase } from './supabase';
 import type { ClubEvent, Employee, LeaveRequest, Profile, Shift, TimeEntry, Transaction } from './types';
@@ -115,13 +116,33 @@ async function sbRpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 
 const repo = <T extends { id: string }>(table: TableName) => (IS_DEMO ? demoRepo<T>(table) : sbRepo<T>(table));
 
+/** Aplica `fix` a todo lo que devuelve un repositorio (p. ej. renombrar categorías antiguas). */
+function mapped<T extends { id: string }>(r: Repo<T>, fix: (row: T) => T): Repo<T> {
+  return {
+    ...r,
+    list: async (q) => (await r.list(q)).map(fix),
+    get: async (id) => {
+      const row = await r.get(id);
+      return row && fix(row);
+    },
+    create: async (v) => fix(await r.create(v)),
+    createMany: async (v) => (await r.createMany(v)).map(fix),
+    update: async (id, p) => fix(await r.update(id, p)),
+  };
+}
+
+const withCurrentCategory = (t: Transaction) => {
+  const category = normalizeCategory(t.category);
+  return category === t.category ? t : { ...t, category };
+};
+
 export const api = {
   profiles: repo<Profile>('profiles'),
   employees: repo<Employee>('employees'),
   events: repo<ClubEvent>('events'),
   timeEntries: repo<TimeEntry>('time_entries'),
   shifts: repo<Shift>('shifts'),
-  transactions: repo<Transaction>('transactions'),
+  transactions: mapped(repo<Transaction>('transactions'), withCurrentCategory),
   requests: repo<LeaveRequest>('leave_requests'),
 
   /** Fichar entrada del usuario conectado (hora del servidor). */

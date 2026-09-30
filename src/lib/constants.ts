@@ -66,10 +66,14 @@ export const METHODS: Record<PaymentMethod, string> = {
 };
 
 export const PAYROLL_CATEGORY = 'Nóminas';
-export const WAITERS_CATEGORY = 'Camareros';
+export const STAFF_CATEGORY = 'Personal';
+
+/** Nombres antiguos de categorías que se muestran con su nombre actual */
+const LEGACY_CATEGORIES: Record<string, string> = { Camareros: STAFF_CATEGORY };
+export const normalizeCategory = (category: string) => LEGACY_CATEGORIES[category] ?? category;
 
 /** Gastos que cuentan como "gastos de personal" (lo pagado al personal) en lugar de gastos operativos. */
-export const STAFF_EXPENSE_CATEGORIES = [PAYROLL_CATEGORY, WAITERS_CATEGORY];
+export const STAFF_EXPENSE_CATEGORIES = [PAYROLL_CATEGORY, STAFF_CATEGORY];
 
 export const isStaffExpense = (t: { kind: string; category: string }) =>
   t.kind === 'expense' && STAFF_EXPENSE_CATEGORIES.includes(t.category);
@@ -90,7 +94,7 @@ export const INCOME_CATEGORIES = [
 
 export const EXPENSE_CATEGORIES = [
   PAYROLL_CATEGORY,
-  WAITERS_CATEGORY,
+  STAFF_CATEGORY,
   'Proveedores bebida',
   'DJ / Artistas',
   'Seguridad externa',

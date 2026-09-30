@@ -135,7 +135,7 @@ export async function renderReportXlsx(r: FinanceReport) {
   const kpis: [string, number, Fmt][] = [
     ['Ingresos', t.income, 'money'],
     ['Gastos operativos', t.expenses, 'money'],
-    ['Gastos de personal (nóminas y camareros)', t.staff, 'money'],
+    ['Gastos de personal (nóminas y personal)', t.staff, 'money'],
   ];
   const kpiStart = row + 1;
   const cell = { income: `B${kpiStart}`, expenses: `B${kpiStart + 1}`, staff: `B${kpiStart + 2}` };
@@ -169,39 +169,21 @@ export async function renderReportXlsx(r: FinanceReport) {
     row = amountTable(ws, row, 'Ingresos por concepto', 'Concepto', r.incomeByCategory);
     row = amountTable(ws, row, 'Ingresos por método de cobro', 'Método', r.incomeByMethod);
   }
-  row = amountTable(ws, row, 'Gastos por concepto', 'Concepto', r.expenseByCategory);
+  // Gastos separados: operativos por un lado y de personal (nóminas y personal) por otro
+  row = amountTable(ws, row, 'Gastos operativos', 'Concepto', r.operatingByCategory);
+  row = amountTable(ws, row, 'Gastos de personal', 'Concepto', r.staffByCategory);
 
-  // Gastos de personal (nóminas + camareros): detalle por persona en el semanal; sólo totales en el resto
+  // Semanal: detalle de los pagos al personal por persona
   const p = r.staffPayments;
-  if (p.detailed) {
-    row = sectionTitle(ws, row, 'Gastos de personal (nóminas y camareros)');
-    if (p.rows.length) {
-      row = writeTable(
-        ws,
-        row,
-        ['Fecha', 'Persona', 'Concepto', 'Método', 'Importe'],
-        p.rows.map((x) => [excelDate(x.date), x.name, x.concept, x.method, x.amount]),
-        ['date', undefined, undefined, undefined, 'money'],
-        [5],
-      );
-    } else {
-      ws.getCell(`A${row}`).value = 'No se han pagado nóminas ni camareros en este periodo';
-      ws.getCell(`A${row}`).font = { color: { argb: 'FF8E8E93' } };
-      row++;
-    }
-    row += 1;
-  } else {
-    row = sectionTitle(ws, row, 'Gastos de personal (totales)');
+  if (p.detailed && p.rows.length) {
+    row = sectionTitle(ws, row, 'Detalle de pagos de personal de la semana');
     row = writeTable(
       ws,
       row,
-      ['Concepto', 'Importe'],
-      [
-        ['Nóminas', p.payroll],
-        ['Camareros', p.waiters],
-      ],
-      [undefined, 'money'],
-      [2],
+      ['Fecha', 'Persona', 'Concepto', 'Método', 'Importe'],
+      p.rows.map((x) => [excelDate(x.date), x.name, x.concept, x.method, x.amount]),
+      ['date', undefined, undefined, undefined, 'money'],
+      [5],
     );
     row += 1;
   }
@@ -236,7 +218,7 @@ export async function renderReportXlsx(r: FinanceReport) {
     [
       ['Ingresos', { formula: cell.income, result: t.income }],
       ['Gastos operativos', { formula: `-${cell.expenses}`, result: -t.expenses }],
-      ['Gastos de personal (nóminas y camareros)', { formula: `-${cell.staff}`, result: -t.staff }],
+      ['Gastos de personal (nóminas y personal)', { formula: `-${cell.staff}`, result: -t.staff }],
       [t.result >= 0 ? 'Beneficio' : 'Pérdida', { formula: `SUM(B${resStart}:B${resStart + 2})`, result: t.result }],
       ['Margen sobre ingresos', { formula: `IF(B${resStart}=0,0,B${resStart + 3}/B${resStart})`, result: t.margin }],
     ],
@@ -251,7 +233,7 @@ export async function renderReportXlsx(r: FinanceReport) {
 
   const note = ws.getCell(`A${row}`);
   note.value =
-    'Resultado = ingresos - gastos operativos - gastos de personal (nóminas y camareros pagados en el periodo). El coste según fichajes es informativo.';
+    'Resultado = ingresos - gastos operativos - gastos de personal (nóminas y personal pagados en el periodo). El coste según fichajes es informativo.';
   note.font = { size: 9, italic: true, color: { argb: 'FF8E8E93' } };
 
   // ---------- Resultado por día / semana / mes ----------
@@ -262,7 +244,7 @@ export async function renderReportXlsx(r: FinanceReport) {
     writeTable(
       wn,
       1,
-      ['Fecha', 'Noche', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
+      ['Fecha', 'Noche', 'Ingresos', 'Gastos operativos', 'Gastos de personal', 'Resultado'],
       bd.rows.map((x, i) => [excelDate(x.from), x.night || null, x.income, x.expenses, x.staff, { formula: `C${i + 2}-D${i + 2}-E${i + 2}`, result: x.result }]),
       ['date', undefined, 'money', 'money', 'money', 'money'],
       [3, 4, 5, 6],
@@ -273,7 +255,7 @@ export async function renderReportXlsx(r: FinanceReport) {
     writeTable(
       wn,
       1,
-      [bd.unit === 'week' ? 'Semana' : 'Mes', 'Desde', 'Hasta', 'Ingresos', 'Gastos', 'Personal', 'Resultado'],
+      [bd.unit === 'week' ? 'Semana' : 'Mes', 'Desde', 'Hasta', 'Ingresos', 'Gastos operativos', 'Gastos de personal', 'Resultado'],
       bd.rows.map((x, i) => [x.label, excelDate(x.from), excelDate(x.to), x.income, x.expenses, x.staff, { formula: `D${i + 2}-E${i + 2}-F${i + 2}`, result: x.result }]),
       [undefined, 'date', 'date', 'money', 'money', 'money', 'money'],
       [4, 5, 6, 7],
