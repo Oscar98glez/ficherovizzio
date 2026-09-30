@@ -1,8 +1,8 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoRepo, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoFiles, demoRepo, type TableName } from './demo';
 import { supabase } from './supabase';
-import type { Availability, ClubEvent, Employee, LeaveRequest, Profile, Shift, TimeEntry, Transaction } from './types';
+import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Shift, TimeEntry, Transaction } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -39,6 +39,9 @@ const ERRORS: [RegExp, string][] = [
   [/employees_email_unique/i, 'Ya existe un empleado con ese email.'],
   [/out_after_in|end_after_start/i, 'La hora de salida debe ser posterior a la de entrada.'],
   [/public.availability/i, 'Falta crear la tabla de disponibilidad en Supabase (ejecuta la migración 20260930130000_availability.sql).'],
+  [/public.invoices|Bucket not found/i, 'Falta crear el apartado de facturas en Supabase (ejecuta la migración 20260930160000_invoices.sql).'],
+  [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
+  [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
   [/availability_one_per_day/i, 'Ya hay disponibilidad guardada para ese día.'],
   [/row-level security|permission denied/i, 'No tienes permisos para realizar esta acción.'],
   [/Failed to fetch|NetworkError/i, 'Sin conexión con el servidor. Revisa tu conexión a internet.'],
@@ -115,6 +118,34 @@ async function sbRpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+// ---------- Archivos (almacenamiento privado de Supabase) ----------
+
+const BUCKET = 'invoices';
+
+export const files = {
+  async upload(path: string, file: File) {
+    if (IS_DEMO) return demoFiles.upload(path, file);
+    const { error } = await sb().storage.from(BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
+    if (error) throw fail(error);
+  },
+  /** Enlace temporal (1 hora) para ver o descargar el archivo */
+  async url(path: string, download?: string) {
+    if (IS_DEMO) {
+      const blob = await demoFiles.get(path);
+      if (!blob) throw new Error('Archivo no encontrado');
+      return URL.createObjectURL(blob);
+    }
+    const { data, error } = await sb().storage.from(BUCKET).createSignedUrl(path, 3600, download ? { download } : undefined);
+    if (error) throw fail(error);
+    return data.signedUrl;
+  },
+  async remove(path: string) {
+    if (IS_DEMO) return demoFiles.remove(path);
+    const { error } = await sb().storage.from(BUCKET).remove([path]);
+    if (error) throw fail(error);
+  },
+};
+
 // ---------- API pública ----------
 
 const repo = <T extends { id: string }>(table: TableName) => (IS_DEMO ? demoRepo<T>(table) : sbRepo<T>(table));
@@ -148,6 +179,7 @@ export const api = {
   transactions: mapped(repo<Transaction>('transactions'), withCurrentCategory),
   requests: repo<LeaveRequest>('leave_requests'),
   availability: repo<Availability>('availability'),
+  invoices: repo<Invoice>('invoices'),
 
   /** Fichar entrada del usuario conectado (hora del servidor). */
   clockIn: (notes?: string) =>

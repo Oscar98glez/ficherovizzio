@@ -28,7 +28,8 @@ export type TableName =
   | 'shifts'
   | 'transactions'
   | 'leave_requests'
-  | 'availability';
+  | 'availability'
+  | 'invoices';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
@@ -58,6 +59,34 @@ export const demoSession = {
       /* almacenamiento no disponible */
     }
   },
+};
+
+// ---------- Archivos (modo demo: se guardan en IndexedDB del navegador) ----------
+
+const FILES_DB = 'vizzio-demo-files';
+
+function filesDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(FILES_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('files');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function filesOp<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  const db = await filesDb();
+  return new Promise((resolve, reject) => {
+    const req = run(db.transaction('files', mode).objectStore('files'));
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export const demoFiles = {
+  upload: async (path: string, file: Blob) => void (await filesOp('readwrite', (s) => s.put(file, path))),
+  get: (path: string) => filesOp<Blob | undefined>('readonly', (s) => s.get(path) as IDBRequest<Blob | undefined>),
+  remove: async (path: string) => void (await filesOp('readwrite', (s) => s.delete(path))),
 };
 
 // ---------- Almacenamiento ----------

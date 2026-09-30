@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Clock,
   Ellipsis,
+  FileText,
   Fingerprint,
   Inbox,
   LayoutGrid,
@@ -72,6 +73,7 @@ export function AppShell() {
           items: [
             { to: '/noches', label: 'Noches', icon: PartyPopper },
             { to: '/finanzas', label: 'Finanzas', icon: Wallet },
+            { to: '/facturas', label: 'Facturas', icon: FileText },
             { to: '/nominas', label: 'Nóminas', icon: Receipt },
           ],
         },

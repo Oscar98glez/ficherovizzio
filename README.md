@@ -12,6 +12,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Turnos** — planificación semanal, asignación de varias personas de una vez, coste previsto y "copiar semana anterior".
 - **Noches** — sesiones y eventos con su rentabilidad (ingresos − gastos − personal).
 - **Finanzas** — movimientos, cierre de caja por noche (efectivo / tarjeta por concepto), gráficos y desglose por categoría.
+- **Facturas** — archivo de facturas recibidas y emitidas (PDF o foto) con importe, IVA, estado de pago y vencimiento; se guardan en un almacenamiento privado de Supabase.
 - **Nóminas** — devengado por empleado según fichajes, pagado y pendiente; registro de pagos.
 - **Solicitudes** — aprobar o rechazar vacaciones, ausencias y cambios de turno.
 

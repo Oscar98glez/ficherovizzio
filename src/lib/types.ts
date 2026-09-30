@@ -117,3 +117,28 @@ export interface Availability {
   note: string | null;
   updated_at: string;
 }
+
+export type InvoiceKind = 'received' | 'issued';
+export type InvoiceStatus = 'pending' | 'paid';
+
+export interface Invoice {
+  id: string;
+  /** received = factura de proveedor (gasto) · issued = factura emitida a un cliente (ingreso) */
+  kind: InvoiceKind;
+  /** Proveedor o cliente */
+  party: string;
+  number: string | null;
+  date: string;
+  due_date: string | null;
+  amount: number;
+  tax: number | null;
+  category: string | null;
+  status: InvoiceStatus;
+  notes: string | null;
+  file_path: string;
+  file_name: string;
+  file_size: number | null;
+  mime_type: string | null;
+  transaction_id: string | null;
+  created_at: string;
+}

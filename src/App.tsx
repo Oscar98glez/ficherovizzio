@@ -11,6 +11,7 @@ import Employees from './pages/admin/Employees';
 import EventDetail from './pages/admin/EventDetail';
 import Events from './pages/admin/Events';
 import Finance from './pages/admin/Finance';
+import Invoices from './pages/admin/Invoices';
 import Payroll from './pages/admin/Payroll';
 import Requests from './pages/admin/Requests';
 import Schedule from './pages/admin/Schedule';
@@ -89,6 +90,7 @@ export default function App() {
                 <Route path="noches" element={<Events />} />
                 <Route path="noches/:id" element={<EventDetail />} />
                 <Route path="finanzas" element={<Finance />} />
+                <Route path="facturas" element={<Invoices />} />
                 <Route path="nominas" element={<Payroll />} />
                 <Route path="solicitudes" element={<Requests />} />
                 <Route path="ajustes" element={<Settings />} />
