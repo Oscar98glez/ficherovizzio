@@ -6,7 +6,7 @@ import { useFeedback } from '../../components/overlay';
 import { Avatar, Button, Card, CardHeader, Input, PageHeader, SectionTitle } from '../../components/ui';
 import { errorMessage } from '../../lib/api';
 import { IS_DEMO } from '../../lib/config';
-import { CONTRACTS, DEPARTMENTS } from '../../lib/constants';
+import { DEPARTMENTS } from '../../lib/constants';
 import { fmtDate } from '../../lib/format';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { api } from '../../lib/api';
@@ -55,7 +55,6 @@ export default function Profile() {
     ? [
         ['Puesto', employee.position],
         ['Departamento', DEPARTMENTS[employee.department].label],
-        ['Contrato', CONTRACTS[employee.contract_type]],
         ['Email', employee.email ?? profile?.email ?? '—'],
         ['Teléfono', employee.phone ?? '—'],
         ['Fecha de alta', employee.hire_date ? fmtDate(employee.hire_date, { day: 'numeric', month: 'long', year: 'numeric' }) : '—'],
@@ -71,7 +70,7 @@ export default function Profile() {
             name={name}
             color={employee.color}
             src={employee.photo_url}
-            size={104}
+            size={114}
             folder={employee.id}
             onChange={async (url) => {
               await api.setMyPhoto(url);
@@ -79,7 +78,7 @@ export default function Profile() {
             }}
           />
         ) : (
-          <Avatar name={name} size={96} />
+          <Avatar name={name} size={106} />
         )}
         <h2 className="mt-3 text-[24px] font-bold tracking-tight">{name}</h2>
         {employee && <p className="text-[15px] text-ink-2">{employee.position}</p>}
