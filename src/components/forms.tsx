@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Trash2 } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
-import { CONTRACTS, DEPARTMENTS, EMPLOYEE_COLORS, POSITIONS, SHIFT_STATUS } from '../lib/constants';
+import { CONTRACTS, DEPARTMENTS, departmentOfPosition, EMPLOYEE_COLORS, POSITION_GROUPS, POSITIONS, SHIFT_STATUS } from '../lib/constants';
+
+const OTHER_POSITION = '__otro__';
 import { businessDate, businessToday, fromLocalInput, isoDate, nightStart, toLocalInput, toTimeInput } from '../lib/dates';
 import { fmtHours, fmtMoney, fmtTime } from '../lib/format';
 import type { Availability, ClubEvent, ContractType, Department, Employee, Shift, ShiftStatus, TimeEntry } from '../lib/types';
@@ -88,6 +90,11 @@ export function EmployeeForm({
     if (open) setF(toEmployeeForm(employee));
   }, [open, employee]);
   const set = <K extends keyof EmployeeFormState>(k: K, v: EmployeeFormState[K]) => setF((s) => ({ ...s, [k]: v }));
+  // Puesto escrito a mano (no está en la lista)
+  const [otherPosition, setOtherPosition] = useState(false);
+  useEffect(() => {
+    if (open) setOtherPosition(!!employee && !POSITIONS.includes(employee.position));
+  }, [open, employee]);
 
   async function submit() {
     if (!f.first_name.trim()) return toast.error('El nombre es obligatorio');
@@ -127,7 +134,7 @@ export function EmployeeForm({
     <Modal open={open} onClose={onClose} title={employee ? 'Editar empleado' : 'Nuevo empleado'} onSubmit={submit} submitLabel={employee ? 'Guardar' : 'Crear'} saving={saving}>
       <div className="space-y-5">
         <div className="flex flex-col items-center gap-3">
-          <PhotoPicker name={name} color={f.color} src={f.photo_url} size={80} folder={employee?.id ?? 'nuevos'} onChange={(url) => set('photo_url', url)} removeOld={false} />
+          <PhotoPicker name={name} color={f.color} src={f.photo_url} size={96} folder={employee?.id ?? 'nuevos'} onChange={(url) => set('photo_url', url)} removeOld={false} />
           <div className="flex flex-wrap justify-center gap-2">
             {EMPLOYEE_COLORS.map((c) => (
               <button
@@ -164,12 +171,34 @@ export function EmployeeForm({
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Puesto">
-            <Input list="positions" value={f.position} onChange={(e) => set('position', e.target.value)} />
-            <datalist id="positions">
-              {POSITIONS.map((p) => (
-                <option key={p} value={p} />
+            <Select
+              value={otherPosition ? OTHER_POSITION : f.position}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === OTHER_POSITION) {
+                  setOtherPosition(true);
+                  set('position', '');
+                } else {
+                  setOtherPosition(false);
+                  // Al elegir un puesto se asigna también su departamento
+                  setF((s) => ({ ...s, position: v, department: departmentOfPosition(v) ?? s.department }));
+                }
+              }}
+            >
+              {POSITION_GROUPS.map((g) => (
+                <optgroup key={g.department} label={DEPARTMENTS[g.department].label}>
+                  {g.positions.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
-            </datalist>
+              <option value={OTHER_POSITION}>Otro…</option>
+            </Select>
+            {otherPosition && (
+              <Input className="mt-2" value={f.position} onChange={(e) => set('position', e.target.value)} placeholder="Escribe el puesto" autoFocus />
+            )}
           </Field>
           <Field label="Departamento">
             <Select value={f.department} onChange={(e) => set('department', e.target.value as Department)}>

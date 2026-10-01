@@ -22,25 +22,25 @@ export const DEPARTMENTS: Record<Department, { label: string; tone: Tone }> = {
   limpieza: { label: 'Limpieza', tone: 'green' },
 };
 
-export const POSITIONS = [
-  'Gerente',
-  'Encargado/a',
-  'Jefe/a de barra',
-  'Camarero/a',
-  'Barback',
-  'Relaciones públicas',
-  'Portero/a',
-  'Vigilante de seguridad',
-  'DJ residente',
-  'DJ invitado',
-  'Técnico/a de sonido',
-  'Técnico/a de iluminación',
-  'Taquillero/a',
-  'Guardarropa',
-  'Host / Hostess',
-  'Animación',
-  'Limpieza',
+/** Puestos de una discoteca agrupados por departamento (al elegir uno se asigna su departamento) */
+export const POSITION_GROUPS: { department: Department; positions: string[] }[] = [
+  { department: 'direccion', positions: ['Gerente', 'Director/a de sala', 'Encargado/a', 'Jefe/a de sala', 'Administrativo/a'] },
+  { department: 'barra', positions: ['Jefe/a de barra', 'Bartender / Coctelero/a', 'Camarero/a', 'Barback / Ayudante de barra'] },
+  {
+    department: 'sala',
+    positions: ['Camarero/a de bandeja', 'Camarero/a de reservados VIP', 'Botellero/a', 'Runner', 'Host / Hostess', 'Gogó / Bailarín/a', 'Animador/a', 'Performer'],
+  },
+  { department: 'seguridad', positions: ['Jefe/a de seguridad', 'Portero/a', 'Vigilante de seguridad', 'Control de acceso', 'Auxiliar de seguridad'] },
+  { department: 'cabina', positions: ['DJ residente', 'DJ invitado', 'Técnico/a de sonido', 'Técnico/a de iluminación', 'VJ / Técnico/a de vídeo'] },
+  { department: 'relaciones', positions: ['Relaciones públicas', 'Jefe/a de relaciones públicas', 'Promotor/a', 'Fotógrafo/a', 'Community manager'] },
+  { department: 'taquilla', positions: ['Taquillero/a', 'Cajero/a'] },
+  { department: 'guardarropa', positions: ['Guardarropa'] },
+  { department: 'limpieza', positions: ['Limpieza', 'Encargado/a de aseos', 'Mantenimiento'] },
 ];
+
+export const POSITIONS = POSITION_GROUPS.flatMap((g) => g.positions);
+
+export const departmentOfPosition = (position: string) => POSITION_GROUPS.find((g) => g.positions.includes(position))?.department;
 
 export const CONTRACTS: Record<ContractType, string> = {
   fijo: 'Indefinido',

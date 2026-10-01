@@ -70,7 +70,7 @@ export default function Profile() {
             name={name}
             color={employee.color}
             src={employee.photo_url}
-            size={114}
+            size={137}
             folder={employee.id}
             onChange={async (url) => {
               await api.setMyPhoto(url);
@@ -78,7 +78,7 @@ export default function Profile() {
             }}
           />
         ) : (
-          <Avatar name={name} size={106} />
+          <Avatar name={name} size={127} />
         )}
         <h2 className="mt-3 text-[24px] font-bold tracking-tight">{name}</h2>
         {employee && <p className="text-[15px] text-ink-2">{employee.position}</p>}
