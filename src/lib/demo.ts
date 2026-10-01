@@ -33,7 +33,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v8';
+const DB_KEY = 'vizzio.demo.db.v9';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -302,6 +302,7 @@ function seed(): DB {
     hourly_rate: rate,
     hire_date: isoDate(addDays(today, -int(90, 1100))),
     active: first !== 'Hugo',
+    photo_url: null,
     color,
     notes: null,
     created_at: stamp,

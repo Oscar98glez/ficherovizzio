@@ -105,7 +105,7 @@ export default function TimeEntries() {
               const emp = emps.get(e.employee_id);
               return (
                 <div key={e.id} className="flex shrink-0 items-center gap-2.5 rounded-2xl bg-fill/60 py-2 pl-2 pr-2">
-                  <Avatar name={fullName(emp)} color={emp?.color} size={34} />
+                  <Avatar name={fullName(emp)} color={emp?.color} src={emp?.photo_url} size={34} />
                   <div className="leading-tight">
                     <div className="text-[14px] font-medium">{emp?.first_name}</div>
                     <div className="tabular text-[12px] text-ink-2">{fmtDuration(now - Date.parse(e.clock_in))}</div>
@@ -160,7 +160,7 @@ export default function TimeEntries() {
                         className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition hover:bg-fill/60 md:grid-cols-[minmax(0,1.6fr)_150px_90px_90px_100px] md:px-5"
                       >
                         <div className="flex min-w-0 items-center gap-3">
-                          <Avatar name={fullName(emp)} color={emp?.color} size={36} />
+                          <Avatar name={fullName(emp)} color={emp?.color} src={emp?.photo_url} size={36} />
                           <div className="min-w-0">
                             <div className="truncate text-[15px] font-medium">{fullName(emp)}</div>
                             <div className="truncate text-[13px] text-ink-2">

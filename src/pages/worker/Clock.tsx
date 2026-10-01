@@ -7,8 +7,14 @@ import { Card, CardHeader, EmptyState, ErrorBox, ListRow, Loading, StatCard } fr
 import { useLoad, useNow } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange } from '../../lib/dates';
-import { fmtDate, fmtDateFull, fmtDateLong, fmtDuration, fmtDurationShort, fmtHours, fmtMoney, fmtTime } from '../../lib/format';
-import { cx, entryCost, entryHours, sumBy } from '../../lib/utils';
+import { fmtDate, fmtDateFull, fmtDateLong, fmtDuration, fmtDurationShort, fmtHours, fmtTime } from '../../lib/format';
+import { cx, entryHours, sumBy } from '../../lib/utils';
+import type { TimeEntry } from '../../lib/types';
+
+const nightsLabel = (es: TimeEntry[]) => {
+  const n = new Set(es.map((e) => businessDate(e.clock_in))).size;
+  return `${n} ${n === 1 ? 'noche' : 'noches'}`;
+};
 
 export function NotLinked() {
   return (
@@ -39,10 +45,10 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
     const from = [week.from, month.from].sort()[0];
     const today = isoDate(businessToday());
     const [entries, shifts] = await Promise.all([
-      api.timeEntries.list({ eq: { employee_id: employeeId }, gte: ['clock_in', businessStart(from)], order: ['clock_in', 'desc'] }),
+      api.myTimeEntries({ eq: { employee_id: employeeId }, gte: ['clock_in', businessStart(from)], order: ['clock_in', 'desc'] }),
       api.shifts.list({ eq: { employee_id: employeeId }, gte: ['start_at', businessStart(today)], lt: ['start_at', businessStart(isoDate(addDays(businessToday(), 30)))], order: ['start_at', 'asc'] }),
     ]);
-    const openEntries = entries.some((e) => !e.clock_out) ? [] : await api.timeEntries.list({ eq: { employee_id: employeeId, clock_out: null } });
+    const openEntries = entries.some((e) => !e.clock_out) ? [] : await api.myTimeEntries({ eq: { employee_id: employeeId, clock_out: null } });
     // ¿Ha indicado ya su disponibilidad para la semana que viene?
     const next = makePeriod('week', addDays(businessToday(), 7));
     const nextAvailability = await api.availability
@@ -114,7 +120,7 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
             {open ? fmtDuration(elapsed) : new Date(now).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           </div>
           <div className="tabular mt-2 h-5 text-[15px] text-ink-2">
-            {open ? `${fmtMoney(entryCost(open, now))} generados en este turno` : todayShift ? `Tu turno de hoy: entrada a las ${fmtTime(todayShift.start_at)}` : ''}
+            {open ? 'Recuerda fichar la salida al terminar' : todayShift ? `Tu turno de hoy: entrada a las ${fmtTime(todayShift.start_at)}` : ''}
           </div>
 
           <div className="relative mx-auto mt-8 h-44 w-44">
@@ -138,8 +144,8 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
       </Card>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <StatCard label="Esta semana" value={fmtHours(sumBy(weekEntries, (e) => entryHours(e, now)))} sub={fmtMoney(sumBy(weekEntries, (e) => entryCost(e, now)))} />
-        <StatCard label={month.label} value={fmtHours(sumBy(monthEntries, (e) => entryHours(e, now)))} sub={fmtMoney(sumBy(monthEntries, (e) => entryCost(e, now)))} />
+        <StatCard label="Esta semana" value={fmtHours(sumBy(weekEntries, (e) => entryHours(e, now)))} sub={nightsLabel(weekEntries)} />
+        <StatCard label={month.label} value={fmtHours(sumBy(monthEntries, (e) => entryHours(e, now)))} sub={nightsLabel(monthEntries)} />
       </div>
 
       {data.missingAvailability && (

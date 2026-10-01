@@ -70,7 +70,7 @@ export default function Requests() {
             return (
               <Card key={r.id} className="p-4">
                 <div className="flex items-start gap-3">
-                  <Avatar name={fullName(emp)} color={emp?.color} size={40} />
+                  <Avatar name={fullName(emp)} color={emp?.color} src={emp?.photo_url} size={40} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-[15px] font-semibold">{fullName(emp)}</span>

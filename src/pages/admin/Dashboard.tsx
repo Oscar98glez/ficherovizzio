@@ -124,7 +124,7 @@ export default function Dashboard() {
                     <ListRow
                       key={e.id}
                       onClick={() => navigate(`/personal/${e.employee_id}`)}
-                      leading={<Avatar name={fullName(emp)} color={emp?.color} size={36} />}
+                      leading={<Avatar name={fullName(emp)} color={emp?.color} src={emp?.photo_url} size={36} />}
                       title={fullName(emp)}
                       subtitle={`${emp?.position ?? ''} · desde ${fmtTime(e.clock_in)}`}
                       trailing={
@@ -208,7 +208,7 @@ export default function Dashboard() {
                   <ListRow
                     key={r.id}
                     onClick={() => navigate('/solicitudes')}
-                    leading={<Avatar name={fullName(emp)} color={emp?.color} size={36} />}
+                    leading={<Avatar name={fullName(emp)} color={emp?.color} src={emp?.photo_url} size={36} />}
                     title={fullName(emp)}
                     subtitle={`${REQUEST_KINDS[r.kind]} · ${fmtDate(r.start_date)}${r.end_date !== r.start_date ? ` – ${fmtDate(r.end_date)}` : ''}`}
                     chevron

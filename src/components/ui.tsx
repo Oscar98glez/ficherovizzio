@@ -354,12 +354,27 @@ export function Avatar({
   color = '#8e8e93',
   size = 36,
   className,
+  src,
 }: {
   name: string;
   color?: string;
   size?: number;
   className?: string;
+  /** Foto de perfil; si no hay, se muestran las iniciales */
+  src?: string | null;
 }) {
+  if (src)
+    return (
+      <img
+        src={src}
+        alt={name}
+        width={size}
+        height={size}
+        loading="lazy"
+        className={cx('inline-block shrink-0 rounded-full bg-fill object-cover', className)}
+        style={{ width: size, height: size }}
+      />
+    );
   return (
     <span
       className={cx('inline-grid shrink-0 place-items-center rounded-full font-semibold text-white', className)}

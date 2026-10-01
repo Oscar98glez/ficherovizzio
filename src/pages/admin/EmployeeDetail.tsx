@@ -105,7 +105,7 @@ export default function EmployeeDetail() {
 
       <Card className="mb-4 p-5 sm:p-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-          <Avatar name={fullName(e)} color={e.color} size={84} className={e.active ? '' : 'opacity-50 grayscale'} />
+          <Avatar name={fullName(e)} color={e.color} src={e.photo_url} size={84} className={e.active ? '' : 'opacity-50 grayscale'} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-[26px] font-bold tracking-tight">{fullName(e)}</h1>

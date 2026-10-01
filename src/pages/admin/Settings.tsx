@@ -42,7 +42,7 @@ export default function Settings() {
         <div>
           <SectionTitle>Tu cuenta</SectionTitle>
           <Card className="flex items-center gap-4 p-5">
-            <Avatar name={profile?.full_name || profile?.email || '?'} color={employee?.color ?? '#8e8e93'} size={56} />
+            <Avatar name={profile?.full_name || profile?.email || '?'} color={employee?.color ?? '#8e8e93'} src={employee?.photo_url} size={56} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[17px] font-semibold">{profile?.full_name || 'Sin nombre'}</div>
               <div className="truncate text-[14px] text-ink-2">{profile?.email}</div>

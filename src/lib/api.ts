@@ -1,6 +1,8 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoFiles, demoRepo, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoFiles, demoRepo, demoSession, type TableName } from './demo';
+import { blobToDataUrl } from './image';
+import { uid } from './utils';
 import { supabase } from './supabase';
 import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Shift, TimeEntry, Transaction } from './types';
 
@@ -41,7 +43,8 @@ const ERRORS: [RegExp, string][] = [
   [/employees_email_unique/i, 'Ya existe un empleado con ese email.'],
   [/out_after_in|end_after_start/i, 'La hora de salida debe ser posterior a la de entrada.'],
   [/public.availability/i, 'Falta crear la tabla de disponibilidad en Supabase (ejecuta la migración 20260930130000_availability.sql).'],
-  [/public.invoices|Bucket not found/i, 'Falta crear el apartado de facturas en Supabase (ejecuta la migración 20260930160000_invoices.sql).'],
+  [/public.invoices/i, 'Falta crear el apartado de facturas en Supabase (ejecuta la migración 20260930160000_invoices.sql).'],
+  [/Bucket not found|set_my_photo|photo_url/i, 'Falta aplicar en Supabase la última migración (fotos de perfil).'],
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
   [/availability_one_per_day/i, 'Ya hay disponibilidad guardada para ese día.'],
@@ -63,7 +66,7 @@ function sb() {
   return supabase;
 }
 
-function sbRepo<T extends { id: string }>(table: TableName): Repo<T> {
+function sbRepo<T extends { id: string }>(table: TableName | 'my_time_entries'): Repo<T> {
   const PAGE = 1000;
   return {
     async list(q = {}) {
@@ -148,6 +151,69 @@ export const files = {
   },
 };
 
+// ---------- Datos propios del trabajador (sin la tarifa €/h) ----------
+
+/** Si aún no se ha aplicado la migración de las vistas, se usan las tablas como antes */
+const missingView = (e: unknown) => /my_employee|my_time_entries|schema cache|does not exist/i.test(e instanceof Error ? e.message : String(e));
+const withoutRate = <T extends { hourly_rate?: number }>(x: T): T => ({ ...x, hourly_rate: 0 });
+
+/** Ficha del trabajador conectado, sin la tarifa ni las notas internas */
+async function myEmployee(userId: string): Promise<Employee | null> {
+  let emp: Employee | null = null;
+  if (IS_DEMO) emp = (await demoRepo<Employee>('employees').list({ eq: { user_id: userId } }))[0] ?? null;
+  else {
+    const { data, error } = await sb().from('my_employee').select('*').maybeSingle();
+    if (error && !missingView(error)) throw fail(error);
+    emp = error ? (await sbRepo<Employee>('employees').list({ eq: { user_id: userId } }))[0] ?? null : (data as Employee | null);
+  }
+  return emp && { ...withoutRate(emp), notes: null };
+}
+
+/** Fichajes del trabajador conectado, sin la tarifa aplicada */
+async function myTimeEntries(q: Query = {}): Promise<TimeEntry[]> {
+  if (IS_DEMO) return (await demoRepo<TimeEntry>('time_entries').list(q)).map(withoutRate);
+  try {
+    return (await sbRepo<TimeEntry>('my_time_entries').list(q)).map(withoutRate);
+  } catch (e) {
+    if (!missingView(e)) throw e;
+    return (await sbRepo<TimeEntry>('time_entries').list(q)).map(withoutRate);
+  }
+}
+
+// ---------- Fotos de perfil ----------
+
+const AVATARS = 'avatars';
+
+export const avatars = {
+  /** Sube la foto (ya recortada) y devuelve su URL */
+  async upload(employeeId: string, image: Blob): Promise<string> {
+    if (IS_DEMO) return blobToDataUrl(image);
+    const path = `${employeeId}/${uid()}.jpg`;
+    const { error } = await sb().storage.from(AVATARS).upload(path, image, { contentType: 'image/jpeg', upsert: false });
+    if (error) throw fail(error);
+    return sb().storage.from(AVATARS).getPublicUrl(path).data.publicUrl;
+  },
+  /** Borra el archivo de una foto anterior (si es de nuestro almacenamiento) */
+  async remove(url: string | null | undefined) {
+    if (IS_DEMO || !url) return;
+    const marker = `/object/public/${AVATARS}/`;
+    const i = url.indexOf(marker);
+    if (i < 0) return;
+    await sb().storage.from(AVATARS).remove([decodeURIComponent(url.slice(i + marker.length))]);
+  },
+};
+
+/** El trabajador cambia (o quita) su propia foto */
+async function setMyPhoto(url: string | null) {
+  if (IS_DEMO) {
+    const userId = demoSession.get();
+    const [emp] = await demoRepo<Employee>('employees').list({ eq: { user_id: userId } });
+    if (emp) await demoRepo<Employee>('employees').update(emp.id, { photo_url: url });
+    return;
+  }
+  await sbRpc<null>('set_my_photo', { p_url: url });
+}
+
 // ---------- API pública ----------
 
 const repo = <T extends { id: string }>(table: TableName) => (IS_DEMO ? demoRepo<T>(table) : sbRepo<T>(table));
@@ -190,4 +256,8 @@ export const api = {
   /** Fichar salida del usuario conectado (hora del servidor). */
   clockOut: (notes?: string) =>
     IS_DEMO ? demoClockOut(notes) : sbRpc<TimeEntry>('clock_out', { p_notes: notes ?? null }),
+
+  myEmployee,
+  myTimeEntries,
+  setMyPhoto,
 };

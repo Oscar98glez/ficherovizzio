@@ -6,7 +6,7 @@ import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { SHIFT_STATUS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
-import { fmtDate, fmtHours, fmtMoney, fmtWeekday, fmtShiftTimes } from '../../lib/format';
+import { fmtDate, fmtHours, fmtWeekday, fmtShiftTimes } from '../../lib/format';
 import { byId, cx, shiftHours } from '../../lib/utils';
 import { NotLinked } from './Clock';
 
@@ -72,7 +72,6 @@ export default function MyShifts() {
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <Badge tone={SHIFT_STATUS[s.status].tone}>{SHIFT_STATUS[s.status].label}</Badge>
-                  {s.end_at && <span className="tabular text-[12px] text-ink-2">{fmtMoney(shiftHours(s) * employee.hourly_rate)}</span>}
                 </div>
               </Card>
             );

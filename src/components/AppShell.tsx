@@ -166,7 +166,7 @@ export function AppShell() {
             </div>
           )}
           <div className="flex items-center gap-3 rounded-[10px] px-2 py-1.5">
-            <Avatar name={displayName} color={employee?.color ?? '#8e8e93'} size={34} />
+            <Avatar name={displayName} color={employee?.color ?? '#8e8e93'} src={employee?.photo_url} size={34} />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[14px] font-medium">{displayName}</div>
               <div className="truncate text-[12px] text-ink-2">{isAdmin ? 'Administrador' : employee?.position ?? 'Trabajador'}</div>

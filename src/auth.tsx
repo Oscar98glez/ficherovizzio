@@ -40,11 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loadUser = useCallback(async (userId: string | null, email: string | null) => {
     if (!userId) return setState(EMPTY);
     try {
-      const [profile, employees] = await Promise.all([
-        api.profiles.get(userId),
-        api.employees.list({ eq: { user_id: userId } }),
-      ]);
-      setState({ loading: false, userId, email: email ?? profile?.email ?? null, profile, employee: employees[0] ?? null, error: null });
+      const profile = await api.profiles.get(userId);
+      // El trabajador recibe su ficha sin la tarifa €/h; el administrador, la ficha completa
+      const employee =
+        profile?.role === 'admin'
+          ? (await api.employees.list({ eq: { user_id: userId } }))[0] ?? null
+          : await api.myEmployee(userId);
+      setState({ loading: false, userId, email: email ?? profile?.email ?? null, profile, employee, error: null });
     } catch (e) {
       setState({ ...EMPTY, userId, email, error: errorMessage(e) });
     }

@@ -40,6 +40,8 @@ export interface Employee {
   active: boolean;
   color: string;
   notes: string | null;
+  /** Foto de perfil (URL pública) */
+  photo_url: string | null;
   created_at: string;
 }
 

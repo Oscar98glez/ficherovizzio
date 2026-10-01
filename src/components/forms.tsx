@@ -8,6 +8,7 @@ import type { Availability, ClubEvent, ContractType, Department, Employee, Shift
 import { availabilityLabel, hhmm } from '../lib/availability';
 import { cx, entryHours, fullName, parseAmount } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
+import { PhotoPicker } from './PhotoPicker';
 import { Avatar, Button, Field, Input, Segmented, Select, Switch, Textarea } from './ui';
 
 function DeleteButton({ label, onClick }: { label: string; onClick: () => void }) {
@@ -50,6 +51,7 @@ interface EmployeeFormState {
   color: string;
   active: boolean;
   notes: string;
+  photo_url: string | null;
 }
 
 const toEmployeeForm = (e?: Employee | null): EmployeeFormState => ({
@@ -65,6 +67,7 @@ const toEmployeeForm = (e?: Employee | null): EmployeeFormState => ({
   color: e?.color ?? EMPLOYEE_COLORS[Math.floor(Math.random() * EMPLOYEE_COLORS.length)],
   active: e?.active ?? true,
   notes: e?.notes ?? '',
+  photo_url: e?.photo_url ?? null,
 });
 
 export function EmployeeForm({
@@ -104,6 +107,8 @@ export function EmployeeForm({
         color: f.color,
         active: f.active,
         notes: f.notes.trim() || null,
+        // La foto sólo se envía si ha cambiado
+        ...(f.photo_url !== (employee?.photo_url ?? null) ? { photo_url: f.photo_url } : {}),
       };
       const saved = employee ? await api.employees.update(employee.id, values) : await api.employees.create(values);
       toast.success(employee ? 'Cambios guardados' : 'Empleado creado');
@@ -122,7 +127,7 @@ export function EmployeeForm({
     <Modal open={open} onClose={onClose} title={employee ? 'Editar empleado' : 'Nuevo empleado'} onSubmit={submit} submitLabel={employee ? 'Guardar' : 'Crear'} saving={saving}>
       <div className="space-y-5">
         <div className="flex flex-col items-center gap-3">
-          <Avatar name={name} color={f.color} size={72} />
+          <PhotoPicker name={name} color={f.color} src={f.photo_url} size={80} folder={employee?.id ?? 'nuevos'} onChange={(url) => set('photo_url', url)} removeOld={false} />
           <div className="flex flex-wrap justify-center gap-2">
             {EMPLOYEE_COLORS.map((c) => (
               <button
@@ -511,7 +516,7 @@ export function ShiftForm({
                       on ? 'bg-surface shadow-card dark:bg-elevated' : 'hover:bg-fill',
                     )}
                   >
-                    <Avatar name={fullName(e)} color={e.color} size={28} />
+                    <Avatar name={fullName(e)} color={e.color} src={e.photo_url} size={28} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[14px] font-medium">{fullName(e)}</span>
                       {availability ? (

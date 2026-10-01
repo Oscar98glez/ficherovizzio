@@ -127,7 +127,7 @@ export default function Employees() {
                   className="grid w-full grid-cols-[minmax(0,1fr)_auto_16px] items-center gap-3 px-4 py-3 text-left transition hover:bg-fill/60 md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_90px_100px_110px_24px] md:gap-4 md:px-5"
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <Avatar name={fullName(e)} color={e.color} size={40} className={e.active ? '' : 'opacity-40 grayscale'} />
+                    <Avatar name={fullName(e)} color={e.color} src={e.photo_url} size={40} className={e.active ? '' : 'opacity-40 grayscale'} />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="truncate text-[15px] font-medium">{fullName(e)}</span>

@@ -176,7 +176,7 @@ export default function Payroll() {
               {rows.map((r) => (
                 <div key={r.e.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 md:grid-cols-[minmax(0,2fr)_70px_80px_110px_110px_110px_90px] md:gap-4 md:px-5">
                   <button onClick={() => navigate(`/personal/${r.e.id}`)} className="flex min-w-0 items-center gap-3 text-left">
-                    <Avatar name={fullName(r.e)} color={r.e.color} size={36} />
+                    <Avatar name={fullName(r.e)} color={r.e.color} src={r.e.photo_url} size={36} />
                     <div className="min-w-0">
                       <div className="truncate text-[15px] font-medium">{fullName(r.e)}</div>
                       <div className="truncate text-[13px] text-ink-2">

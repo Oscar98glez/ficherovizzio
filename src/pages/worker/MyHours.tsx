@@ -6,8 +6,8 @@ import { Badge, Card, EmptyState, ErrorBox, Loading, PageHeader, StatCard } from
 import { useLoad, useNow } from '../../hooks';
 import { api } from '../../lib/api';
 import { businessDate, makePeriod, periodRange } from '../../lib/dates';
-import { fmtDateLong, fmtHours, fmtMoney, fmtTime } from '../../lib/format';
-import { entryCost, entryHours, sumBy } from '../../lib/utils';
+import { fmtDateLong, fmtHours, fmtTime } from '../../lib/format';
+import { entryHours, sumBy } from '../../lib/utils';
 import { NotLinked } from './Clock';
 
 export default function MyHours() {
@@ -18,7 +18,7 @@ export default function MyHours() {
   const { data, loading, error, reload } = useLoad(async () => {
     if (!employee) return [];
     const { start, end } = periodRange(period);
-    return api.timeEntries.list({ eq: { employee_id: employee.id }, gte: ['clock_in', start], lt: ['clock_in', end], order: ['clock_in', 'desc'] });
+    return api.myTimeEntries({ eq: { employee_id: employee.id }, gte: ['clock_in', start], lt: ['clock_in', end], order: ['clock_in', 'desc'] });
   }, [period, employee?.id]);
 
   if (!employee) return <NotLinked />;
@@ -27,19 +27,18 @@ export default function MyHours() {
 
   const entries = data ?? [];
   const hours = sumBy(entries, (e) => entryHours(e, now));
-  const earned = sumBy(entries, (e) => entryCost(e, now));
   const nights = new Set(entries.map((e) => businessDate(e.clock_in))).size;
 
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Mis horas" subtitle={`Tarifa actual ${fmtMoney(employee.hourly_rate)}/h`} />
+      <PageHeader title="Mis horas" subtitle="Tus fichajes y las horas que has trabajado" />
       <div className="mb-4">
         <PeriodPicker period={period} onChange={setPeriod} units={['week', 'month']} />
       </div>
       <div className="mb-5 grid grid-cols-3 gap-3">
         <StatCard label="Horas" value={fmtHours(hours)} />
         <StatCard label="Noches" value={nights} />
-        <StatCard label="Importe bruto" value={fmtMoney(earned)} tone="green" />
+        <StatCard label="Media por noche" value={nights ? fmtHours(hours / nights) : '—'} />
       </div>
 
       <Card className="divide-y divide-line overflow-hidden">
@@ -58,7 +57,6 @@ export default function MyHours() {
               </div>
               <div className="tabular text-right">
                 <div className="text-[15px] font-semibold">{fmtHours(entryHours(e, now))}</div>
-                <div className="text-[12px] text-ink-2">{fmtMoney(entryCost(e, now))}</div>
               </div>
             </div>
           ))
@@ -66,7 +64,6 @@ export default function MyHours() {
           <EmptyState icon={<Clock />} title="Sin fichajes en este periodo" />
         )}
       </Card>
-      <p className="mt-3 px-1 text-[12px] text-ink-3">Importe orientativo calculado con tu tarifa por hora. No incluye retenciones ni cotizaciones.</p>
     </div>
   );
 }

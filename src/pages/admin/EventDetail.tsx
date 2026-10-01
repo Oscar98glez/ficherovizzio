@@ -111,7 +111,7 @@ export default function EventDetail() {
                   return (
                     <ListRow
                       key={s.id}
-                      leading={<Avatar name={fullName(emp)} color={emp?.color} size={32} />}
+                      leading={<Avatar name={fullName(emp)} color={emp?.color} src={emp?.photo_url} size={32} />}
                       title={fullName(emp)}
                       subtitle={`${s.position ?? emp?.position ?? ''} · ${fmtShiftTimes(s)}`}
                     />
@@ -125,7 +125,7 @@ export default function EventDetail() {
                       <ListRow
                         key={e.id}
                         onClick={() => navigate(`/personal/${e.employee_id}`)}
-                        leading={<Avatar name={fullName(emp)} color={emp?.color} size={32} />}
+                        leading={<Avatar name={fullName(emp)} color={emp?.color} src={emp?.photo_url} size={32} />}
                         title={fullName(emp)}
                         subtitle={`${fmtTime(e.clock_in)}–${e.clock_out ? fmtTime(e.clock_out) : 'en curso'} · ${fmtHours(entryHours(e))}`}
                         trailing={<span className="tabular text-[14px] font-semibold">{fmtMoney(entryCost(e))}</span>}

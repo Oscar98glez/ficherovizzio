@@ -104,7 +104,7 @@ export default function Availability() {
                 return (
                   <div key={e.id} className="grid grid-cols-[minmax(180px,1.3fr)_repeat(7,minmax(88px,1fr))] items-stretch">
                     <div className="flex min-w-0 items-center gap-2.5 px-4 py-2.5">
-                      <Avatar name={fullName(e)} color={e.color} size={32} />
+                      <Avatar name={fullName(e)} color={e.color} src={e.photo_url} size={32} />
                       <div className="min-w-0">
                         <div className="truncate text-[14px] font-medium">{fullName(e)}</div>
                         {answered ? (
