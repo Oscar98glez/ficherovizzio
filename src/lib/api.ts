@@ -32,6 +32,8 @@ const ERRORS: [RegExp, string][] = [
   [/ALREADY_CLOCKED_IN|time_entries_one_open/i, 'Ya hay un fichaje abierto para este empleado.'],
   [/NOT_CLOCKED_IN/i, 'No tienes ningún fichaje abierto.'],
   [/NO_EMPLOYEE/i, 'Tu usuario no está vinculado a ninguna ficha de empleado activa.'],
+  [/email rate limit exceeded|over_email_send_rate_limit/i, 'Ahora mismo no se pueden enviar más emails de confirmación. Espera unos minutos y vuelve a intentarlo, o avisa al administrador.'],
+  [/rate limit|too many requests/i, 'Demasiados intentos seguidos. Espera un par de minutos y vuelve a intentarlo.'],
   [/Invalid login credentials/i, 'Email o contraseña incorrectos.'],
   [/User already registered/i, 'Ya existe una cuenta con este email.'],
   [/Email not confirmed/i, 'Confirma tu email antes de iniciar sesión (revisa tu bandeja de entrada).'],
