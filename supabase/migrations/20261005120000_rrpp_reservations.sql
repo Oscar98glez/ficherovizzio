@@ -90,7 +90,9 @@ begin
     end if;
   end if;
 
-  if tg_op = 'INSERT' or new.rrpp_id is distinct from old.rrpp_id then
+  if tg_op = 'INSERT' then
+    new.rrpp_name := (select trim(first_name || ' ' || last_name) from public.employees where id = new.rrpp_id);
+  elsif new.rrpp_id is distinct from old.rrpp_id then
     new.rrpp_name := (select trim(first_name || ' ' || last_name) from public.employees where id = new.rrpp_id);
   end if;
 
