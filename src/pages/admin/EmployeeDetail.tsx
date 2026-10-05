@@ -266,11 +266,11 @@ export default function EmployeeDetail() {
 
       {isRrpp && (
         <div className="mt-4 lg:mt-5">
-          <RrppCommissionCard employeeId={e.id} />
+          <RrppCommissionCard employee={e} />
         </div>
       )}
 
-      <EmployeeForm open={editing} onClose={() => setEditing(false)} employee={e} onSaved={reload} />
+      <EmployeeForm open={editing} onClose={() => setEditing(false)} employee={e} onSaved={reload} rrpp={isRrpp} />
       <EntryForm
         open={!!entryModal}
         onClose={() => setEntryModal(null)}

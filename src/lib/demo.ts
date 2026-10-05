@@ -44,7 +44,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v14';
+const DB_KEY = 'vizzio.demo.db.v15';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -666,11 +666,12 @@ function seed(): DB {
     weekday: Number(d),
     bottle_pct: b,
     ticket_pct: t,
+    list_fee: b ? 1 : 0,
     updated_at: stamp,
   }));
   const ticketSales: TicketSale[] = events
     .filter((e) => e.date >= isoDate(addDays(today, -30)) && e.date < isoDate(businessToday()) && e.kind !== 'evento_privado')
-    .map((e) => ({ id: uid(), date: e.date, employee_id: 'emp-6', quantity: int(8, 40), unit_price: 15, notes: null, created_at: stamp }));
+    .map((e) => ({ id: uid(), date: e.date, employee_id: 'emp-6', quantity: int(8, 40), unit_price: 15, list_quantity: int(10, 60), notes: null, created_at: stamp }));
 
   return {
     profiles,

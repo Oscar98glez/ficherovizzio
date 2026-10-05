@@ -43,6 +43,11 @@ export interface Employee {
   notes: string | null;
   /** Foto de perfil (URL pública) */
   photo_url: string | null;
+  /** RRPP: comisiones propias (null = se usa la del día de la semana) */
+  rrpp_bottle_pct?: number | null;
+  rrpp_ticket_pct?: number | null;
+  /** RRPP: € por cada persona que entra por su lista */
+  rrpp_list_fee?: number | null;
   created_at: string;
 }
 
@@ -227,6 +232,8 @@ export interface CommissionRate {
   weekday: number;
   bottle_pct: number;
   ticket_pct: number;
+  /** € por persona de lista */
+  list_fee: number;
   updated_at: string;
 }
 
@@ -239,6 +246,8 @@ export interface TicketSale {
   quantity: number;
   /** Precio de venta de cada entrada */
   unit_price: number;
+  /** Personas que entran por su lista */
+  list_quantity: number;
   notes: string | null;
   created_at: string;
 }

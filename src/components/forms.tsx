@@ -54,6 +54,9 @@ interface EmployeeFormState {
   active: boolean;
   notes: string;
   photo_url: string | null;
+  rrpp_bottle_pct: string;
+  rrpp_ticket_pct: string;
+  rrpp_list_fee: string;
 }
 
 const toEmployeeForm = (e?: Employee | null): EmployeeFormState => ({
@@ -70,6 +73,9 @@ const toEmployeeForm = (e?: Employee | null): EmployeeFormState => ({
   active: e?.active ?? true,
   notes: e?.notes ?? '',
   photo_url: e?.photo_url ?? null,
+  rrpp_bottle_pct: e?.rrpp_bottle_pct != null ? String(e.rrpp_bottle_pct).replace('.', ',') : '',
+  rrpp_ticket_pct: e?.rrpp_ticket_pct != null ? String(e.rrpp_ticket_pct).replace('.', ',') : '',
+  rrpp_list_fee: e?.rrpp_list_fee != null ? String(e.rrpp_list_fee).replace('.', ',') : '',
 });
 
 export function EmployeeForm({
@@ -77,11 +83,14 @@ export function EmployeeForm({
   onClose,
   employee,
   onSaved,
+  rrpp = false,
 }: {
   open: boolean;
   onClose: () => void;
   employee?: Employee | null;
   onSaved: (e: Employee) => void;
+  /** Es RRPP (por su cuenta): muestra sus comisiones */
+  rrpp?: boolean;
 }) {
   const { toast } = useFeedback();
   const [f, setF] = useState(() => toEmployeeForm(employee));
@@ -99,6 +108,10 @@ export function EmployeeForm({
   async function submit() {
     if (!f.first_name.trim()) return toast.error('El nombre es obligatorio');
     if (f.email && !/^\S+@\S+\.\S+$/.test(f.email.trim())) return toast.error('El email no es válido');
+    const optional = (v: string) => (v.trim() ? parseAmount(v) : null);
+    const bottlePct = optional(f.rrpp_bottle_pct);
+    const ticketPct = optional(f.rrpp_ticket_pct);
+    if ([bottlePct, ticketPct].some((v) => v != null && (v < 0 || v > 100))) return toast.error('Los porcentajes deben estar entre 0 y 100');
     setSaving(true);
     try {
       const values: Partial<Employee> = {
@@ -114,6 +127,10 @@ export function EmployeeForm({
         color: f.color,
         active: f.active,
         notes: f.notes.trim() || null,
+        // Comisiones propias de RRPP: sólo se envían si se muestran o ya tenía alguna
+        ...(showRrpp || employee?.rrpp_bottle_pct != null || employee?.rrpp_ticket_pct != null || employee?.rrpp_list_fee != null
+          ? { rrpp_bottle_pct: bottlePct, rrpp_ticket_pct: ticketPct, rrpp_list_fee: optional(f.rrpp_list_fee) }
+          : {}),
         // La foto sólo se envía si ha cambiado
         ...(f.photo_url !== (employee?.photo_url ?? null) ? { photo_url: f.photo_url } : {}),
       };
@@ -129,6 +146,7 @@ export function EmployeeForm({
   }
 
   const name = `${f.first_name} ${f.last_name}`.trim() || '?';
+  const showRrpp = rrpp || f.department === 'relaciones';
 
   return (
     <Modal open={open} onClose={onClose} title={employee ? 'Editar empleado' : 'Nuevo empleado'} onSubmit={submit} submitLabel={employee ? 'Guardar' : 'Crear'} saving={saving}>
@@ -228,6 +246,31 @@ export function EmployeeForm({
             <Input type="date" value={f.hire_date} onChange={(e) => set('hire_date', e.target.value)} />
           </Field>
         </div>
+
+        {showRrpp && (
+          <div className="rounded-xl bg-fill/60 p-4">
+            <div className="mb-3">
+              <div className="text-[15px] font-semibold">Comisiones RRPP</div>
+              <div className="text-[13px] text-ink-2">Lo que se lleva de lo que vende. Vacío = se usa la comisión de cada día de la semana.</div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {(
+                [
+                  ['rrpp_bottle_pct', 'Comisión botellas', '%', 'Ej. 10'],
+                  ['rrpp_ticket_pct', 'Comisión entradas', '%', 'Ej. 10'],
+                  ['rrpp_list_fee', 'Entradas de lista', '€/pers.', 'Ej. 1'],
+                ] as const
+              ).map(([k, label, unit, placeholder]) => (
+                <Field key={k} label={label}>
+                  <div className="relative">
+                    <Input inputMode="decimal" value={f[k]} onChange={(e) => set(k, e.target.value)} placeholder={placeholder} className="pr-16" />
+                    <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[14px] text-ink-3">{unit}</span>
+                  </div>
+                </Field>
+              ))}
+            </div>
+          </div>
+        )}
 
         <Field label="Notas">
           <Textarea value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Tallas de uniforme, disponibilidad, observaciones…" />

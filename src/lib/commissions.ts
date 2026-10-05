@@ -1,11 +1,12 @@
 /**
  * Comisiones de los RRPP: un % de lo vendido en botellas (de sus reservas) y en entradas,
- * con un porcentaje distinto para cada día de la semana.
+ * más un importe fijo por cada persona que entra por su lista.
+ * Cada RRPP puede tener sus propios valores; si no, se usan los del día de la semana.
  */
 import { isActiveReservation } from './constants';
 import { parseDate } from './dates';
 import { menuPrice } from './menu';
-import type { CommissionRate, Reservation, TicketSale } from './types';
+import type { CommissionRate, Employee, Reservation, TicketSale } from './types';
 
 /** Días en el orden de la semana española (lunes primero); el valor es el de Date.getDay() */
 export const WEEKDAYS: { value: number; label: string }[] = [
@@ -22,6 +23,9 @@ export const weekdayOf = (date: string) => parseDate(date).getDay();
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Comisiones propias de un RRPP (null = se usa la del día) */
+export type PersonalRates = Pick<Employee, 'id' | 'rrpp_bottle_pct' | 'rrpp_ticket_pct' | 'rrpp_list_fee'>;
+
 export interface NightCommission {
   date: string;
   bottles: number;
@@ -32,6 +36,11 @@ export interface NightCommission {
   ticketSales: number;
   ticketPct: number;
   ticketCommission: number;
+  /** Personas que entran por su lista */
+  list: number;
+  /** € por persona de lista */
+  listFee: number;
+  listCommission: number;
   total: number;
 }
 
@@ -44,6 +53,8 @@ export interface RrppCommission {
   tickets: number;
   ticketSales: number;
   ticketCommission: number;
+  list: number;
+  listCommission: number;
   total: number;
 }
 
@@ -56,12 +67,21 @@ export function reservationBottles(r: Reservation) {
   };
 }
 
+const num = (v: number | null | undefined) => (v == null ? null : Number(v));
+
 /**
  * Comisiones de cada RRPP. Cuentan las reservas en las que es el RRPP (no las canceladas
- * ni las de "No vino") y las entradas que tiene registradas, con el % del día de cada noche.
+ * ni las de "No vino") y las entradas y personas de lista registradas, con los valores
+ * propios del RRPP o, si no tiene, los del día de la semana de cada noche.
  */
-export function computeCommissions(reservations: Reservation[], tickets: TicketSale[], rates: CommissionRate[]): Map<string, RrppCommission> {
+export function computeCommissions(
+  reservations: Reservation[],
+  tickets: TicketSale[],
+  rates: CommissionRate[],
+  personal: PersonalRates[] = [],
+): Map<string, RrppCommission> {
   const rate = new Map(rates.map((r) => [r.weekday, r]));
+  const own = new Map(personal.map((e) => [e.id, e]));
   const nights = new Map<string, Map<string, NightCommission>>();
   const night = (employeeId: string, date: string) => {
     let byDate = nights.get(employeeId);
@@ -69,7 +89,22 @@ export function computeCommissions(reservations: Reservation[], tickets: TicketS
     let n = byDate.get(date);
     if (!n) {
       const r = rate.get(weekdayOf(date));
-      n = { date, bottles: 0, bottleSales: 0, bottlePct: Number(r?.bottle_pct ?? 0), bottleCommission: 0, tickets: 0, ticketSales: 0, ticketPct: Number(r?.ticket_pct ?? 0), ticketCommission: 0, total: 0 };
+      const e = own.get(employeeId);
+      n = {
+        date,
+        bottles: 0,
+        bottleSales: 0,
+        bottlePct: num(e?.rrpp_bottle_pct) ?? Number(r?.bottle_pct ?? 0),
+        bottleCommission: 0,
+        tickets: 0,
+        ticketSales: 0,
+        ticketPct: num(e?.rrpp_ticket_pct) ?? Number(r?.ticket_pct ?? 0),
+        ticketCommission: 0,
+        list: 0,
+        listFee: num(e?.rrpp_list_fee) ?? Number(r?.list_fee ?? 0),
+        listCommission: 0,
+        total: 0,
+      };
       byDate.set(date, n);
     }
     return n;
@@ -84,10 +119,12 @@ export function computeCommissions(reservations: Reservation[], tickets: TicketS
     n.bottleSales = round2(n.bottleSales + sales);
   }
   for (const t of tickets) {
-    if (!t.quantity) continue;
+    const list = t.list_quantity ?? 0;
+    if (!t.quantity && !list) continue;
     const n = night(t.employee_id, t.date);
     n.tickets += t.quantity;
     n.ticketSales = round2(n.ticketSales + t.quantity * Number(t.unit_price));
+    n.list += list;
   }
 
   const out = new Map<string, RrppCommission>();
@@ -96,7 +133,8 @@ export function computeCommissions(reservations: Reservation[], tickets: TicketS
     for (const n of list) {
       n.bottleCommission = round2((n.bottleSales * n.bottlePct) / 100);
       n.ticketCommission = round2((n.ticketSales * n.ticketPct) / 100);
-      n.total = round2(n.bottleCommission + n.ticketCommission);
+      n.listCommission = round2(n.list * n.listFee);
+      n.total = round2(n.bottleCommission + n.ticketCommission + n.listCommission);
     }
     const sum = (k: keyof NightCommission) => round2(list.reduce((a, n) => a + (n[k] as number), 0));
     out.set(employeeId, {
@@ -108,6 +146,8 @@ export function computeCommissions(reservations: Reservation[], tickets: TicketS
       tickets: sum('tickets'),
       ticketSales: sum('ticketSales'),
       ticketCommission: sum('ticketCommission'),
+      list: sum('list'),
+      listCommission: sum('listCommission'),
       total: sum('total'),
     });
   }
