@@ -13,6 +13,7 @@ import {
   PartyPopper,
   Receipt,
   Settings,
+  Sofa,
   User,
   Users,
   Wallet,
@@ -42,7 +43,7 @@ export function Logo({ size = 32 }: { size?: number }) {
 }
 
 export function AppShell() {
-  const { profile, employee, isAdmin, signOut } = useAuth();
+  const { profile, employee, isAdmin, isRrpp, signOut } = useAuth();
   const [pending, setPending] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
@@ -72,6 +73,7 @@ export function AppShell() {
           title: 'Negocio',
           items: [
             { to: '/noches', label: 'Noches', icon: PartyPopper },
+            { to: '/reservados', label: 'Reservados', icon: Sofa },
             { to: '/finanzas', label: 'Finanzas', icon: Wallet },
             { to: '/facturas', label: 'Facturas', icon: FileText },
             { to: '/nominas', label: 'Nóminas', icon: Receipt },
@@ -89,6 +91,7 @@ export function AppShell() {
         {
           items: [
             { to: '/fichar', label: 'Fichar', icon: Fingerprint },
+            ...(isRrpp ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
             { to: '/mis-horas', label: 'Mis horas', icon: Clock },
             { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays },
             { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
@@ -169,7 +172,7 @@ export function AppShell() {
             <Avatar name={displayName} color={employee?.color ?? '#8e8e93'} src={employee?.photo_url} size={34} />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[14px] font-medium">{displayName}</div>
-              <div className="truncate text-[12px] text-ink-2">{isAdmin ? 'Administrador' : employee?.position ?? 'Trabajador'}</div>
+              <div className="truncate text-[12px] text-ink-2">{isAdmin ? 'Administrador' : employee?.position ?? (isRrpp ? 'RRPP' : 'Trabajador')}</div>
             </div>
             <button
               onClick={async () => {

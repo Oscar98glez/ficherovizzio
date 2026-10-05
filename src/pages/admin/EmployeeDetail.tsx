@@ -7,7 +7,7 @@ import { useFeedback } from '../../components/overlay';
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, ListRow, LiveDot, Loading, Segmented, StatCard } from '../../components/ui';
 import { useLoad, useNow } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
-import { CONTRACTS, DEPARTMENTS, SHIFT_STATUS } from '../../lib/constants';
+import { CONTRACTS, DEPARTMENTS, ROLES, SHIFT_STATUS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange } from '../../lib/dates';
 import { fmtDate, fmtDateLong, fmtDuration, fmtHours, fmtMoney, fmtTime, fmtShiftTimes } from '../../lib/format';
 import type { Role, TimeEntry } from '../../lib/types';
@@ -71,7 +71,7 @@ export default function EmployeeDetail() {
     if (!data?.profile) return;
     try {
       await api.profiles.update(data.profile.id, { role });
-      toast.success(role === 'admin' ? 'Ahora es administrador' : 'Ahora es trabajador');
+      toast.success(`Ahora es ${role === 'rrpp' ? 'RRPP' : ROLES[role].toLowerCase()}`);
       reload();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -205,6 +205,7 @@ export default function EmployeeDetail() {
                       onChange={(r) => (data.profile!.id === userId ? toast.error('No puedes cambiar tu propio rol') : setRole(r))}
                       options={[
                         { value: 'worker', label: 'Trabajador' },
+                        { value: 'rrpp', label: 'RRPP' },
                         { value: 'admin', label: 'Administrador' },
                       ]}
                     />

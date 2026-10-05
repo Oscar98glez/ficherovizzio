@@ -16,6 +16,8 @@ interface AuthState {
 
 interface AuthContext extends AuthState {
   isAdmin: boolean;
+  /** Relaciones públicas: ficha como un trabajador y gestiona reservados */
+  isRrpp: boolean;
   signIn(email: string, password: string): Promise<void>;
   signUp(name: string, email: string, password: string): Promise<{ needsConfirmation: boolean }>;
   signOut(): Promise<void>;
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContext = {
     ...state,
     isAdmin: state.profile?.role === 'admin',
+    isRrpp: state.profile?.role === 'rrpp',
 
     async signIn(email, password) {
       const { error } = await sb().auth.signInWithPassword({ email: email.trim(), password });
@@ -94,7 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
 
     async demoSignIn(role) {
-      const id = role === 'admin' ? DEMO_USERS.admin : DEMO_USERS.worker;
+      const id = DEMO_USERS[role];
       demoSession.set(id);
       await loadUser(id, null);
     },

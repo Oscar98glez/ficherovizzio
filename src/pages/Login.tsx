@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShieldCheck, UserRound } from 'lucide-react';
+import { ShieldCheck, Sofa, UserRound } from 'lucide-react';
 import { useAuth } from '../auth';
 import { Logo } from '../components/AppShell';
 import { useFeedback } from '../components/overlay';
@@ -57,7 +57,7 @@ export default function Login() {
     }
   }
 
-  async function demo(role: 'admin' | 'worker') {
+  async function demo(role: 'admin' | 'worker' | 'rrpp') {
     await demoSignIn(role);
     navigate('/');
   }
@@ -77,6 +77,12 @@ export default function Login() {
             title="Trabajador"
             text="Fichar entrada y salida, horas, turnos y solicitudes."
             onClick={() => demo('worker')}
+          />
+          <DemoOption
+            icon={<Sofa className="h-6 w-6" />}
+            title="RRPP"
+            text="Fichar entrada y salida y gestionar los reservados."
+            onClick={() => demo('rrpp')}
           />
         </div>
         <p className="mt-6 text-center text-[13px] text-ink-2">

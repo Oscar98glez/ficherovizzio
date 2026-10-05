@@ -109,6 +109,7 @@ export default function Settings() {
                     ) : (
                       <Select value={p.role} onChange={(e) => changeRole(p.id, e.target.value as Role)} className="h-8 w-auto rounded-lg py-0 text-[13px]">
                         <option value="worker">Trabajador</option>
+                        <option value="rrpp">RRPP</option>
                         <option value="admin">Administrador</option>
                       </Select>
                     )

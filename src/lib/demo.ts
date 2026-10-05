@@ -4,7 +4,7 @@
  */
 import type { Query, Repo } from './api';
 import { PAYROLL_CATEGORY } from './constants';
-import { addDays, addMonths, businessDate, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
+import { addDays, addMonths, businessDate, businessToday, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
 import type {
   Availability,
   ClubEvent,
@@ -14,9 +14,12 @@ import type {
   LeaveRequest,
   PaymentMethod,
   Profile,
+  Reservation,
+  ReservationStatus,
   Shift,
   TimeEntry,
   Transaction,
+  VipTable,
 } from './types';
 import { entryCost, uid } from './utils';
 
@@ -29,16 +32,19 @@ export type TableName =
   | 'transactions'
   | 'leave_requests'
   | 'availability'
-  | 'invoices';
+  | 'invoices'
+  | 'vip_tables'
+  | 'reservations';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v9';
+const DB_KEY = 'vizzio.demo.db.v10';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
   admin: 'demo-admin',
   worker: 'demo-worker',
+  rrpp: 'demo-rrpp',
 } as const;
 
 // ---------- Sesión demo ----------
@@ -156,6 +162,7 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
     async createMany(values) {
       await wait();
       const created = values.map((v) => ({ id: uid(), created_at: new Date().toISOString(), ...v }));
+      if (table === 'reservations') created.forEach((c) => reservationRules(c as unknown as Reservation, true));
       if (table === 'time_entries') {
         for (const c of created as unknown as TimeEntry[]) {
           if (!c.clock_out && rows().some((r) => r.employee_id === c.employee_id && !r.clock_out))
@@ -172,7 +179,9 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
       await wait();
       const r = rows().find((x) => x.id === id);
       if (!r) throw new Error('Registro no encontrado');
+      if (table === 'reservations') reservationRules({ ...(r as unknown as Reservation), ...(patch as Partial<Reservation>) }, false);
       Object.assign(r, patch);
+      if (table === 'reservations') Object.assign(r, reservationRules(r as unknown as Reservation, false));
       if (table === 'time_entries') syncShiftEnd(r as unknown as TimeEntry);
       persist();
       return clone(r) as unknown as T;
@@ -183,6 +192,25 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
       persist();
     },
   };
+}
+
+/** Reglas de las reservas (como el trigger y el índice único de Supabase). */
+function reservationRules(res: Reservation, isNew: boolean): Reservation {
+  const d = getDb();
+  const userId = demoSession.get();
+  const isAdmin = d.profiles.some((p) => p.id === userId && p.role === 'admin');
+  if (isNew && !isAdmin) res.rrpp_id = (d.employees.find((e) => e.user_id === userId)?.id as string) ?? null;
+  const emp = d.employees.find((e) => e.id === res.rrpp_id) as Employee | undefined;
+  res.rrpp_name = emp ? `${emp.first_name} ${emp.last_name}`.trim() : null;
+  res.updated_at = new Date().toISOString();
+  const active = (x: Reservation) => x.status !== 'cancelled' && x.status !== 'no_show';
+  if (
+    res.table_id &&
+    active(res) &&
+    (d.reservations as unknown as Reservation[]).some((x) => x.id !== res.id && x.table_id === res.table_id && x.date === res.date && active(x))
+  )
+    throw new Error('reservations_table_night');
+  return res;
 }
 
 /** Copia la hora de salida fichada al turno de esa noche (como el trigger de Supabase). */
@@ -277,7 +305,7 @@ function seed(): DB {
     ['Lucía', 'Martín', 'Camarera', 'barra', 'fijo_discontinuo', 13, '#34c759', 23.5, 6.5, DEMO_USERS.worker],
     ['Javier', 'Sánchez', 'Camarero', 'barra', 'fijo_discontinuo', 13, '#30b0c7', 23.5, 6.5],
     ['Nerea', 'Ortiz', 'Barback', 'barra', 'temporal', 11.5, '#5856d6', 23.5, 6.5],
-    ['Marta', 'López', 'Relaciones públicas', 'relaciones', 'autonomo', 14, '#ff9500', 23.5, 4.5],
+    ['Marta', 'López', 'Relaciones públicas', 'relaciones', 'autonomo', 14, '#ff9500', 23.5, 4.5, DEMO_USERS.rrpp],
     ['David', 'Fernández', 'Portero', 'seguridad', 'fijo', 17, '#8e8e93', 23, 7.5],
     ['Álvaro', 'Torres', 'Vigilante de seguridad', 'seguridad', 'temporal', 17, '#a2845e', 23, 7.5],
     ['Nacho', 'Vidal', 'DJ residente', 'cabina', 'autonomo', 45, '#ff2d55', 0.5, 5.5],
@@ -311,6 +339,7 @@ function seed(): DB {
   const profiles: Profile[] = [
     { id: DEMO_USERS.admin, email: 'laura.gomez@vizzio.club', full_name: 'Laura Gómez', role: 'admin', created_at: stamp },
     { id: DEMO_USERS.worker, email: 'lucia.martin@vizzio.club', full_name: 'Lucía Martín', role: 'worker', created_at: stamp },
+    { id: DEMO_USERS.rrpp, email: 'marta.lopez@vizzio.club', full_name: 'Marta López', role: 'rrpp', created_at: stamp },
   ];
 
   const events: ClubEvent[] = [];
@@ -547,6 +576,60 @@ function seed(): DB {
     { id: uid(), employee_id: 'emp-8', kind: 'vacaciones', start_date: isoDate(addDays(today, -30)), end_date: isoDate(addDays(today, -24)), reason: null, status: 'rejected', reviewed_at: stamp, created_at: stamp },
   ];
 
+  // Reservados del local y reservas de las noches cercanas
+  const tableDefs: [string, string, number, number][] = [
+    ['VIP 1', 'Pista', 8, 300],
+    ['VIP 2', 'Pista', 8, 300],
+    ['VIP 3', 'Pista', 10, 400],
+    ['VIP 4', 'Pista', 10, 400],
+    ['Reservado 5', 'Altillo', 6, 200],
+    ['Reservado 6', 'Altillo', 6, 200],
+    ['Reservado 7', 'Altillo', 8, 250],
+    ['Reservado 8', 'Altillo', 8, 250],
+    ['Palco 1', 'Escenario', 12, 600],
+    ['Palco 2', 'Escenario', 15, 800],
+  ];
+  const vipTables: VipTable[] = tableDefs.map(([name, zone, capacity, min_spend], i) => ({
+    id: `vip-${i + 1}`,
+    name,
+    zone,
+    capacity,
+    min_spend,
+    active: true,
+    sort: i + 1,
+    notes: null,
+    created_at: stamp,
+  }));
+  const customers = ['Álex Romero', 'Grupo Sergio M.', 'Cumpleaños Andrea', 'Despedida Pablo', 'Iván Herrera', 'Claudia Ramos', 'Empresa Nexo', 'Mario & friends', 'Rocío Peña', 'Daniel Gil', 'Laura Méndez', 'Tomás Vega'];
+  const rrpps = [employees[5], employees[0]]; // Marta (RRPP) y Laura (gerente)
+  const reservations: Reservation[] = [];
+  for (const ev of events.filter((e) => e.date >= isoDate(addDays(today, -7)) && e.date <= isoDate(addDays(today, 14)))) {
+    const isPast = ev.date < isoDate(businessToday());
+    const count = int(3, 7);
+    const picks = [...vipTables].sort(() => r() - 0.5).slice(0, count);
+    picks.forEach((t, i) => {
+      const rrpp = rrpps[r() < 0.7 ? 0 : 1];
+      const status: ReservationStatus = isPast ? (r() < 0.85 ? 'arrived' : 'no_show') : r() < 0.6 ? 'confirmed' : 'pending';
+      reservations.push({
+        id: uid(),
+        date: ev.date,
+        table_id: t.id,
+        customer_name: customers[(i + int(0, 11)) % customers.length],
+        customer_phone: `+34 6${String(10000000 + Math.floor(r() * 89999999)).slice(0, 8)}`,
+        guests: Math.max(2, Math.min(t.capacity ?? 6, int(4, 12))),
+        arrival_time: ['00:30', '01:00', '01:30', '02:00'][int(0, 3)],
+        min_spend: t.min_spend,
+        deposit: r() < 0.6 ? round(between(50, 150), 10) : 0,
+        status,
+        notes: r() < 0.25 ? 'Botella de bienvenida' : null,
+        rrpp_id: rrpp.id,
+        rrpp_name: `${rrpp.first_name} ${rrpp.last_name}`,
+        created_at: stamp,
+        updated_at: stamp,
+      });
+    });
+  }
+
   return {
     profiles,
     employees,
@@ -556,5 +639,7 @@ function seed(): DB {
     transactions: tx,
     leave_requests: leave,
     availability,
+    vip_tables: vipTables,
+    reservations,
   } as unknown as DB;
 }

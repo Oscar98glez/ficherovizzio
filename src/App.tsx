@@ -19,6 +19,7 @@ import Settings from './pages/admin/Settings';
 import TimeEntries from './pages/admin/TimeEntries';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Reservations from './pages/Reservations';
 import Clock from './pages/worker/Clock';
 import MyAvailability from './pages/worker/MyAvailability';
 import MyHours from './pages/worker/MyHours';
@@ -65,6 +66,12 @@ function RequireAdmin() {
   return isAdmin ? <Outlet /> : <Navigate to="/fichar" replace />;
 }
 
+/** Reservados: administradores y RRPP */
+function RequireReservations() {
+  const { isAdmin, isRrpp } = useAuth();
+  return isAdmin || isRrpp ? <Outlet /> : <Navigate to="/fichar" replace />;
+}
+
 function Home() {
   const { isAdmin } = useAuth();
   return <Navigate to={isAdmin ? '/resumen' : '/fichar'} replace />;
@@ -94,6 +101,9 @@ export default function App() {
                 <Route path="nominas" element={<Payroll />} />
                 <Route path="solicitudes" element={<Requests />} />
                 <Route path="ajustes" element={<Settings />} />
+              </Route>
+              <Route element={<RequireReservations />}>
+                <Route path="reservados" element={<Reservations />} />
               </Route>
               <Route path="fichar" element={<Clock />} />
               <Route path="mis-horas" element={<MyHours />} />

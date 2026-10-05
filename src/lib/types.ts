@@ -1,4 +1,5 @@
-export type Role = 'admin' | 'worker';
+/** admin = administrador · worker = camarero/trabajador · rrpp = relaciones públicas (ficha y gestiona reservados) */
+export type Role = 'admin' | 'worker' | 'rrpp';
 export type Department =
   | 'direccion'
   | 'barra'
@@ -143,4 +144,43 @@ export interface Invoice {
   mime_type: string | null;
   transaction_id: string | null;
   created_at: string;
+}
+
+export interface VipTable {
+  id: string;
+  /** "VIP 1", "Palco 2"... */
+  name: string;
+  zone: string | null;
+  capacity: number | null;
+  /** Consumo mínimo */
+  min_spend: number | null;
+  active: boolean;
+  sort: number;
+  notes: string | null;
+  created_at: string;
+}
+
+export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'cancelled' | 'no_show';
+
+export interface Reservation {
+  id: string;
+  /** YYYY-MM-DD: la noche */
+  date: string;
+  table_id: string | null;
+  customer_name: string;
+  customer_phone: string | null;
+  guests: number;
+  /** HH:MM(:SS) */
+  arrival_time: string | null;
+  /** Consumo mínimo acordado */
+  min_spend: number | null;
+  /** Señal cobrada */
+  deposit: number;
+  status: ReservationStatus;
+  notes: string | null;
+  /** Empleado RRPP que la gestiona */
+  rrpp_id: string | null;
+  rrpp_name: string | null;
+  created_at: string;
+  updated_at: string;
 }

@@ -4,7 +4,7 @@ import { demoClockIn, demoClockOut, demoFiles, demoRepo, demoSession, type Table
 import { blobToDataUrl } from './image';
 import { uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Shift, TimeEntry, Transaction } from './types';
+import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Reservation, Shift, TimeEntry, Transaction, VipTable } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -47,6 +47,8 @@ const ERRORS: [RegExp, string][] = [
   [/Bucket not found|set_my_photo|photo_url/i, 'Falta aplicar en Supabase la última migración (fotos de perfil).'],
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
+  [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
+  [/public.reservations|public.vip_tables|profiles_role_check/i, 'Falta aplicar en Supabase la migración de RRPP y reservados (20261005120000_rrpp_reservations.sql).'],
   [/availability_one_per_day/i, 'Ya hay disponibilidad guardada para ese día.'],
   [/row-level security|permission denied/i, 'No tienes permisos para realizar esta acción.'],
   [/Failed to fetch|NetworkError/i, 'Sin conexión con el servidor. Revisa tu conexión a internet.'],
@@ -248,6 +250,8 @@ export const api = {
   requests: repo<LeaveRequest>('leave_requests'),
   availability: repo<Availability>('availability'),
   invoices: repo<Invoice>('invoices'),
+  vipTables: repo<VipTable>('vip_tables'),
+  reservations: repo<Reservation>('reservations'),
 
   /** Fichar entrada del usuario conectado (hora del servidor). */
   clockIn: (notes?: string) =>

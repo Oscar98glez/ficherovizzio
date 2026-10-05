@@ -5,10 +5,18 @@ import type {
   PaymentMethod,
   RequestKind,
   RequestStatus,
+  ReservationStatus,
+  Role,
   ShiftStatus,
 } from './types';
 
 export type Tone = 'gray' | 'blue' | 'green' | 'red' | 'orange' | 'purple' | 'teal' | 'pink' | 'indigo';
+
+export const ROLES: Record<Role, string> = {
+  worker: 'Trabajador',
+  rrpp: 'RRPP',
+  admin: 'Administrador',
+};
 
 export const DEPARTMENTS: Record<Department, { label: string; tone: Tone }> = {
   direccion: { label: 'Dirección', tone: 'purple' },
@@ -142,3 +150,14 @@ export const EMPLOYEE_COLORS = [
   '#ff3b30',
   '#8e8e93',
 ];
+
+/** Estados de una reserva (las canceladas y "no vino" dejan el reservado libre) */
+export const RESERVATION_STATUS: Record<ReservationStatus, { label: string; tone: Tone }> = {
+  pending: { label: 'Pendiente', tone: 'orange' },
+  confirmed: { label: 'Confirmada', tone: 'blue' },
+  arrived: { label: 'Ha llegado', tone: 'green' },
+  cancelled: { label: 'Cancelada', tone: 'gray' },
+  no_show: { label: 'No vino', tone: 'red' },
+};
+
+export const isActiveReservation = (r: { status: ReservationStatus }) => r.status !== 'cancelled' && r.status !== 'no_show';
