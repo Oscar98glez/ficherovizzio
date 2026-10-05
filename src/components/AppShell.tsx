@@ -56,6 +56,12 @@ export function AppShell() {
 
   useEffect(() => setMoreOpen(false), [location.pathname]);
 
+  // Dentro de la app el tema es siempre oscuro, a juego con la foto de fondo
+  useEffect(() => {
+    document.documentElement.classList.add('theme-dark');
+    return () => document.documentElement.classList.remove('theme-dark');
+  }, []);
+
   const sections: NavSection[] = isAdmin
     ? [
         { items: [{ to: '/resumen', label: 'Resumen', icon: LayoutGrid }] },
@@ -195,7 +201,8 @@ export function AppShell() {
       </aside>
 
       {/* Contenido */}
-      <main className="lg:pl-[260px]">
+      <div className="app-bg" aria-hidden />
+      <main className="app-glass lg:pl-[260px]">
         {IS_DEMO && (
           <div className="bg-orange/15 px-4 pb-1.5 pt-[calc(env(safe-area-inset-top)+6px)] text-center text-[12px] font-medium text-orange lg:hidden">
             Modo demo · conecta Supabase para usar datos reales

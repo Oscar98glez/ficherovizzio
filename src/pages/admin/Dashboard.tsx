@@ -83,9 +83,7 @@ export default function Dashboard() {
   const shiftsByDate = groupBy(data.shifts.filter((s) => s.status !== 'cancelled'), (s) => businessDate(s.start_at));
 
   return (
-    <div className="theme-dark dashboard-glass text-ink">
-      {/* Foto del local de fondo (fija, oscurecida) */}
-      <div className="dashboard-bg" aria-hidden />
+    <>
       <PageHeader title={`${greeting}${name ? `, ${name}` : ''}`} subtitle={fmtDateFull(new Date())} />
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
@@ -236,6 +234,6 @@ export default function Dashboard() {
           <HBarList items={stats.deptCost} color="rgb(var(--purple))" empty="Sin fichajes este mes" />
         </Card>
       </div>
-    </div>
+    </>
   );
 }
