@@ -10,7 +10,7 @@ import { APP_NAME, IS_DEMO } from '../lib/config';
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
-    <div className="theme-dark auth-bg flex min-h-dvh flex-col items-center justify-center px-4 py-10 text-ink">
+    <div className="theme-dark auth-bg flex min-h-dvh flex-col items-center justify-start px-4 pb-10 pt-[max(4vh,24px)] text-ink">
       <div className="w-full max-w-[400px]">
         <div className="mb-8 flex flex-col items-center text-center">
           <Logo size={64} />
