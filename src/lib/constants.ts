@@ -5,6 +5,7 @@ import type {
   PaymentMethod,
   RequestKind,
   RequestStatus,
+  ReservationOrigin,
   ReservationStatus,
   Role,
   ShiftStatus,
@@ -152,6 +153,12 @@ export const EMPLOYEE_COLORS = [
   '#ff3b30',
   '#8e8e93',
 ];
+
+/** Origen de una reserva que no trae un RRPP */
+export const RESERVATION_ORIGINS: Record<ReservationOrigin, string> = {
+  otros: 'Otros',
+  empresa: 'Empresa',
+};
 
 /** Estados de una reserva (las canceladas y "no vino" dejan el reservado libre) */
 export const RESERVATION_STATUS: Record<ReservationStatus, { label: string; tone: Tone }> = {

@@ -203,13 +203,14 @@ function reservationRules(res: Reservation, isNew: boolean): Reservation {
   const isAdmin = d.profiles.some((p) => p.id === userId && p.role === 'admin');
   if (isNew && !isAdmin) {
     res.created_by = userId;
-    res.rrpp_id ??= (d.employees.find((e) => e.user_id === userId)?.id as string) ?? null;
+    if (!res.rrpp_origin) res.rrpp_id ??= (d.employees.find((e) => e.user_id === userId)?.id as string) ?? null;
   }
   const nameOf = (id: string | null) => {
     const emp = d.employees.find((e) => e.id === id) as Employee | undefined;
     return emp ? `${emp.first_name} ${emp.last_name}`.trim() : null;
   };
-  res.rrpp_name = nameOf(res.rrpp_id);
+  if (res.rrpp_origin) res.rrpp_id = null;
+  res.rrpp_name = res.rrpp_origin ? (res.rrpp_origin === 'empresa' ? 'Empresa' : 'Otros') : nameOf(res.rrpp_id);
   res.host_rrpp_name = nameOf(res.host_rrpp_id ?? null);
   res.updated_at = new Date().toISOString();
   const active = (x: Reservation) => x.status !== 'cancelled' && x.status !== 'no_show';
@@ -644,6 +645,7 @@ function seed(): DB {
         notes: r() < 0.25 ? 'Botella de bienvenida' : null,
         rrpp_id: rrpp.id,
         rrpp_name: `${rrpp.first_name} ${rrpp.last_name}`,
+        rrpp_origin: null,
         host_rrpp_id: null,
         host_rrpp_name: null,
         created_by: rrpp.user_id,

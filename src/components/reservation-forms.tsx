@@ -2,15 +2,17 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, Minus, Plus, Trash2, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { hhmm } from '../lib/availability';
-import { isActiveReservation, RESERVATION_STATUS } from '../lib/constants';
+import { isActiveReservation, RESERVATION_ORIGINS, RESERVATION_STATUS } from '../lib/constants';
 import { fmtDateFull, fmtMoneyExact } from '../lib/format';
 import { BOTTLE_GROUPS, menuPrice, MIXER_GROUPS, type MenuGroup } from '../lib/menu';
-import type { OrderItem, Reservation, ReservationStatus, StaffOption, VipTable } from '../lib/types';
+import type { OrderItem, Reservation, ReservationOrigin, ReservationStatus, StaffOption, VipTable } from '../lib/types';
 import { cx, parseAmount } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
 import { Badge, Button, EmptyState, Field, Input, List, ListRow, Select, Switch, Textarea } from './ui';
 
 const amountText = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','));
+
+const ORIGIN_PREFIX = '__origen_';
 
 export const tableLabel = (t: VipTable) => [t.name, t.zone].filter(Boolean).join(' · ');
 
@@ -198,7 +200,8 @@ const toForm = (date: string, r?: Reservation | null, table?: VipTable | null, r
   mixers: r?.mixers?.length ? r.mixers.map((m) => ({ ...m })) : [],
   total_amount: amountText(r?.total_amount),
   status: r?.status ?? 'pending',
-  rrpp_id: r ? (r.rrpp_id ?? '') : (rrppId ?? ''),
+  // "Otros" y "Empresa" van en el mismo desplegable que los RRPP
+  rrpp_id: r ? (r.rrpp_origin ? ORIGIN_PREFIX + r.rrpp_origin : (r.rrpp_id ?? '')) : (rrppId ?? ''),
   host_rrpp_id: r?.host_rrpp_id ?? '',
   notes: r?.notes ?? '',
 });
@@ -286,7 +289,9 @@ export function ReservationForm({
         total_amount: f.total_amount.trim() ? parseAmount(f.total_amount) : null,
         status: f.status,
         notes: f.notes.trim() || null,
-        rrpp_id: f.rrpp_id || null,
+        ...(f.rrpp_id.startsWith(ORIGIN_PREFIX)
+          ? { rrpp_id: null, rrpp_origin: f.rrpp_id.slice(ORIGIN_PREFIX.length) as ReservationOrigin }
+          : { rrpp_id: f.rrpp_id || null, rrpp_origin: null }),
         host_rrpp_id: f.host_rrpp_id || null,
       };
       if (reservation) await api.reservations.update(reservation.id, values);
@@ -401,11 +406,20 @@ export function ReservationForm({
           <Field label="RRPP">
             <Select value={f.rrpp_id} onChange={(e) => set('rrpp_id', e.target.value)}>
               <option value="">Sin RRPP</option>
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
+              <optgroup label="RRPP">
+                {staff.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Otros orígenes">
+                {(Object.keys(RESERVATION_ORIGINS) as ReservationOrigin[]).map((o) => (
+                  <option key={o} value={ORIGIN_PREFIX + o}>
+                    {RESERVATION_ORIGINS[o]}
+                  </option>
+                ))}
+              </optgroup>
             </Select>
           </Field>
           <Field label="RRPP que atiende">

@@ -179,6 +179,8 @@ export interface OrderItem {
   price?: number;
 }
 
+export type ReservationOrigin = 'otros' | 'empresa';
+
 export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'cancelled' | 'no_show';
 
 export interface Reservation {
@@ -206,6 +208,8 @@ export interface Reservation {
   /** RRPP de la reserva (quien la trae) */
   rrpp_id: string | null;
   rrpp_name: string | null;
+  /** La reserva no la trae un RRPP sino "Otros" o "Empresa" */
+  rrpp_origin: ReservationOrigin | null;
   /** RRPP que atiende el reservado esa noche */
   host_rrpp_id: string | null;
   host_rrpp_name: string | null;
