@@ -160,7 +160,7 @@ export default function Reservations() {
           <StatCard label="Personas" value={sumBy(view.active, (r) => r.guests)} icon={<Users />} tone="purple" />
           <StatCard label="Reservados libres" value={`${view.freeCount} / ${view.activeTables}`} icon={<Sofa />} tone="green" />
           <StatCard
-            label="Importe reservas"
+            label="Coste total"
             value={fmtMoneyExact(sumBy(view.active, (r) => r.total_amount ?? 0))}
             sub={`Señales ${fmtMoneyExact(sumBy(view.active, (r) => r.deposit))}`}
             icon={<Coins />}

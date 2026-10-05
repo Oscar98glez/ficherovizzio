@@ -153,14 +153,14 @@ export const EMPLOYEE_COLORS = [
   '#8e8e93',
 ];
 
-/** Botellas habituales (se puede escribir cualquier otra) */
-export const BOTTLE_SUGGESTIONS = [
-  'Absolut', 'Grey Goose', 'Belvedere', 'Ciroc', 'Eristoff',
-  'Beefeater', 'Tanqueray', "Hendrick's", 'Bombay Sapphire', 'Puerto de Indias', 'Seagram\'s', 'Larios',
-  'Bacardí', 'Havana Club 7', 'Brugal', 'Barceló', 'Cacique',
-  "Jack Daniel's", 'Johnnie Walker Red', 'Johnnie Walker Black', "Ballantine's", 'J&B', 'Chivas Regal',
-  'Jägermeister', 'Tequila José Cuervo', 'Don Julio',
-  'Moët & Chandon', 'Moët Ice', 'Dom Pérignon', 'Veuve Clicquot',
+/** Carta de botellas para los reservados, por tipo (provisional: se sustituirá por la carta del local) */
+export const BOTTLE_GROUPS: { label: string; items: string[] }[] = [
+  { label: 'Vodka', items: ['Absolut', 'Grey Goose', 'Belvedere', 'Ciroc', 'Eristoff'] },
+  { label: 'Ginebra', items: ['Beefeater', 'Tanqueray', "Hendrick's", 'Bombay Sapphire', 'Puerto de Indias', "Seagram's", 'Larios'] },
+  { label: 'Ron', items: ['Bacardí', 'Havana Club 7', 'Brugal', 'Barceló', 'Cacique'] },
+  { label: 'Whisky', items: ["Jack Daniel's", 'Johnnie Walker Red', 'Johnnie Walker Black', "Ballantine's", 'J&B', 'Chivas Regal'] },
+  { label: 'Otros', items: ['Jägermeister', 'Tequila José Cuervo', 'Don Julio'] },
+  { label: 'Champagne', items: ['Moët & Chandon', 'Moët Ice', 'Dom Pérignon', 'Veuve Clicquot'] },
 ];
 
 /** Refrescos habituales (se puede escribir cualquier otro) */

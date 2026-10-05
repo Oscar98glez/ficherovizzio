@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, Minus, Plus, Trash2, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { hhmm } from '../lib/availability';
-import { BOTTLE_SUGGESTIONS, isActiveReservation, MIXER_SUGGESTIONS, RESERVATION_STATUS } from '../lib/constants';
+import { BOTTLE_GROUPS, isActiveReservation, MIXER_SUGGESTIONS, RESERVATION_STATUS } from '../lib/constants';
 import { fmtDateFull, fmtMoneyExact } from '../lib/format';
 import type { Employee, OrderItem, Reservation, ReservationStatus, VipTable } from '../lib/types';
 import { cx, fullName, parseAmount } from '../lib/utils';
@@ -16,13 +16,19 @@ export const tableLabel = (t: VipTable) => [t.name, t.zone].filter(Boolean).join
 /** "2× Grey Goose, 1× Moët" */
 export const itemsText = (items: OrderItem[] | null | undefined) => (items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ');
 
-/** Lista editable de botellas o refrescos con su cantidad */
+const OTHER = '__otra__';
+
+/**
+ * Lista editable de botellas o refrescos con su cantidad. Con `groups` se elige de una carta
+ * (con "Otra…" para escribirla a mano); sin ella, se escribe con sugerencias.
+ */
 function ItemsEditor({
   label,
   addLabel,
   items,
   onChange,
-  suggestions,
+  suggestions = [],
+  groups,
   placeholder,
   listId,
 }: {
@@ -30,29 +36,77 @@ function ItemsEditor({
   addLabel: string;
   items: OrderItem[];
   onChange: (items: OrderItem[]) => void;
-  suggestions: string[];
+  suggestions?: string[];
+  groups?: { label: string; items: string[] }[];
   placeholder: string;
   listId: string;
 }) {
   const set = (i: number, patch: Partial<OrderItem>) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  const listed = new Set(groups?.flatMap((g) => g.items));
+  // Filas en las que se ha elegido "Otra…" y aún no se ha escrito nada
+  const [typing, setTyping] = useState<Set<number>>(new Set());
+  const isOther = (i: number) => typing.has(i) || (!!items[i].name && !listed.has(items[i].name));
+  const remove = (i: number) => {
+    onChange(items.filter((_, j) => j !== i));
+    setTyping((t) => new Set([...t].filter((j) => j !== i).map((j) => (j > i ? j - 1 : j))));
+  };
+  const nameField = (it: OrderItem, i: number) => {
+    const input = (
+      <Input
+        value={it.name}
+        onChange={(e) => set(i, { name: e.target.value })}
+        placeholder={placeholder}
+        list={groups ? undefined : listId}
+        autoFocus={!!groups && typing.has(i)}
+        className={groups ? 'w-full' : 'min-w-0 flex-1'}
+      />
+    );
+    if (!groups) return input;
+    return (
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <Select
+          value={isOther(i) ? OTHER : it.name}
+          onChange={(e) => {
+            const v = e.target.value;
+            setTyping((t) => {
+              const n = new Set(t);
+              if (v === OTHER) n.add(i);
+              else n.delete(i);
+              return n;
+            });
+            set(i, { name: v === OTHER ? '' : v });
+          }}
+        >
+          <option value="">Elige una botella</option>
+          {groups.map((g) => (
+            <optgroup key={g.label} label={g.label}>
+              {g.items.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+          <option value={OTHER}>Otra…</option>
+        </Select>
+        {isOther(i) && input}
+      </div>
+    );
+  };
   return (
     <div>
       <span className="mb-1.5 block text-[13px] font-medium text-ink-2">{label}</span>
-      <datalist id={listId}>
-        {suggestions.map((s) => (
-          <option key={s} value={s} />
-        ))}
-      </datalist>
+      {!groups && (
+        <datalist id={listId}>
+          {suggestions.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      )}
       <div className="space-y-2">
         {items.map((it, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <Input
-              value={it.name}
-              onChange={(e) => set(i, { name: e.target.value })}
-              placeholder={placeholder}
-              list={listId}
-              className="min-w-0 flex-1"
-            />
+          <div key={i} className="flex items-start gap-2">
+            {nameField(it, i)}
             <div className="flex h-10 shrink-0 items-center rounded-[10px] bg-fill">
               <button
                 type="button"
@@ -74,8 +128,8 @@ function ItemsEditor({
             </div>
             <button
               type="button"
-              onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-fill hover:text-red"
+              onClick={() => remove(i)}
+              className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-fill hover:text-red"
               aria-label="Quitar"
             >
               <X className="h-4 w-4" />
@@ -110,7 +164,6 @@ interface ReservationFormState {
   date: string;
   table_id: string;
   customer_name: string;
-  customer_phone: string;
   guests: string;
   arrival_time: string;
   min_spend: string;
@@ -127,7 +180,6 @@ const toForm = (date: string, r?: Reservation | null, table?: VipTable | null, r
   date: r?.date ?? date,
   table_id: r?.table_id ?? table?.id ?? '',
   customer_name: r?.customer_name ?? '',
-  customer_phone: r?.customer_phone ?? '',
   guests: String(r?.guests ?? ''),
   arrival_time: hhmm(r?.arrival_time),
   min_spend: amountText(r ? r.min_spend : table?.min_spend),
@@ -204,7 +256,6 @@ export function ReservationForm({
         date: f.date,
         table_id: f.table_id || null,
         customer_name: f.customer_name.trim(),
-        customer_phone: f.customer_phone.trim() || null,
         guests,
         arrival_time: f.arrival_time || null,
         min_spend: f.min_spend.trim() ? parseAmount(f.min_spend) : null,
@@ -266,13 +317,13 @@ export function ReservationForm({
           </div>
           <List>
             <ListRow title="Reservado" trailing={<span className="text-ink-2">{t ? tableLabel(t) : 'Sin asignar'}</span>} />
-            <ListRow title="Personas" trailing={<span className="tabular text-ink-2">{reservation.guests}</span>} />
+            <ListRow title="Número de personas" trailing={<span className="tabular text-ink-2">{reservation.guests}</span>} />
             <ListRow title="Llegada" trailing={<span className="tabular text-ink-2">{hhmm(reservation.arrival_time) || '—'}</span>} />
             <ListRow title="RRPP" trailing={<span className="text-ink-2">{reservation.rrpp_name ?? '—'}</span>} />
             {!!reservation.bottles?.length && <ListRow title="Botellas" subtitle={itemsText(reservation.bottles)} />}
             {!!reservation.mixers?.length && <ListRow title="Refrescos" subtitle={itemsText(reservation.mixers)} />}
             {reservation.total_amount != null && (
-              <ListRow title="Importe total" trailing={<span className="tabular font-semibold">{fmtMoneyExact(reservation.total_amount)}</span>} />
+              <ListRow title="Coste total" trailing={<span className="tabular font-semibold">{fmtMoneyExact(reservation.total_amount)}</span>} />
             )}
           </List>
           <p className="text-center text-[13px] text-ink-3">Sólo quien gestiona la reserva (o un administrador) puede modificarla.</p>
@@ -300,27 +351,16 @@ export function ReservationForm({
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Teléfono">
-            <Input
-              type="tel"
-              inputMode="tel"
-              value={f.customer_phone}
-              onChange={(e) => set('customer_phone', e.target.value)}
-              placeholder="Opcional"
-            />
-          </Field>
-          <Field label="Personas" hint={selected?.capacity && guests > selected.capacity ? `El reservado es para ${selected.capacity}` : undefined}>
+          <Field label="Número de personas" hint={selected?.capacity && guests > selected.capacity ? `El reservado es para ${selected.capacity}` : undefined}>
             <Input type="number" inputMode="numeric" min={1} value={f.guests} onChange={(e) => set('guests', e.target.value)} />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Noche">
-            <Input type="date" value={f.date} onChange={(e) => set('date', e.target.value)} />
           </Field>
           <Field label="Hora de llegada">
             <Input type="time" value={f.arrival_time} onChange={(e) => set('arrival_time', e.target.value)} />
           </Field>
         </div>
+        <Field label="Noche">
+          <Input type="date" value={f.date} onChange={(e) => set('date', e.target.value)} />
+        </Field>
         <Field label="Reservado">
           <Select value={f.table_id} onChange={(e) => chooseTable(e.target.value)}>
             <option value="">Sin asignar</option>
@@ -341,8 +381,8 @@ export function ReservationForm({
             addLabel="Añadir botella"
             items={f.bottles}
             onChange={(v) => set('bottles', v)}
-            suggestions={BOTTLE_SUGGESTIONS}
-            placeholder="Grey Goose, Moët…"
+            groups={BOTTLE_GROUPS}
+            placeholder="Escribe la botella"
             listId="bottle-suggestions"
           />
           <ItemsEditor
@@ -355,7 +395,7 @@ export function ReservationForm({
             listId="mixer-suggestions"
           />
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Importe total (€)" hint={f.min_spend ? `Consumo mínimo: ${f.min_spend} €` : undefined}>
+            <Field label="Coste total (€)">
               <Input inputMode="decimal" value={f.total_amount} onChange={(e) => set('total_amount', e.target.value)} placeholder="0" />
             </Field>
             <Field label="Señal cobrada (€)">
