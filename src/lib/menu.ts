@@ -92,11 +92,11 @@ export const BOTTLE_GROUPS: MenuGroup[] = [
   },
 ];
 
+/** Refrescos de los reservados: van incluidos con la botella; sólo el Monster suma 1 € cada uno */
 export const MIXER_GROUPS: MenuGroup[] = [
-  { label: 'Refrescos', items: items(3.5, ['Coca-Cola', 'Coca-Cola Zero', 'Fanta Naranja', 'Fanta Limón', 'Sprite', 'Tónica', 'Ginger Ale']) },
-  { label: 'Bebidas energéticas', items: items(3.5, ['Red Bull', 'Red Bull Sin Azúcar']) },
-  { label: 'Zumos y batidos', items: items(3.5, ['Zumo de naranja', 'Zumo de piña', 'Batido']) },
-  { label: 'Agua y cerveza', items: [...items(2, ['Agua', 'Agua con gas']), { name: 'Cerveza 1/3', price: 3.5 }] },
+  { label: 'Refrescos', items: items(0, ['Coca-Cola', 'Coca-Cola Zero', 'Fanta Naranja', 'Fanta Limón', 'Sprite', 'Tónica', 'Ginger Ale']) },
+  { label: 'Bebidas energéticas', items: [...items(1, ['Monster', 'Monster Ultra']), ...items(0, ['Red Bull', 'Red Bull Sin Azúcar'])] },
+  { label: 'Zumos y agua', items: items(0, ['Zumo de naranja', 'Zumo de piña', 'Agua', 'Agua con gas']) },
 ];
 
 const PRICES = new Map([...BOTTLE_GROUPS, ...MIXER_GROUPS].flatMap((g) => g.items).map((i) => [i.name, i.price]));

@@ -44,7 +44,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v15';
+const DB_KEY = 'vizzio.demo.db.v16';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -618,7 +618,7 @@ function seed(): DB {
     created_at: stamp,
   }));
   const bottleNames = ['Grey Goose', 'Absolut', 'Beefeater', 'Tanqueray', 'Barceló', "Jack Daniel's", 'Moët Brut Impérial', 'Puerto de Indias Fresa'];
-  const mixerNames = ['Coca-Cola', 'Coca-Cola Zero', 'Tónica', 'Fanta Limón', 'Red Bull', 'Agua'];
+  const mixerNames = ['Coca-Cola', 'Coca-Cola Zero', 'Tónica', 'Fanta Limón', 'Red Bull', 'Monster'];
   const customers = ['Álex Romero', 'Grupo Sergio M.', 'Cumpleaños Andrea', 'Despedida Pablo', 'Iván Herrera', 'Claudia Ramos', 'Empresa Nexo', 'Mario & friends', 'Rocío Peña', 'Daniel Gil', 'Laura Méndez', 'Tomás Vega'];
   const rrpps = [employees[5], employees[0]]; // Marta (RRPP) y Laura (gerente)
   const reservations: Reservation[] = [];

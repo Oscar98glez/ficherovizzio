@@ -94,7 +94,7 @@ function ItemsEditor({
                   <optgroup key={g.label} label={g.label}>
                     {g.items.map((m) => (
                       <option key={m.name} value={m.name}>
-                        {m.name} · {fmtMoneyExact(m.price)}
+                        {m.name} · {courtesy ? fmtMoneyExact(m.price) : m.price > 0 ? `+${fmtMoneyExact(m.price)}` : 'incluido'}
                       </option>
                     ))}
                   </optgroup>
