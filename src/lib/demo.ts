@@ -40,7 +40,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v12';
+const DB_KEY = 'vizzio.demo.db.v13';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -201,9 +201,16 @@ function reservationRules(res: Reservation, isNew: boolean): Reservation {
   const d = getDb();
   const userId = demoSession.get();
   const isAdmin = d.profiles.some((p) => p.id === userId && p.role === 'admin');
-  if (isNew && !isAdmin) res.rrpp_id = (d.employees.find((e) => e.user_id === userId)?.id as string) ?? null;
-  const emp = d.employees.find((e) => e.id === res.rrpp_id) as Employee | undefined;
-  res.rrpp_name = emp ? `${emp.first_name} ${emp.last_name}`.trim() : null;
+  if (isNew && !isAdmin) {
+    res.created_by = userId;
+    res.rrpp_id ??= (d.employees.find((e) => e.user_id === userId)?.id as string) ?? null;
+  }
+  const nameOf = (id: string | null) => {
+    const emp = d.employees.find((e) => e.id === id) as Employee | undefined;
+    return emp ? `${emp.first_name} ${emp.last_name}`.trim() : null;
+  };
+  res.rrpp_name = nameOf(res.rrpp_id);
+  res.host_rrpp_name = nameOf(res.host_rrpp_id ?? null);
   res.updated_at = new Date().toISOString();
   const active = (x: Reservation) => x.status !== 'cancelled' && x.status !== 'no_show';
   if (
@@ -213,6 +220,17 @@ function reservationRules(res: Reservation, isNew: boolean): Reservation {
   )
     throw new Error('reservations_table_night');
   return res;
+}
+
+/** RRPP que se pueden elegir en una reserva (como la función reservation_staff de Supabase) */
+export async function demoReservationStaff() {
+  const d = getDb();
+  const roles = new Map(d.profiles.map((p) => [p.id, p.role]));
+  await wait();
+  return (d.employees as unknown as Employee[])
+    .filter((e) => e.active && (e.department === 'relaciones' || ['rrpp', 'admin'].includes(String(roles.get(e.user_id ?? '') ?? ''))))
+    .map((e) => ({ id: e.id, name: `${e.first_name} ${e.last_name}`.trim() }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
 
 /** Copia la hora de salida fichada al turno de esa noche (como el trigger de Supabase). */
@@ -626,6 +644,9 @@ function seed(): DB {
         notes: r() < 0.25 ? 'Botella de bienvenida' : null,
         rrpp_id: rrpp.id,
         rrpp_name: `${rrpp.first_name} ${rrpp.last_name}`,
+        host_rrpp_id: null,
+        host_rrpp_name: null,
+        created_by: rrpp.user_id,
         created_at: stamp,
         updated_at: stamp,
       });

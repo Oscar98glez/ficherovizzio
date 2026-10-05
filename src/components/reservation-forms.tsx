@@ -5,8 +5,8 @@ import { hhmm } from '../lib/availability';
 import { isActiveReservation, RESERVATION_STATUS } from '../lib/constants';
 import { fmtDateFull, fmtMoneyExact } from '../lib/format';
 import { BOTTLE_GROUPS, menuPrice, MIXER_GROUPS, type MenuGroup } from '../lib/menu';
-import type { Employee, OrderItem, Reservation, ReservationStatus, VipTable } from '../lib/types';
-import { cx, fullName, parseAmount } from '../lib/utils';
+import type { OrderItem, Reservation, ReservationStatus, StaffOption, VipTable } from '../lib/types';
+import { cx, parseAmount } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
 import { Badge, Button, EmptyState, Field, Input, List, ListRow, Select, Switch, Textarea } from './ui';
 
@@ -182,6 +182,7 @@ interface ReservationFormState {
   total_amount: string;
   status: ReservationStatus;
   rrpp_id: string;
+  host_rrpp_id: string;
   notes: string;
 }
 
@@ -198,6 +199,7 @@ const toForm = (date: string, r?: Reservation | null, table?: VipTable | null, r
   total_amount: amountText(r?.total_amount),
   status: r?.status ?? 'pending',
   rrpp_id: r ? (r.rrpp_id ?? '') : (rrppId ?? ''),
+  host_rrpp_id: r?.host_rrpp_id ?? '',
   notes: r?.notes ?? '',
 });
 
@@ -209,9 +211,8 @@ export function ReservationForm({
   reservations,
   reservation,
   table,
-  rrpps,
+  staff,
   canEdit,
-  isAdmin,
   myEmployeeId,
   onSaved,
 }: {
@@ -225,10 +226,9 @@ export function ReservationForm({
   reservation?: Reservation | null;
   /** Reservado elegido al crear desde la lista de reservados */
   table?: VipTable | null;
-  /** Sólo administradores: a quién se le asigna la reserva */
-  rrpps: Employee[];
+  /** RRPP que se pueden elegir como "RRPP" y "RRPP que atiende" */
+  staff: StaffOption[];
   canEdit: boolean;
-  isAdmin: boolean;
   myEmployeeId: string | null;
   onSaved: () => void;
 }) {
@@ -239,9 +239,9 @@ export function ReservationForm({
   const [autoTotal, setAutoTotal] = useState(true);
   useEffect(() => {
     if (!open) return;
-    setF(toForm(date, reservation, table, isAdmin ? myEmployeeId : null));
+    setF(toForm(date, reservation, table, myEmployeeId && staff.some((s) => s.id === myEmployeeId) ? myEmployeeId : null));
     setAutoTotal(!reservation || reservation.total_amount == null || Math.abs(reservation.total_amount - itemsTotal(reservation.bottles) - itemsTotal(reservation.mixers)) < 0.005);
-  }, [open, date, reservation, table, isAdmin, myEmployeeId]);
+  }, [open, date, reservation, table, myEmployeeId, staff]);
   const set = <K extends keyof ReservationFormState>(k: K, v: ReservationFormState[K]) => setF((s) => ({ ...s, [k]: v }));
   const menuTotal = (s: Pick<ReservationFormState, 'bottles' | 'mixers'>) => round2(itemsTotal(s.bottles) + itemsTotal(s.mixers));
   const totalText = (n: number) => (n > 0 ? (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ',')) : '');
@@ -286,8 +286,8 @@ export function ReservationForm({
         total_amount: f.total_amount.trim() ? parseAmount(f.total_amount) : null,
         status: f.status,
         notes: f.notes.trim() || null,
-        // El RRPP queda siempre como autor de sus reservas; el administrador puede asignarlas
-        ...(isAdmin ? { rrpp_id: f.rrpp_id || null } : {}),
+        rrpp_id: f.rrpp_id || null,
+        host_rrpp_id: f.host_rrpp_id || null,
       };
       if (reservation) await api.reservations.update(reservation.id, values);
       else await api.reservations.create(values);
@@ -341,13 +341,14 @@ export function ReservationForm({
             <ListRow title="Número de personas" trailing={<span className="tabular text-ink-2">{reservation.guests}</span>} />
             <ListRow title="Llegada" trailing={<span className="tabular text-ink-2">{hhmm(reservation.arrival_time) || '—'}</span>} />
             <ListRow title="RRPP" trailing={<span className="text-ink-2">{reservation.rrpp_name ?? '—'}</span>} />
+            <ListRow title="RRPP que atiende" trailing={<span className="text-ink-2">{reservation.host_rrpp_name ?? '—'}</span>} />
             {!!reservation.bottles?.length && <ListRow title="Botellas" subtitle={itemsText(reservation.bottles)} />}
             {!!reservation.mixers?.length && <ListRow title="Refrescos" subtitle={itemsText(reservation.mixers)} />}
             {reservation.total_amount != null && (
               <ListRow title="Coste total" trailing={<span className="tabular font-semibold">{fmtMoneyExact(reservation.total_amount)}</span>} />
             )}
           </List>
-          <p className="text-center text-[13px] text-ink-3">Sólo quien gestiona la reserva (o un administrador) puede modificarla.</p>
+          <p className="text-center text-[13px] text-ink-3">Sólo quien la creó, su RRPP, el RRPP que la atiende o un administrador pueden modificarla.</p>
         </div>
       </Modal>
     );
@@ -396,6 +397,28 @@ export function ReservationForm({
               ))}
           </Select>
         </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="RRPP">
+            <Select value={f.rrpp_id} onChange={(e) => set('rrpp_id', e.target.value)}>
+              <option value="">Sin RRPP</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="RRPP que atiende">
+            <Select value={f.host_rrpp_id} onChange={(e) => set('host_rrpp_id', e.target.value)}>
+              <option value="">Sin asignar</option>
+              {staff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
         <div className="space-y-4 rounded-2xl bg-fill/50 p-3.5">
           <ItemsEditor
             label="Botellas"
@@ -469,18 +492,6 @@ export function ReservationForm({
             ))}
           </div>
         </Field>
-        {isAdmin && (
-          <Field label="RRPP">
-            <Select value={f.rrpp_id} onChange={(e) => set('rrpp_id', e.target.value)}>
-              <option value="">Sin RRPP</option>
-              {rrpps.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {fullName(e)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
         <Field label="Notas">
           <Textarea rows={2} value={f.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Botellas, cumpleaños, peticiones…" />
         </Field>

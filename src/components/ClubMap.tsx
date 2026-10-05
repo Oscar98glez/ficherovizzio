@@ -90,7 +90,7 @@ export function ClubMap({
           const w = t.map_w ?? 60;
           const h = t.map_h ?? 54;
           const color = r ? STATUS_COLOR[r.status] : null;
-          const mine = !!r && !!myEmployeeId && r.rrpp_id === myEmployeeId;
+          const mine = !!r && !!myEmployeeId && (r.rrpp_id === myEmployeeId || r.host_rrpp_id === myEmployeeId);
           const label = `${t.name}${r ? ` · ${r.customer_name} · ${r.guests} pers. · ${RESERVATION_STATUS[r.status].label}` : ' · Libre'}`;
           return (
             <g

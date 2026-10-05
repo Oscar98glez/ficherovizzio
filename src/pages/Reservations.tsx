@@ -25,7 +25,7 @@ import { hhmm } from '../lib/availability';
 import { isActiveReservation, RESERVATION_STATUS } from '../lib/constants';
 import { addDays, businessToday, isoDate, parseDate } from '../lib/dates';
 import { fmtDateFull, fmtMoneyExact } from '../lib/format';
-import type { Employee, Reservation, VipTable } from '../lib/types';
+import type { Reservation, VipTable } from '../lib/types';
 import { cx, groupBy, sumBy } from '../lib/utils';
 
 type Filter = 'all' | 'mine';
@@ -38,7 +38,7 @@ const arrivalKey = (r: Reservation) => {
 };
 
 export default function Reservations() {
-  const { isAdmin, employee } = useAuth();
+  const { isAdmin, employee, userId } = useAuth();
   const today = isoDate(businessToday());
   const [date, setDate] = useState(today);
   const [filter, setFilter] = useState<Filter>('all');
@@ -49,27 +49,20 @@ export default function Reservations() {
   const [managing, setManaging] = useState(false);
 
   const { data, loading, error, reload } = useLoad(async () => {
-    const [tables, reservations, events] = await Promise.all([
+    // RRPP que se pueden elegir como "RRPP" y "RRPP que atiende"
+    const [tables, reservations, events, staff] = await Promise.all([
       api.vipTables.list(),
       api.reservations.list({ eq: { date } }),
       api.events.list({ eq: { date } }),
+      api.reservationStaff(),
     ]);
-    // El administrador puede asignar la reserva a cualquier RRPP (o a relaciones públicas sin cuenta)
-    let rrpps: Employee[] = [];
-    if (isAdmin) {
-      const [employees, profiles] = await Promise.all([api.employees.list({ eq: { active: true } }), api.profiles.list()]);
-      const roles = new Map(profiles.map((p) => [p.id, p.role]));
-      rrpps = employees
-        .filter((e) => e.department === 'relaciones' || (e.user_id && ['rrpp', 'admin'].includes(roles.get(e.user_id) ?? '')))
-        .sort((a, b) => a.first_name.localeCompare(b.first_name, 'es'));
-    }
     return {
       tables: tables.sort(byName),
       reservations,
       event: events[0] ?? null,
-      rrpps,
+      staff,
     };
-  }, [date, isAdmin]);
+  }, [date]);
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -83,7 +76,7 @@ export default function Reservations() {
       (t) => t.zone || 'Sin zona',
     );
     const list = data.reservations
-      .filter((r) => filter === 'all' || r.rrpp_id === employee?.id)
+      .filter((r) => filter === 'all' || (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id)))
       .sort((a, b) => arrivalKey(a).localeCompare(arrivalKey(b)));
     return {
       active,
@@ -101,7 +94,9 @@ export default function Reservations() {
   if (error && !data) return <ErrorBox message={error} onRetry={reload} />;
   if (!data || !view) return null;
 
-  const canEdit = (r: Reservation) => isAdmin || (!!employee && r.rrpp_id === employee.id);
+  // Puede editarla quien la creó, su RRPP, el RRPP que la atiende o un administrador
+  const canEdit = (r: Reservation) =>
+    isAdmin || (!!userId && r.created_by === userId) || (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id));
   const move = (days: number) => setDate(isoDate(addDays(parseDate(date), days)));
 
   return (
@@ -241,6 +236,7 @@ export default function Reservations() {
                         `${r.guests} pers.`,
                         itemsText(r.bottles),
                         r.rrpp_id === employee?.id ? 'Tu reserva' : r.rrpp_name,
+                        r.host_rrpp_name && `atiende ${r.host_rrpp_id === employee?.id ? 'tú' : r.host_rrpp_name}`,
                       ]
                         .filter(Boolean)
                         .join(' · ')}
@@ -285,7 +281,7 @@ export default function Reservations() {
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                     {tables.map((t) => {
                       const r = view.byTable.get(t.id);
-                      const mine = !!r && r.rrpp_id === employee?.id;
+                      const mine = !!r && !!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id);
                       return (
                         <button
                           key={t.id}
@@ -344,9 +340,8 @@ export default function Reservations() {
         reservations={data.reservations}
         reservation={form?.reservation}
         table={form?.table}
-        rrpps={data.rrpps}
+        staff={data.staff}
         canEdit={!form?.reservation || canEdit(form.reservation)}
-        isAdmin={isAdmin}
         myEmployeeId={employee?.id ?? null}
         onSaved={reload}
       />

@@ -165,6 +165,12 @@ export interface VipTable {
   created_at: string;
 }
 
+/** RRPP que se puede elegir en una reserva */
+export interface StaffOption {
+  id: string;
+  name: string;
+}
+
 /** Una línea de la consumición: botella o refresco, cuántas y su precio unitario */
 export interface OrderItem {
   name: string;
@@ -197,9 +203,14 @@ export interface Reservation {
   total_amount: number | null;
   status: ReservationStatus;
   notes: string | null;
-  /** Empleado RRPP que la gestiona */
+  /** RRPP de la reserva (quien la trae) */
   rrpp_id: string | null;
   rrpp_name: string | null;
+  /** RRPP que atiende el reservado esa noche */
+  host_rrpp_id: string | null;
+  host_rrpp_name: string | null;
+  /** Usuario que creó la reserva */
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
