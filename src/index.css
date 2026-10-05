@@ -52,6 +52,45 @@
   }
 }
 
+/* Pantallas de acceso: siempre en oscuro sobre la foto del local */
+.theme-dark {
+  color-scheme: dark;
+  --bg: 0 0 0;
+  --surface: 28 28 30;
+  --elevated: 44 44 46;
+  --ink: 245 245 247;
+  --ink-2: 161 161 166;
+  --ink-3: 110 110 115;
+  --accent: 214 176 64;
+  --on-accent: 24 20 8;
+  --green: 48 209 88;
+  --red: 255 69 58;
+  --orange: 255 159 10;
+  --purple: 191 90 242;
+  --teal: 100 210 255;
+  --pink: 255 55 95;
+  --indigo: 94 92 230;
+  --line: rgba(255, 255, 255, 0.09);
+  --fill: rgba(118, 118, 128, 0.22);
+  --fill-2: rgba(118, 118, 128, 0.32);
+  --shadow-card: 0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
+}
+
+.auth-bg {
+  background-color: #000;
+  background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.35) 45%, rgba(0, 0, 0, 0.8) 100%), url('/login-bg.jpg');
+  background-size: cover;
+  background-position: center;
+}
+
+.auth-bg .card {
+  background-color: rgb(var(--surface) / 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

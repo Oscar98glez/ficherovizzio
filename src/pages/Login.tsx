@@ -10,16 +10,16 @@ import { APP_NAME, IS_DEMO } from '../lib/config';
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-4 py-10">
+    <div className="theme-dark auth-bg flex min-h-dvh flex-col items-center justify-center px-4 py-10 text-ink">
       <div className="w-full max-w-[400px]">
         <div className="mb-8 flex flex-col items-center text-center">
           <Logo size={64} />
-          <h1 className="mt-5 text-[28px] font-bold tracking-tight">{title}</h1>
+          <h1 className="mt-5 text-[28px] font-bold tracking-tight [text-shadow:0_2px_16px_rgba(0,0,0,0.6)]">{title}</h1>
           {subtitle && <p className="mt-1.5 text-[15px] text-ink-2">{subtitle}</p>}
         </div>
         {children}
       </div>
-      <p className="mt-10 text-[12px] text-ink-3">
+      <p className="mt-10 text-[12px] text-ink-2">
         {APP_NAME} · Gestión de personal y finanzas
       </p>
     </div>
