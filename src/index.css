@@ -100,6 +100,31 @@
   box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.12), 0 20px 60px rgba(0, 0, 0, 0.45);
 }
 
+/* Resumen: foto del local de fondo y tarjetas translúcidas */
+.dashboard-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.84) 55%, rgba(0, 0, 0, 0.94) 100%), url('/dashboard-bg.jpg') center / cover no-repeat #000;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-bg {
+    left: 260px;
+  }
+}
+
+.dashboard-glass .card {
+  background-color: rgb(var(--surface) / 0.62);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
+}
+
+.dashboard-glass h1 {
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+}
+
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
