@@ -5,6 +5,7 @@
 import type { Query, Repo } from './api';
 import { CLUB_TABLES } from './club-map';
 import { PAYROLL_CATEGORY } from './constants';
+import { menuPrice } from './menu';
 import { addDays, addMonths, businessDate, businessToday, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
 import type {
   Availability,
@@ -39,7 +40,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v11';
+const DB_KEY = 'vizzio.demo.db.v12';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -593,7 +594,7 @@ function seed(): DB {
     map_h: t.h,
     created_at: stamp,
   }));
-  const bottleNames = ['Grey Goose', 'Absolut', 'Beefeater', "Hendrick's", 'Bacardí', "Jack Daniel's", 'Moët & Chandon', 'Puerto de Indias'];
+  const bottleNames = ['Grey Goose', 'Absolut', 'Beefeater', 'Tanqueray', 'Barceló', "Jack Daniel's", 'Moët Brut Impérial', 'Puerto de Indias Fresa'];
   const mixerNames = ['Coca-Cola', 'Coca-Cola Zero', 'Tónica', 'Fanta Limón', 'Red Bull', 'Agua'];
   const customers = ['Álex Romero', 'Grupo Sergio M.', 'Cumpleaños Andrea', 'Despedida Pablo', 'Iván Herrera', 'Claudia Ramos', 'Empresa Nexo', 'Mario & friends', 'Rocío Peña', 'Daniel Gil', 'Laura Méndez', 'Tomás Vega'];
   const rrpps = [employees[5], employees[0]]; // Marta (RRPP) y Laura (gerente)
@@ -605,8 +606,8 @@ function seed(): DB {
     picks.forEach((t, i) => {
       const rrpp = rrpps[r() < 0.7 ? 0 : 1];
       const nBottles = int(1, 3);
-      const bottles = [...bottleNames].sort(() => r() - 0.5).slice(0, nBottles).map((name) => ({ name, qty: int(1, 2) }));
-      const mixers = [...mixerNames].sort(() => r() - 0.5).slice(0, int(1, 3)).map((name) => ({ name, qty: int(2, 8) }));
+      const bottles = [...bottleNames].sort(() => r() - 0.5).slice(0, nBottles).map((name) => ({ name, qty: int(1, 2), price: menuPrice(name) }));
+      const mixers = [...mixerNames].sort(() => r() - 0.5).slice(0, int(1, 3)).map((name) => ({ name, qty: int(2, 8), price: menuPrice(name) }));
       const status: ReservationStatus = isPast ? (r() < 0.85 ? 'arrived' : 'no_show') : r() < 0.6 ? 'confirmed' : 'pending';
       reservations.push({
         id: uid(),
@@ -620,7 +621,7 @@ function seed(): DB {
         deposit: r() < 0.6 ? round(between(50, 150), 10) : 0,
         bottles,
         mixers,
-        total_amount: round(sumBy(bottles, (b) => b.qty) * between(120, 180) + sumBy(mixers, (m) => m.qty) * 3, 10),
+        total_amount: sumBy([...bottles, ...mixers], (x) => x.qty * (x.price ?? 0)),
         status,
         notes: r() < 0.25 ? 'Botella de bienvenida' : null,
         rrpp_id: rrpp.id,

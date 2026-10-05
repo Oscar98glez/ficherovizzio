@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom
 import { AuthProvider, useAuth } from './auth';
 import { AppShell } from './components/AppShell';
 import { FeedbackProvider } from './components/overlay';
+import { UpdateBanner } from './components/UpdateBanner';
 import { Button, Card, EmptyState, Loading } from './components/ui';
 import AvailabilityAdmin from './pages/admin/Availability';
 import Dashboard from './pages/admin/Dashboard';
@@ -122,6 +123,7 @@ export default function App() {
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <UpdateBanner />
         </AuthProvider>
       </FeedbackProvider>
     </BrowserRouter>

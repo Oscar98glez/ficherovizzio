@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, Minus, Plus, Trash2, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { hhmm } from '../lib/availability';
-import { BOTTLE_GROUPS, isActiveReservation, MIXER_SUGGESTIONS, RESERVATION_STATUS } from '../lib/constants';
+import { isActiveReservation, RESERVATION_STATUS } from '../lib/constants';
 import { fmtDateFull, fmtMoneyExact } from '../lib/format';
+import { BOTTLE_GROUPS, menuPrice, MIXER_GROUPS, type MenuGroup } from '../lib/menu';
 import type { Employee, OrderItem, Reservation, ReservationStatus, VipTable } from '../lib/types';
 import { cx, fullName, parseAmount } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
@@ -16,33 +17,40 @@ export const tableLabel = (t: VipTable) => [t.name, t.zone].filter(Boolean).join
 /** "2× Grey Goose, 1× Moët" */
 export const itemsText = (items: OrderItem[] | null | undefined) => (items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ');
 
-const OTHER = '__otra__';
+const OTHER = '__otro__';
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Precio unitario: el guardado en la reserva o, si no, el de la carta */
+const priceOf = (i: OrderItem) => i.price ?? menuPrice(i.name) ?? 0;
+
+/** Total de una lista de botellas o refrescos (cantidad × precio) */
+export const itemsTotal = (items: OrderItem[] | null | undefined) => round2((items ?? []).reduce((a, i) => a + priceOf(i) * i.qty, 0));
 
 /**
- * Lista editable de botellas o refrescos con su cantidad. Con `groups` se elige de una carta
- * (con "Otra…" para escribirla a mano); sin ella, se escribe con sugerencias.
+ * Lista editable de botellas o refrescos con su cantidad, elegidos de la carta del local
+ * (con "Otra…" para escribir una que no esté, con su precio).
  */
 function ItemsEditor({
   label,
   addLabel,
+  emptyLabel,
+  otherLabel,
   items,
   onChange,
-  suggestions = [],
   groups,
   placeholder,
-  listId,
 }: {
   label: string;
   addLabel: string;
+  emptyLabel: string;
+  otherLabel: string;
   items: OrderItem[];
   onChange: (items: OrderItem[]) => void;
-  suggestions?: string[];
-  groups?: { label: string; items: string[] }[];
+  groups: MenuGroup[];
   placeholder: string;
-  listId: string;
 }) {
   const set = (i: number, patch: Partial<OrderItem>) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
-  const listed = new Set(groups?.flatMap((g) => g.items));
+  const listed = new Map(groups.flatMap((g) => g.items).map((m) => [m.name, m.price]));
   // Filas en las que se ha elegido "Otra…" y aún no se ha escrito nada
   const [typing, setTyping] = useState<Set<number>>(new Set());
   const isOther = (i: number) => typing.has(i) || (!!items[i].name && !listed.has(items[i].name));
@@ -50,63 +58,63 @@ function ItemsEditor({
     onChange(items.filter((_, j) => j !== i));
     setTyping((t) => new Set([...t].filter((j) => j !== i).map((j) => (j > i ? j - 1 : j))));
   };
-  const nameField = (it: OrderItem, i: number) => {
-    const input = (
-      <Input
-        value={it.name}
-        onChange={(e) => set(i, { name: e.target.value })}
-        placeholder={placeholder}
-        list={groups ? undefined : listId}
-        autoFocus={!!groups && typing.has(i)}
-        className={groups ? 'w-full' : 'min-w-0 flex-1'}
-      />
-    );
-    if (!groups) return input;
-    return (
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <Select
-          value={isOther(i) ? OTHER : it.name}
-          onChange={(e) => {
-            const v = e.target.value;
-            setTyping((t) => {
-              const n = new Set(t);
-              if (v === OTHER) n.add(i);
-              else n.delete(i);
-              return n;
-            });
-            set(i, { name: v === OTHER ? '' : v });
-          }}
-        >
-          <option value="">Elige una botella</option>
-          {groups.map((g) => (
-            <optgroup key={g.label} label={g.label}>
-              {g.items.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-          <option value={OTHER}>Otra…</option>
-        </Select>
-        {isOther(i) && input}
-      </div>
-    );
-  };
+  const total = itemsTotal(items);
+
   return (
     <div>
-      <span className="mb-1.5 block text-[13px] font-medium text-ink-2">{label}</span>
-      {!groups && (
-        <datalist id={listId}>
-          {suggestions.map((s) => (
-            <option key={s} value={s} />
-          ))}
-        </datalist>
-      )}
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <span className="text-[13px] font-medium text-ink-2">{label}</span>
+        {total > 0 && <span className="tabular text-[13px] font-medium text-ink-2">{fmtMoneyExact(total)}</span>}
+      </div>
       <div className="space-y-2">
         {items.map((it, i) => (
           <div key={i} className="flex items-start gap-2">
-            {nameField(it, i)}
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <Select
+                value={isOther(i) ? OTHER : it.name}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setTyping((t) => {
+                    const n = new Set(t);
+                    if (v === OTHER) n.add(i);
+                    else n.delete(i);
+                    return n;
+                  });
+                  set(i, v === OTHER ? { name: '', price: undefined } : { name: v, price: listed.get(v) });
+                }}
+              >
+                <option value="">{emptyLabel}</option>
+                {groups.map((g) => (
+                  <optgroup key={g.label} label={g.label}>
+                    {g.items.map((m) => (
+                      <option key={m.name} value={m.name}>
+                        {m.name} · {fmtMoneyExact(m.price)}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+                <option value={OTHER}>{otherLabel}</option>
+              </Select>
+              {isOther(i) && (
+                <div className="flex gap-2">
+                  <Input
+                    value={it.name}
+                    onChange={(e) => set(i, { name: e.target.value })}
+                    placeholder={placeholder}
+                    autoFocus={typing.has(i)}
+                    className="min-w-0 flex-1"
+                  />
+                  <Input
+                    inputMode="decimal"
+                    defaultValue={it.price != null ? amountText(it.price) : ''}
+                    onChange={(e) => set(i, { price: e.target.value.trim() ? parseAmount(e.target.value) : undefined })}
+                    placeholder="Precio €"
+                    aria-label="Precio"
+                    className="w-24 shrink-0"
+                  />
+                </div>
+              )}
+            </div>
             <div className="flex h-10 shrink-0 items-center rounded-[10px] bg-fill">
               <button
                 type="button"
@@ -148,12 +156,13 @@ function ItemsEditor({
   );
 }
 
-const cleanItems = (items: OrderItem[]) =>
+const cleanItems = (items: OrderItem[]): OrderItem[] =>
   items
-    .map((i) => ({
-      name: i.name.trim(),
-      qty: Math.max(1, Math.round(i.qty) || 1),
-    }))
+    .map((i) => {
+      const name = i.name.trim();
+      const price = i.price ?? menuPrice(name);
+      return { name, qty: Math.max(1, Math.round(i.qty) || 1), ...(price != null ? { price } : {}) };
+    })
     .filter((i) => i.name);
 
 // =====================================================================
@@ -226,10 +235,22 @@ export function ReservationForm({
   const { toast, confirm } = useFeedback();
   const [f, setF] = useState(() => toForm(date, reservation, table));
   const [saving, setSaving] = useState(false);
+  // El coste total se calcula con la carta hasta que se escribe a mano
+  const [autoTotal, setAutoTotal] = useState(true);
   useEffect(() => {
-    if (open) setF(toForm(date, reservation, table, isAdmin ? myEmployeeId : null));
+    if (!open) return;
+    setF(toForm(date, reservation, table, isAdmin ? myEmployeeId : null));
+    setAutoTotal(!reservation || reservation.total_amount == null || Math.abs(reservation.total_amount - itemsTotal(reservation.bottles) - itemsTotal(reservation.mixers)) < 0.005);
   }, [open, date, reservation, table, isAdmin, myEmployeeId]);
   const set = <K extends keyof ReservationFormState>(k: K, v: ReservationFormState[K]) => setF((s) => ({ ...s, [k]: v }));
+  const menuTotal = (s: Pick<ReservationFormState, 'bottles' | 'mixers'>) => round2(itemsTotal(s.bottles) + itemsTotal(s.mixers));
+  const totalText = (n: number) => (n > 0 ? (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ',')) : '');
+  const setItems = (k: 'bottles' | 'mixers', v: OrderItem[]) =>
+    setF((s) => {
+      const next = { ...s, [k]: v };
+      return autoTotal ? { ...next, total_amount: totalText(menuTotal(next)) } : next;
+    });
+  const computed = menuTotal(f);
 
   const taken = new Set(
     f.date === date ? reservations.filter((r) => r.id !== reservation?.id && r.table_id && isActiveReservation(r)).map((r) => r.table_id!) : [],
@@ -380,23 +401,51 @@ export function ReservationForm({
             label="Botellas"
             addLabel="Añadir botella"
             items={f.bottles}
-            onChange={(v) => set('bottles', v)}
+            onChange={(v) => setItems('bottles', v)}
             groups={BOTTLE_GROUPS}
+            emptyLabel="Elige una botella"
+            otherLabel="Otra…"
             placeholder="Escribe la botella"
-            listId="bottle-suggestions"
           />
           <ItemsEditor
             label="Refrescos"
             addLabel="Añadir refresco"
             items={f.mixers}
-            onChange={(v) => set('mixers', v)}
-            suggestions={MIXER_SUGGESTIONS}
-            placeholder="Coca-Cola, tónica…"
-            listId="mixer-suggestions"
+            onChange={(v) => setItems('mixers', v)}
+            groups={MIXER_GROUPS}
+            emptyLabel="Elige un refresco"
+            otherLabel="Otro…"
+            placeholder="Escribe el refresco"
           />
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Coste total (€)">
-              <Input inputMode="decimal" value={f.total_amount} onChange={(e) => set('total_amount', e.target.value)} placeholder="0" />
+            <Field
+              label="Coste total (€)"
+              hint={
+                autoTotal ? (
+                  computed > 0 && 'Según la carta'
+                ) : computed > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAutoTotal(true);
+                      set('total_amount', totalText(computed));
+                    }}
+                    className="font-medium text-accent hover:opacity-70"
+                  >
+                    Usar precio de carta ({fmtMoneyExact(computed)})
+                  </button>
+                ) : undefined
+              }
+            >
+              <Input
+                inputMode="decimal"
+                value={f.total_amount}
+                onChange={(e) => {
+                  setAutoTotal(false);
+                  set('total_amount', e.target.value);
+                }}
+                placeholder="0"
+              />
             </Field>
             <Field label="Señal cobrada (€)">
               <Input inputMode="decimal" value={f.deposit} onChange={(e) => set('deposit', e.target.value)} placeholder="0" />

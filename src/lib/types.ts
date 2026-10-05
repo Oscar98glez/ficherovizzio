@@ -165,10 +165,12 @@ export interface VipTable {
   created_at: string;
 }
 
-/** Una línea de la consumición: botella o refresco y cuántas */
+/** Una línea de la consumición: botella o refresco, cuántas y su precio unitario */
 export interface OrderItem {
   name: string;
   qty: number;
+  /** Precio por unidad (el de la carta, o el escrito a mano si no está en ella) */
+  price?: number;
 }
 
 export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'cancelled' | 'no_show';
