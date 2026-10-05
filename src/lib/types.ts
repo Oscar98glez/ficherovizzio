@@ -177,6 +177,8 @@ export interface OrderItem {
   qty: number;
   /** Precio por unidad (el de la carta, o el escrito a mano si no está en ella) */
   price?: number;
+  /** Cortesía: la regala el local y cuenta 0 € */
+  courtesy?: boolean;
 }
 
 export type ReservationOrigin = 'otros' | 'empresa';

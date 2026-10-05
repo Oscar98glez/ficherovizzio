@@ -17,13 +17,14 @@ const ORIGIN_PREFIX = '__origen_';
 export const tableLabel = (t: VipTable) => [t.name, t.zone].filter(Boolean).join(' · ');
 
 /** "2× Grey Goose, 1× Moët" */
-export const itemsText = (items: OrderItem[] | null | undefined) => (items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ');
+export const itemsText = (items: OrderItem[] | null | undefined) =>
+  (items ?? []).map((i) => `${i.qty}× ${i.name}${i.courtesy ? ' (cortesía)' : ''}`).join(', ');
 
 const OTHER = '__otro__';
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Precio unitario: el guardado en la reserva o, si no, el de la carta */
-const priceOf = (i: OrderItem) => i.price ?? menuPrice(i.name) ?? 0;
+/** Precio unitario: 0 si es cortesía; si no, el guardado en la reserva o el de la carta */
+const priceOf = (i: OrderItem) => (i.courtesy ? 0 : (i.price ?? menuPrice(i.name) ?? 0));
 
 /** Total de una lista de botellas o refrescos (cantidad × precio) */
 export const itemsTotal = (items: OrderItem[] | null | undefined) => round2((items ?? []).reduce((a, i) => a + priceOf(i) * i.qty, 0));
@@ -41,6 +42,7 @@ function ItemsEditor({
   onChange,
   groups,
   placeholder,
+  courtesy = false,
 }: {
   label: string;
   addLabel: string;
@@ -50,6 +52,8 @@ function ItemsEditor({
   onChange: (items: OrderItem[]) => void;
   groups: MenuGroup[];
   placeholder: string;
+  /** Permite marcar cada línea como cortesía (0 €) */
+  courtesy?: boolean;
 }) {
   const set = (i: number, patch: Partial<OrderItem>) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const listed = new Map(groups.flatMap((g) => g.items).map((m) => [m.name, m.price]));
@@ -116,6 +120,17 @@ function ItemsEditor({
                   />
                 </div>
               )}
+              {courtesy && (
+                <label className="flex w-fit cursor-pointer items-center gap-2 text-[13px] text-ink-2">
+                  <input
+                    type="checkbox"
+                    checked={!!it.courtesy}
+                    onChange={(e) => set(i, { courtesy: e.target.checked || undefined })}
+                    className="h-4 w-4 rounded accent-[rgb(var(--accent))]"
+                  />
+                  Cortesía <span className="text-ink-3">(0 €)</span>
+                </label>
+              )}
             </div>
             <div className="flex h-10 shrink-0 items-center rounded-[10px] bg-fill">
               <button
@@ -163,7 +178,7 @@ const cleanItems = (items: OrderItem[]): OrderItem[] =>
     .map((i) => {
       const name = i.name.trim();
       const price = i.price ?? menuPrice(name);
-      return { name, qty: Math.max(1, Math.round(i.qty) || 1), ...(price != null ? { price } : {}) };
+      return { name, qty: Math.max(1, Math.round(i.qty) || 1), ...(price != null ? { price } : {}), ...(i.courtesy ? { courtesy: true } : {}) };
     })
     .filter((i) => i.name);
 
@@ -443,6 +458,7 @@ export function ReservationForm({
             emptyLabel="Elige una botella"
             otherLabel="Otra…"
             placeholder="Escribe la botella"
+            courtesy
           />
           <ItemsEditor
             label="Refrescos"
