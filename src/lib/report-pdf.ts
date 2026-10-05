@@ -198,7 +198,7 @@ export async function renderReportPdf(r: FinanceReport) {
   }) + 11;
 
   const p = r.staffPayments;
-  section('Gastos de personal', 'Nóminas y personal');
+  section('Gastos de personal', 'Fichajes de cada noche, nóminas y personal');
   y = table({
     head: ['Concepto', 'Importe', '%'],
     body: amountRows(r.staffByCategory, t.staff),
@@ -248,9 +248,9 @@ export async function renderReportPdf(r: FinanceReport) {
         },
   ) + 11;
 
-  // Horas según fichajes: sólo si se usan los fichajes. Informativo, no se resta del resultado.
+  // Horas y coste según fichajes (incluido en los gastos de personal)
   if (r.staff.length) {
-    section('Horas trabajadas según fichajes', 'Informativo · no se resta del resultado');
+    section('Horas trabajadas según fichajes', 'Incluido en los gastos de personal');
     y = table({
       head: ['Empleado', 'Puesto', 'Noches', 'Horas', '€/hora', 'Coste estimado'],
       body: r.staff.map((s) => [s.name, s.position, fmtNum(s.nights, 0), clean(fmtHours(s.hours)), money(s.rate), money(s.cost)]),
@@ -286,7 +286,7 @@ export async function renderReportPdf(r: FinanceReport) {
     body: [
       ['Ingresos', money(t.income)],
       ['Gastos operativos', money(-t.expenses)],
-      ['Gastos de personal (nóminas y personal)', money(-t.staff)],
+      ['Gastos de personal (fichajes, nóminas y personal)', money(-t.staff)],
     ],
     right: [1],
   }) + 4;
@@ -306,8 +306,7 @@ export async function renderReportPdf(r: FinanceReport) {
   doc.text(
     doc.splitTextToSize(
       clean(
-        'Resultado = ingresos - gastos operativos - gastos de personal (nóminas y personal pagados en el periodo). ' +
-          'El coste estimado según fichajes es informativo y no se resta. ' +
+        'Resultado = ingresos - gastos operativos - gastos de personal (coste de los fichajes de cada noche + nóminas y personal pagados en el periodo). ' +
                     'Las noches van de 06:00 a 06:00.',
       ),
       contentW,

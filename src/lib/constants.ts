@@ -75,6 +75,8 @@ export const METHODS: Record<PaymentMethod, string> = {
 
 export const PAYROLL_CATEGORY = 'Nóminas';
 export const STAFF_CATEGORY = 'Personal';
+/** Coste de los fichajes (horas × tarifa) de cada noche: se suma solo a los gastos de personal */
+export const TIMESHEET_CATEGORY = 'Fichajes';
 
 /** Nombres antiguos de categorías que se muestran con su nombre actual */
 const LEGACY_CATEGORIES: Record<string, string> = { Camareros: STAFF_CATEGORY };

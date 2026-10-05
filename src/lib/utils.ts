@@ -1,4 +1,4 @@
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from './constants';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, TIMESHEET_CATEGORY } from './constants';
 import type { Employee, PaymentMethod, Shift, TimeEntry, TxKind } from './types';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
@@ -44,6 +44,7 @@ const METHOD_ORDER: PaymentMethod[] = ['efectivo', 'tarjeta', 'bizum', 'transfer
 
 /** Posición de una categoría según el orden de las listas (Taquilla, Barra 1, Barra 2…). */
 export function categoryRank(kind: TxKind, category: string) {
+  if (kind === 'expense' && category === TIMESHEET_CATEGORY) return -1;
   const list = kind === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
   const i = list.indexOf(category);
   return i < 0 ? list.length : i;

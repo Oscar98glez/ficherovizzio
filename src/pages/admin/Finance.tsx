@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Banknote, Download, FileDown, Plus, Wallet } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Banknote, Clock, Download, FileDown, Plus, Wallet } from 'lucide-react';
 import { BarChart, HBarList } from '../../components/charts';
 import { CloseoutForm, TransactionForm } from '../../components/finance-forms';
 import { PeriodPicker } from '../../components/PeriodPicker';
@@ -7,15 +8,31 @@ import { ReportDialog } from '../../components/ReportDialog';
 import { Button, Card, EmptyState, ErrorBox, Loading, PageHeader, SearchInput, Segmented, StatCard } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
-import { isStaffExpense, METHODS } from '../../lib/constants';
-import { addDays, addMonths, daysBetween, isoDate, makePeriod, parseDate, periodRange, startOfWeek } from '../../lib/dates';
-import { fmtDate, fmtDateLong, fmtMoney, fmtPercent, fmtWeekday } from '../../lib/format';
-import type { Transaction } from '../../lib/types';
-import { byId, categoryRank, compareByCategory, cx, downloadCSV, entryCost, fullName, groupBy, sumBy } from '../../lib/utils';
+import { isStaffExpense, METHODS, TIMESHEET_CATEGORY } from '../../lib/constants';
+import { addDays, addMonths, businessDate, daysBetween, isoDate, makePeriod, parseDate, periodRange, startOfWeek } from '../../lib/dates';
+import { fmtDate, fmtDateLong, fmtHours, fmtMoney, fmtPercent, fmtWeekday } from '../../lib/format';
+import type { TimeEntry, Transaction } from '../../lib/types';
+import { byId, categoryRank, compareByCategory, cx, downloadCSV, entryCost, entryHours, fullName, groupBy, sumBy } from '../../lib/utils';
 
 type KindFilter = 'all' | 'income' | 'expense';
 
+/** Coste de los fichajes de una noche (cuentan en la noche de la entrada, al fichar la salida) */
+interface TimesheetDay {
+  date: string;
+  cost: number;
+  hours: number;
+  people: number;
+}
+
+function timesheetByDay(entries: TimeEntry[]): Record<string, TimesheetDay> {
+  const out: Record<string, TimesheetDay> = {};
+  for (const [date, es] of Object.entries(groupBy(entries.filter((e) => e.clock_out), (e) => businessDate(e.clock_in))))
+    out[date] = { date, cost: sumBy(es, (e) => entryCost(e)), hours: sumBy(es, (e) => entryHours(e)), people: new Set(es.map((e) => e.employee_id)).size };
+  return out;
+}
+
 export default function Finance() {
+  const navigate = useNavigate();
   const [period, setPeriod] = useState(() => makePeriod('month'));
   const [kind, setKind] = useState<KindFilter>('all');
   const [q, setQ] = useState('');
@@ -40,9 +57,13 @@ export default function Finance() {
     // Gastos operativos por un lado y gastos de personal (nóminas + personal) por otro
     const exp = data.tx.filter((t) => t.kind === 'expense' && !isStaffExpense(t));
     const staffTx = data.tx.filter(isStaffExpense);
+    // Coste de los fichajes de cada noche: se suma a los gastos de personal junto con nóminas y personal
+    const sheets = Object.values(timesheetByDay(data.entries));
+    const timesheets = sumBy(sheets, (d) => d.cost);
     const income = sumBy(inc, (t) => t.amount);
     const expenses = sumBy(exp, (t) => t.amount);
-    const staff = sumBy(staffTx, (t) => t.amount);
+    const paid = sumBy(staffTx, (t) => t.amount);
+    const staff = paid + timesheets;
     const result = income - expenses - staff;
 
     // Desglose en el orden de las categorías (Taquilla, Barra 1, Barra 2…)
@@ -72,7 +93,7 @@ export default function Finance() {
         detail: b.detail,
         values: [
           sumBy(inc.filter((t) => inRange(t.date)), (t) => t.amount),
-          sumBy([...exp, ...staffTx].filter((t) => inRange(t.date)), (t) => t.amount),
+          sumBy([...exp, ...staffTx].filter((t) => inRange(t.date)), (t) => t.amount) + sumBy(sheets.filter((d) => inRange(d.date)), (d) => d.cost),
         ],
       };
     });
@@ -81,10 +102,11 @@ export default function Finance() {
       income,
       expenses,
       staff,
+      paid,
+      timesheets,
       result,
-      accrued: sumBy(data.entries, (e) => entryCost(e)),
       incomeByCat: cat(inc, 'income'),
-      expenseByCat: cat([...exp, ...staffTx], 'expense').filter((x) => x.value > 0),
+      expenseByCat: [{ label: TIMESHEET_CATEGORY, value: timesheets }, ...cat([...exp, ...staffTx], 'expense')].filter((x) => x.value > 0),
       series,
     };
   }, [data, period]);
@@ -96,6 +118,13 @@ export default function Finance() {
       .filter((t) => !term || `${t.category} ${t.description ?? ''} ${METHODS[t.method]}`.toLowerCase().includes(term));
   }, [data, kind, q]);
 
+  // Fichajes de cada día, como un gasto más en la lista de movimientos
+  const sheetList = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    if (!data || kind === 'income' || (term && !'fichajes personal horas'.includes(term))) return {};
+    return timesheetByDay(data.entries);
+  }, [data, kind, q]);
+
   if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorBox message={error} onRetry={reload} />;
   if (!data || !s) return null;
@@ -103,11 +132,14 @@ export default function Finance() {
   const emps = byId(data.employees);
   const events = byId(data.events);
   const byDate = groupBy(list, (t) => t.date);
-  const dates = Object.keys(byDate).sort().reverse();
+  const dates = [...new Set([...Object.keys(byDate), ...Object.keys(sheetList)])].sort().reverse();
 
   const exportCsv = () =>
     downloadCSV(`movimientos-${period.from}.csv`, [
       ['Fecha', 'Tipo', 'Categoría', 'Importe', 'Método', 'Noche', 'Empleado', 'Concepto'],
+      ...Object.values(sheetList)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((d) => [d.date, 'Gasto', TIMESHEET_CATEGORY, -Math.round(d.cost * 100) / 100, '', '', '', `${d.people} personas · ${fmtHours(d.hours)}`]),
       ...[...list].reverse().map((t) => [
         t.date,
         t.kind === 'income' ? 'Ingreso' : 'Gasto',
@@ -147,7 +179,7 @@ export default function Finance() {
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
         <StatCard label="Ingresos" value={fmtMoney(s.income)} tone="green" />
         <StatCard label="Gastos operativos" value={fmtMoney(s.expenses)} />
-        <StatCard label="Gastos de personal" value={fmtMoney(s.staff)} sub={s.accrued > 0 ? `Según fichajes ${fmtMoney(s.accrued)}` : 'Nóminas y personal'} />
+        <StatCard label="Gastos de personal" value={fmtMoney(s.staff)} sub={`Fichajes ${fmtMoney(s.timesheets)} · Pagos ${fmtMoney(s.paid)}`} />
         <StatCard
           label="Resultado"
           value={<span className={s.result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney(s.result)}</span>}
@@ -179,7 +211,7 @@ export default function Finance() {
       </div>
 
       <p className="mt-3 px-1 text-[12px] text-ink-3">
-        Resultado = ingresos - gastos operativos - gastos de personal (nóminas y personal pagados). El coste según fichajes es sólo informativo.
+        Resultado = ingresos - gastos operativos - gastos de personal (coste de los fichajes de cada noche + nóminas y personal pagados). Los fichajes cuentan al fichar la salida.
       </p>
 
       <div className="mb-3 mt-8 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -204,8 +236,9 @@ export default function Finance() {
       {dates.length ? (
         <div className="space-y-4">
           {dates.map((d) => {
-            const ts = byDate[d];
-            const net = sumBy(ts, (t) => (t.kind === 'income' ? t.amount : -t.amount));
+            const ts = byDate[d] ?? [];
+            const sheet = sheetList[d];
+            const net = sumBy(ts, (t) => (t.kind === 'income' ? t.amount : -t.amount)) - (sheet?.cost ?? 0);
             return (
               <section key={d}>
                 <div className="mb-1.5 flex items-baseline justify-between px-1">
@@ -216,6 +249,20 @@ export default function Finance() {
                   </span>
                 </div>
                 <Card className="divide-y divide-line overflow-hidden">
+                  {sheet && (
+                    <button onClick={() => navigate('/fichajes')} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-fill/60">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-purple/15 text-purple">
+                        <Clock className="h-[17px] w-[17px]" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[15px] font-medium">{TIMESHEET_CATEGORY}</div>
+                        <div className="truncate text-[13px] text-ink-2">
+                          {sheet.people} {sheet.people === 1 ? 'persona' : 'personas'} · {fmtHours(sheet.hours)} · automático
+                        </div>
+                      </div>
+                      <span className="tabular shrink-0 text-[15px] font-semibold">−{fmtMoney(sheet.cost)}</span>
+                    </button>
+                  )}
                   {[...ts].sort(compareByCategory).map((t) => (
                     <button key={t.id} onClick={() => setTxModal({ tx: t })} className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-fill/60">
                       <span

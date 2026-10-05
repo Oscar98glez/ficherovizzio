@@ -1,5 +1,5 @@
 import { api } from './api';
-import { DEPARTMENTS, isStaffExpense, METHODS, PAYROLL_CATEGORY, STAFF_CATEGORY } from './constants';
+import { DEPARTMENTS, isStaffExpense, METHODS, PAYROLL_CATEGORY, STAFF_CATEGORY, TIMESHEET_CATEGORY } from './constants';
 import { addDays, addMonths, businessDate, capitalize, isoDate, parseDate, periodRange, startOfMonth, startOfWeek } from './dates';
 import { fmtDate } from './format';
 import type { Transaction, TxKind } from './types';
@@ -39,11 +39,11 @@ export interface FinanceReport {
     income: number;
     /** Gastos operativos (sin nóminas ni personal) */
     expenses: number;
-    /** Gastos de personal: nóminas + personal pagados */
+    /** Gastos de personal: coste de los fichajes + nóminas y personal pagados */
     staff: number;
     payroll: number;
     personal: number;
-    /** Coste según fichajes (horas × tarifa). Informativo: no se resta del resultado. */
+    /** Coste de los fichajes (horas × tarifa), incluido en los gastos de personal */
     accrued: number;
     result: number;
     margin: number;
@@ -56,14 +56,14 @@ export interface FinanceReport {
   incomeByMethod: Amount[];
   /** Gastos operativos por concepto (sin nóminas ni personal) */
   operatingByCategory: Amount[];
-  /** Gastos de personal por concepto: Nóminas y Personal */
+  /** Gastos de personal por concepto: Fichajes, Nóminas y Personal */
   staffByCategory: Amount[];
   /** Resultado por día (semanal), por semana (mensual/trimestral) o por mes (anual), según los movimientos introducidos */
   breakdown: {
     unit: BreakdownUnit;
     rows: { label: string; from: string; to: string; night: string; income: number; expenses: number; staff: number; result: number }[];
   };
-  /** Horas y coste por empleado según fichajes (informativo) */
+  /** Horas y coste por empleado según fichajes (incluido en los gastos de personal) */
   staff: { name: string; position: string; department: string; nights: number; hours: number; rate: number; cost: number }[];
   /** Gastos de personal pagados (nóminas y personal): con detalle por persona sólo en informes semanales. */
   staffPayments: {
@@ -137,13 +137,17 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
   const totalIncome = sumBy(income, (t) => t.amount);
   const totalExpenses = sumBy(expenses, (t) => t.amount);
   const staffPaid = sumBy(staffTx, (t) => t.amount);
-  const result = totalIncome - totalExpenses - staffPaid;
+  // Coste de los fichajes de cada noche (cuentan en la noche de la entrada, al fichar la salida)
+  const sheetDays = groupBy(closed, (e) => businessDate(e.clock_in));
+  const accrued = sumBy(closed, (e) => entryCost(e));
+  const staffTotal = staffPaid + accrued;
+  const result = totalIncome - totalExpenses - staffTotal;
 
   // Resultado por fechas según los movimientos introducidos: por día (semanal), por semana (mensual) o por mes (anual)
   const unit: BreakdownUnit = detailed ? 'day' : reportDays(from, to) <= 92 ? 'week' : 'month';
   const buckets: { label: string; from: string; to: string }[] = [];
   if (unit === 'day') {
-    for (const d of [...new Set(tx.map((t) => t.date))].sort()) buckets.push({ label: d, from: d, to: d });
+    for (const d of [...new Set([...tx.map((t) => t.date), ...Object.keys(sheetDays)])].sort()) buckets.push({ label: d, from: d, to: d });
   } else {
     const first = unit === 'week' ? startOfWeek(parseDate(from)) : startOfMonth(parseDate(from));
     for (let s = first; isoDate(s) <= to; s = unit === 'week' ? addDays(s, 7) : addMonths(s, 1)) {
@@ -163,7 +167,8 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
     const t = tx.filter((x) => x.date >= b.from && x.date <= b.to);
     const inc = sumBy(t.filter((x) => x.kind === 'income'), (x) => x.amount);
     const exp = sumBy(t.filter((x) => x.kind === 'expense' && !isStaffExpense(x)), (x) => x.amount);
-    const staffPaidInBucket = sumBy(t.filter(isStaffExpense), (x) => x.amount);
+    const sheetsInBucket = Object.entries(sheetDays).filter(([d]) => d >= b.from && d <= b.to).flatMap(([, es]) => es);
+    const staffPaidInBucket = sumBy(t.filter(isStaffExpense), (x) => x.amount) + sumBy(sheetsInBucket, (e) => entryCost(e));
     const night = unit === 'day' ? events.filter((e) => e.date === b.from).map((e) => e.name).join(', ') : '';
     return { ...b, night, income: inc, expenses: exp, staff: staffPaidInBucket, result: inc - exp - staffPaidInBucket };
   });
@@ -196,10 +201,23 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
     description: t.description ?? '',
   });
 
+  // Coste de los fichajes de cada noche, como un movimiento más
+  const sheetMovements: Movement[] = Object.entries(sheetDays).map(([date, es]) => ({
+    date,
+    kind: 'expense',
+    category: TIMESHEET_CATEGORY,
+    amount: sumBy(es, (e) => entryCost(e)),
+    method: 'Fichaje',
+    night: events.filter((e) => e.date === date).map((e) => e.name).join(', '),
+    employee: '',
+    description: `${new Set(es.map((e) => e.employee_id)).size} personas · ${Math.round(sumBy(es, (e) => entryHours(e)) * 10) / 10} h`,
+  }));
+
   // En informes mensuales/anuales los pagos al personal se agrupan por día y sin nombres
   const movements: Movement[] = detailed
-    ? tx.map(toMovement).sort(compareMovements)
+    ? [...sheetMovements, ...tx.map(toMovement)].sort(compareMovements)
     : [
+        ...sheetMovements,
         ...tx.filter((t) => !isStaffExpense(t)).map(toMovement),
         ...Object.values(groupBy(staffTx, (t) => `${t.date}|${t.category}`)).map((ps) => ({
           date: ps[0].date,
@@ -223,10 +241,10 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
     totals: {
       income: totalIncome,
       expenses: totalExpenses,
-      staff: staffPaid,
+      staff: staffTotal,
       payroll: sumBy(payroll, (t) => t.amount),
       personal: sumBy(personal, (t) => t.amount),
-      accrued: sumBy(closed, (e) => entryCost(e)),
+      accrued,
       result,
       margin: totalIncome ? result / totalIncome : 0,
       hours: sumBy(closed, (e) => entryHours(e)),
@@ -243,7 +261,7 @@ export async function buildFinanceReport(from: string, to: string): Promise<Fina
       .map(([label, xs]) => ({ label, value: sumBy(xs, (t) => t.amount) }))
       .sort((a, b) => methodLabelRank(a.label) - methodLabelRank(b.label)),
     operatingByCategory: byCategory(expenses, 'expense'),
-    staffByCategory: byCategory(staffTx, 'expense'),
+    staffByCategory: [{ label: TIMESHEET_CATEGORY, value: accrued }, ...byCategory(staffTx, 'expense')].filter((x) => x.value > 0),
     breakdown: { unit, rows: breakdownRows },
     staff,
     staffPayments: {

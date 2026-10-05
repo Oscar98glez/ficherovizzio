@@ -135,7 +135,7 @@ export async function renderReportXlsx(r: FinanceReport) {
   const kpis: [string, number, Fmt][] = [
     ['Ingresos', t.income, 'money'],
     ['Gastos operativos', t.expenses, 'money'],
-    ['Gastos de personal (nóminas y personal)', t.staff, 'money'],
+    ['Gastos de personal (fichajes, nóminas y personal)', t.staff, 'money'],
   ];
   const kpiStart = row + 1;
   const cell = { income: `B${kpiStart}`, expenses: `B${kpiStart + 1}`, staff: `B${kpiStart + 2}` };
@@ -190,14 +190,14 @@ export async function renderReportXlsx(r: FinanceReport) {
 
   // Coste estimado según fichajes (informativo): sólo si se usan los fichajes
   if (r.staff.length) {
-    row = sectionTitle(ws, row, 'Según fichajes (informativo, no se resta del resultado)');
+    row = sectionTitle(ws, row, 'Según fichajes (incluido en los gastos de personal)');
     const start = row + 1;
     row = writeTable(
       ws,
       row,
       ['Concepto', 'Valor'],
       [
-        ['Coste estimado (horas × tarifa)', Math.round(t.accrued * 100) / 100],
+        ['Coste de los fichajes (horas × tarifa)', Math.round(t.accrued * 100) / 100],
         ['Horas trabajadas', t.hours],
         ['Noches con personal', t.nights],
       ],
@@ -218,7 +218,7 @@ export async function renderReportXlsx(r: FinanceReport) {
     [
       ['Ingresos', { formula: cell.income, result: t.income }],
       ['Gastos operativos', { formula: `-${cell.expenses}`, result: -t.expenses }],
-      ['Gastos de personal (nóminas y personal)', { formula: `-${cell.staff}`, result: -t.staff }],
+      ['Gastos de personal (fichajes, nóminas y personal)', { formula: `-${cell.staff}`, result: -t.staff }],
       [t.result >= 0 ? 'Beneficio' : 'Pérdida', { formula: `SUM(B${resStart}:B${resStart + 2})`, result: t.result }],
       ['Margen sobre ingresos', { formula: `IF(B${resStart}=0,0,B${resStart + 3}/B${resStart})`, result: t.margin }],
     ],
@@ -233,7 +233,7 @@ export async function renderReportXlsx(r: FinanceReport) {
 
   const note = ws.getCell(`A${row}`);
   note.value =
-    'Resultado = ingresos - gastos operativos - gastos de personal (nóminas y personal pagados en el periodo). El coste según fichajes es informativo.';
+    'Resultado = ingresos - gastos operativos - gastos de personal (coste de los fichajes de cada noche + nóminas y personal pagados en el periodo).';
   note.font = { size: 9, italic: true, color: { argb: 'FF8E8E93' } };
 
   // ---------- Resultado por día / semana / mes ----------
@@ -263,7 +263,7 @@ export async function renderReportXlsx(r: FinanceReport) {
     freezeAndFilter(wn, 1, 7, bd.rows.length);
   }
 
-  // ---------- Horas según fichajes (informativo; sólo si se usan los fichajes) ----------
+  // ---------- Horas según fichajes (sólo si se usan los fichajes) ----------
   if (r.staff.length) {
     const wp = wb.addWorksheet('Horas (fichajes)');
     wp.columns = [{ width: 24 }, { width: 22 }, { width: 20 }, { width: 9 }, { width: 10 }, { width: 11 }, { width: 16 }];
