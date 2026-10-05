@@ -19,7 +19,8 @@ interface AuthContext extends AuthState {
   /** Relaciones públicas: ficha como un trabajador y gestiona reservados */
   isRrpp: boolean;
   signIn(email: string, password: string): Promise<void>;
-  signUp(name: string, email: string, password: string): Promise<{ needsConfirmation: boolean }>;
+  /** Registro de un trabajador: elige si es camarero/a ('worker') o RRPP ('rrpp') */
+  signUp(name: string, email: string, password: string, role: Exclude<Role, 'admin'>): Promise<{ needsConfirmation: boolean }>;
   signOut(): Promise<void>;
   demoSignIn(role: Role): Promise<void>;
   resetPassword(email: string): Promise<void>;
@@ -77,11 +78,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw new Error(errorMessage(error));
     },
 
-    async signUp(name, email, password) {
+    async signUp(name, email, password, role) {
       const { data, error } = await sb().auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { full_name: name.trim() }, emailRedirectTo: window.location.origin },
+        options: { data: { full_name: name.trim(), role }, emailRedirectTo: window.location.origin },
       });
       if (error) throw new Error(errorMessage(error));
       return { needsConfirmation: !data.session };
