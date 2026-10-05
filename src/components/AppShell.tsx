@@ -93,9 +93,14 @@ export function AppShell() {
             { to: '/fichar', label: 'Fichar', icon: Fingerprint },
             ...(isRrpp ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
             { to: '/mis-horas', label: 'Mis horas', icon: Clock },
-            { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays },
-            { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
-            { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
+            // Los RRPP no tienen turnos, disponibilidad ni solicitudes
+            ...(isRrpp
+              ? []
+              : [
+                  { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays },
+                  { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
+                  { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
+                ]),
             { to: '/perfil', label: 'Perfil', icon: User },
           ],
         },
@@ -203,7 +208,7 @@ export function AppShell() {
 
       {/* Barra de pestañas (móvil) */}
       <nav className="glass fixed inset-x-0 bottom-0 z-30 border-t border-line pb-[env(safe-area-inset-bottom)] lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-5">
+        <div className="mx-auto grid max-w-lg" style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}>
           {tabs.map((t) => {
             const content = (active: boolean) => (
               <span className={cx('relative flex flex-col items-center gap-0.5 pb-1.5 pt-2', active ? 'text-accent' : 'text-ink-3')}>

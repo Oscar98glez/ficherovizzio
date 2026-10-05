@@ -72,6 +72,12 @@ function RequireReservations() {
   return isAdmin || isRrpp ? <Outlet /> : <Navigate to="/fichar" replace />;
 }
 
+/** Turnos, disponibilidad y solicitudes: no aplican a los RRPP */
+function NotRrpp() {
+  const { isRrpp } = useAuth();
+  return isRrpp ? <Navigate to="/fichar" replace /> : <Outlet />;
+}
+
 function Home() {
   const { isAdmin } = useAuth();
   return <Navigate to={isAdmin ? '/resumen' : '/fichar'} replace />;
@@ -107,9 +113,11 @@ export default function App() {
               </Route>
               <Route path="fichar" element={<Clock />} />
               <Route path="mis-horas" element={<MyHours />} />
-              <Route path="mis-turnos" element={<MyShifts />} />
-              <Route path="mi-disponibilidad" element={<MyAvailability />} />
-              <Route path="mis-solicitudes" element={<MyRequests />} />
+              <Route element={<NotRrpp />}>
+                <Route path="mis-turnos" element={<MyShifts />} />
+                <Route path="mi-disponibilidad" element={<MyAvailability />} />
+                <Route path="mis-solicitudes" element={<MyRequests />} />
+              </Route>
               <Route path="perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

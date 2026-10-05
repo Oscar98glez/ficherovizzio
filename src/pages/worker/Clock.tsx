@@ -36,6 +36,7 @@ export default function Clock() {
 
 function ClockInner({ employeeId, firstName, active }: { employeeId: string; firstName: string; active: boolean }) {
   const { toast, confirm } = useFeedback();
+  const { isRrpp } = useAuth();
   const now = useNow(1000);
   const [busy, setBusy] = useState(false);
   const week = useMemo(() => makePeriod('week'), []);
@@ -148,7 +149,7 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
         <StatCard label={month.label} value={fmtHours(sumBy(monthEntries, (e) => entryHours(e, now)))} sub={nightsLabel(monthEntries)} />
       </div>
 
-      {data.missingAvailability && (
+      {data.missingAvailability && !isRrpp && (
         <Link to="/mi-disponibilidad">
           <Card className="mt-4 flex items-center gap-4 p-4 ring-1 ring-accent/40 transition hover:bg-fill/40">
             <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent">
@@ -163,7 +164,7 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
         </Link>
       )}
 
-      {nextShift && !todayShift && (
+      {nextShift && !todayShift && !isRrpp && (
         <Link to="/mis-turnos">
           <Card className="mt-4 flex items-center gap-4 p-4 transition hover:bg-fill/40">
             <span className="grid h-11 w-11 place-items-center rounded-xl bg-accent/10 text-accent">
