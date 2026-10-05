@@ -220,3 +220,25 @@ export interface Reservation {
   created_at: string;
   updated_at: string;
 }
+
+/** % de comisión de los RRPP para un día de la semana (0 = domingo … 6 = sábado) */
+export interface CommissionRate {
+  id: string;
+  weekday: number;
+  bottle_pct: number;
+  ticket_pct: number;
+  updated_at: string;
+}
+
+/** Entradas vendidas por un RRPP en una noche */
+export interface TicketSale {
+  id: string;
+  /** YYYY-MM-DD: la noche */
+  date: string;
+  employee_id: string;
+  quantity: number;
+  /** Precio de venta de cada entrada */
+  unit_price: number;
+  notes: string | null;
+  created_at: string;
+}

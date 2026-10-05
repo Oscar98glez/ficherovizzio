@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Download, Plus, Users } from 'lucide-react';
 import { EmployeeForm } from '../../components/forms';
+import { RrppPanel } from '../../components/rrpp-commissions';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorBox, LiveDot, Loading, PageHeader, SearchInput, Segmented, Select } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
-import { CONTRACTS, DEPARTMENTS, isActiveReservation } from '../../lib/constants';
+import { CONTRACTS, DEPARTMENTS } from '../../lib/constants';
 import { makePeriod, periodRange } from '../../lib/dates';
 import { fmtHours, fmtMoney, fmtMoney0 } from '../../lib/format';
 import type { Department, Employee, Role } from '../../lib/types';
@@ -52,24 +53,18 @@ export default function Employees() {
 
   const { data, loading, error, reload } = useLoad(async () => {
     const { start, end } = periodRange(month);
-    const [employees, entries, profiles, reservations] = await Promise.all([
+    const [employees, entries, profiles] = await Promise.all([
       api.employees.list({ order: ['first_name', 'asc'] }),
       api.timeEntries.list({ gte: ['clock_in', start], lt: ['clock_in', end] }),
       api.profiles.list(),
-      // Reservas del mes, para la pestaña de RRPP (si aún no existe la tabla, se omiten)
-      api.reservations.list({ gte: ['date', month.from], lt: ['date', month.to] }).catch(() => []),
     ]);
     const roles = new Map(profiles.map((p) => [p.id, p.role]));
-    return { employees: employees.map((e) => ({ ...e, kind: kindOf(e, roles) })), entries, reservations };
+    return { employees: employees.map((e) => ({ ...e, kind: kindOf(e, roles) })), entries };
   }, [month]);
 
   const rows = useMemo(() => {
     if (!data) return [];
     const byEmp = groupBy(data.entries, (e) => e.employee_id);
-    const resByRrpp = groupBy(
-      data.reservations.filter((r) => r.rrpp_id && isActiveReservation(r)),
-      (r) => r.rrpp_id!,
-    );
     const term = q.trim().toLowerCase();
     return data.employees
       .filter((e) => e.kind === kind)
@@ -78,15 +73,7 @@ export default function Employees() {
       .filter((e) => !term || `${fullName(e)} ${e.position} ${e.email ?? ''}`.toLowerCase().includes(term))
       .map((e) => {
         const es = byEmp[e.id] ?? [];
-        const rs = resByRrpp[e.id] ?? [];
-        return {
-          e,
-          hours: sumBy(es, (x) => entryHours(x)),
-          cost: sumBy(es, (x) => entryCost(x)),
-          live: es.some((x) => !x.clock_out),
-          reservations: rs.length,
-          sales: sumBy(rs, (r) => r.total_amount ?? 0),
-        };
+        return { e, hours: sumBy(es, (x) => entryHours(x)), cost: sumBy(es, (x) => entryCost(x)), live: es.some((x) => !x.clock_out) };
       });
   }, [data, q, filter, dept, kind]);
 
@@ -97,19 +84,16 @@ export default function Employees() {
   const activeCount = data.employees.filter((e) => e.active).length;
   const counts = Object.fromEntries(KINDS.map((k) => [k.value, data.employees.filter((e) => e.kind === k.value && e.active).length])) as Record<Kind, number>;
   const isRrpp = kind === 'rrpp';
-  const cols = isRrpp
-    ? 'md:grid-cols-[minmax(0,2.2fr)_90px_120px_100px_110px_24px]'
-    : 'md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_90px_100px_110px_24px]';
+  const cols = 'md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_90px_100px_110px_24px]';
   const totalCost = sumBy(data.entries, (x) => entryCost(x));
 
   const exportCsv = () =>
     downloadCSV(`personal-${KINDS.find((k) => k.value === kind)!.label.toLowerCase()}-${month.from.slice(0, 7)}.csv`, [
       [
         'Nombre', 'Email', 'Teléfono', 'Puesto', 'Departamento', 'Contrato', '€/hora', `Horas ${month.label}`, `Coste ${month.label}`,
-        ...(isRrpp ? [`Reservas ${month.label}`, `Importe reservas ${month.label}`] : []),
         'Activo',
       ],
-      ...rows.map(({ e, hours, cost, reservations, sales }) => [
+      ...rows.map(({ e, hours, cost }) => [
         fullName(e),
         e.email,
         e.phone,
@@ -119,7 +103,6 @@ export default function Employees() {
         e.hourly_rate,
         Math.round(hours * 100) / 100,
         Math.round(cost * 100) / 100,
-        ...(isRrpp ? [reservations, Math.round(sales * 100) / 100] : []),
         e.active ? 'Sí' : 'No',
       ]),
     ]);
@@ -172,28 +155,22 @@ export default function Employees() {
         </div>
       </div>
 
+      {isRrpp ? (
+        <RrppPanel employees={rows.map((r) => r.e)} onOpen={(id) => navigate(`/personal/${id}`)} />
+      ) : (
       <Card className="overflow-hidden">
         {rows.length ? (
           <>
             <div className={cx('hidden gap-4 border-b border-line px-5 py-2.5 text-[12px] font-semibold uppercase tracking-wide text-ink-3 md:grid', cols)}>
               <span>Nombre</span>
-              {isRrpp ? (
-                <>
-                  <span className="text-right">Reservas mes</span>
-                  <span className="text-right">Importe reservas</span>
-                </>
-              ) : (
-                <>
-                  <span>Departamento</span>
-                  <span className="text-right">€/hora</span>
-                </>
-              )}
+              <span>Departamento</span>
+              <span className="text-right">€/hora</span>
               <span className="text-right">Horas mes</span>
               <span className="text-right">Coste mes</span>
               <span />
             </div>
             <div className="divide-y divide-line">
-              {rows.map(({ e, hours, cost, live, reservations, sales }) => (
+              {rows.map(({ e, hours, cost, live }) => (
                 <button
                   key={e.id}
                   onClick={() => navigate(`/personal/${e.id}`)}
@@ -213,26 +190,14 @@ export default function Employees() {
                       </div>
                     </div>
                   </div>
-                  {isRrpp ? (
-                    <>
-                      <div className="tabular hidden text-right text-[14px] md:block">{reservations}</div>
-                      <div className="tabular hidden text-right text-[14px] md:block">{fmtMoney0(sales)}</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="hidden md:block">
-                        <Badge tone={DEPARTMENTS[e.department].tone}>{DEPARTMENTS[e.department].label}</Badge>
-                      </div>
-                      <div className="tabular hidden text-right text-[14px] md:block">{fmtMoney(e.hourly_rate)}</div>
-                    </>
-                  )}
+                  <div className="hidden md:block">
+                    <Badge tone={DEPARTMENTS[e.department].tone}>{DEPARTMENTS[e.department].label}</Badge>
+                  </div>
+                  <div className="tabular hidden text-right text-[14px] md:block">{fmtMoney(e.hourly_rate)}</div>
                   <div className="tabular hidden text-right text-[14px] text-ink-2 md:block">{fmtHours(hours)}</div>
                   <div className="tabular text-right text-[15px] font-semibold md:text-[14px]">
                     {fmtMoney0(cost)}
-                    <div className="text-[12px] font-normal text-ink-2 md:hidden">
-                      {fmtHours(hours)}
-                      {isRrpp && ` · ${reservations} reservas`}
-                    </div>
+                    <div className="text-[12px] font-normal text-ink-2 md:hidden">{fmtHours(hours)}</div>
                   </div>
                   <ChevronRight className="h-4 w-4 text-ink-3" />
                 </button>
@@ -248,6 +213,7 @@ export default function Employees() {
           />
         )}
       </Card>
+      )}
 
       <EmployeeForm open={creating} onClose={() => setCreating(false)} onSaved={(e) => navigate(`/personal/${e.id}`)} />
     </>

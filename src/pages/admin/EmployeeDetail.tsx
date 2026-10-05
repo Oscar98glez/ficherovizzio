@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Copy, LogIn, LogOut, Mail, Pencil, Phone, Plus, Trash2 } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { EmployeeForm, EntryForm } from '../../components/forms';
+import { RrppCommissionCard } from '../../components/rrpp-commissions';
 import { useFeedback } from '../../components/overlay';
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, ListRow, LiveDot, Loading, Segmented, StatCard } from '../../components/ui';
 import { useLoad, useNow } from '../../hooks';
@@ -47,6 +48,8 @@ export default function EmployeeDetail() {
   const cost = sumBy(monthEntries, (x) => entryCost(x, now));
   const nights = new Set(monthEntries.map((x) => businessDate(x.clock_in))).size;
   const open = data.entries.find((x) => !x.clock_out);
+  // RRPP: por el perfil de su cuenta o, sin cuenta, por ser de relaciones públicas
+  const isRrpp = data.profile ? data.profile.role === 'rrpp' : e.department === 'relaciones';
 
   async function toggleClock() {
     setBusy(true);
@@ -260,6 +263,12 @@ export default function EmployeeDetail() {
           </Button>
         </div>
       </div>
+
+      {isRrpp && (
+        <div className="mt-4 lg:mt-5">
+          <RrppCommissionCard employeeId={e.id} />
+        </div>
+      )}
 
       <EmployeeForm open={editing} onClose={() => setEditing(false)} employee={e} onSaved={reload} />
       <EntryForm

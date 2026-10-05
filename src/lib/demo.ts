@@ -10,6 +10,7 @@ import { addDays, addMonths, businessDate, businessToday, isoDate, monthKey, sta
 import type {
   Availability,
   ClubEvent,
+  CommissionRate,
   ContractType,
   Department,
   Employee,
@@ -19,6 +20,7 @@ import type {
   Reservation,
   ReservationStatus,
   Shift,
+  TicketSale,
   TimeEntry,
   Transaction,
   VipTable,
@@ -36,11 +38,13 @@ export type TableName =
   | 'availability'
   | 'invoices'
   | 'vip_tables'
-  | 'reservations';
+  | 'reservations'
+  | 'rrpp_commission_rates'
+  | 'rrpp_ticket_sales';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v13';
+const DB_KEY = 'vizzio.demo.db.v14';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -655,6 +659,19 @@ function seed(): DB {
     });
   }
 
+  // Comisiones de RRPP: % por día de la semana y entradas vendidas por Marta en las noches pasadas
+  const rateByDay: Record<number, [number, number]> = { 0: [0, 0], 1: [0, 0], 2: [0, 0], 3: [10, 5], 4: [10, 10], 5: [12, 10], 6: [15, 12] };
+  const commissionRates: CommissionRate[] = Object.entries(rateByDay).map(([d, [b, t]]) => ({
+    id: `rate-${d}`,
+    weekday: Number(d),
+    bottle_pct: b,
+    ticket_pct: t,
+    updated_at: stamp,
+  }));
+  const ticketSales: TicketSale[] = events
+    .filter((e) => e.date >= isoDate(addDays(today, -30)) && e.date < isoDate(businessToday()) && e.kind !== 'evento_privado')
+    .map((e) => ({ id: uid(), date: e.date, employee_id: 'emp-6', quantity: int(8, 40), unit_price: 15, notes: null, created_at: stamp }));
+
   return {
     profiles,
     employees,
@@ -666,5 +683,7 @@ function seed(): DB {
     availability,
     vip_tables: vipTables,
     reservations,
+    rrpp_commission_rates: commissionRates,
+    rrpp_ticket_sales: ticketSales,
   } as unknown as DB;
 }

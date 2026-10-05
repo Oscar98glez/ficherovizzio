@@ -4,7 +4,7 @@ import { demoClockIn, demoClockOut, demoFiles, demoRepo, demoReservationStaff, d
 import { blobToDataUrl } from './image';
 import { uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Reservation, Shift, StaffOption, TimeEntry, Transaction, VipTable } from './types';
+import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Reservation, Shift, StaffOption, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -48,6 +48,7 @@ const ERRORS: [RegExp, string][] = [
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
   [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
+  [/rrpp_commission_rates|rrpp_ticket_sales/i, 'Falta aplicar en Supabase la migración de comisiones de RRPP (20261005170000_rrpp_commissions.sql).'],
   [/rrpp_origin/i, 'Falta aplicar en Supabase la migración de origen de reservas (20261005160000_reservation_origin.sql).'],
   [/reservation_staff|host_rrpp/i, 'Falta aplicar en Supabase la migración de "RRPP que atiende" (20261005150000_reservation_host_rrpp.sql).'],
   [/map_x|total_amount|bottles|mixers/i, 'Falta aplicar en Supabase la migración del mapa de reservados (20261005130000_vip_map_and_orders.sql).'],
@@ -255,6 +256,8 @@ export const api = {
   invoices: repo<Invoice>('invoices'),
   vipTables: repo<VipTable>('vip_tables'),
   reservations: repo<Reservation>('reservations'),
+  commissionRates: repo<CommissionRate>('rrpp_commission_rates'),
+  ticketSales: repo<TicketSale>('rrpp_ticket_sales'),
 
   /** Fichar entrada del usuario conectado (hora del servidor). */
   clockIn: (notes?: string) =>
