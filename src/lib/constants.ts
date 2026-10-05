@@ -153,11 +153,27 @@ export const EMPLOYEE_COLORS = [
   '#8e8e93',
 ];
 
+/** Botellas habituales (se puede escribir cualquier otra) */
+export const BOTTLE_SUGGESTIONS = [
+  'Absolut', 'Grey Goose', 'Belvedere', 'Ciroc', 'Eristoff',
+  'Beefeater', 'Tanqueray', "Hendrick's", 'Bombay Sapphire', 'Puerto de Indias', 'Seagram\'s', 'Larios',
+  'Bacardí', 'Havana Club 7', 'Brugal', 'Barceló', 'Cacique',
+  "Jack Daniel's", 'Johnnie Walker Red', 'Johnnie Walker Black', "Ballantine's", 'J&B', 'Chivas Regal',
+  'Jägermeister', 'Tequila José Cuervo', 'Don Julio',
+  'Moët & Chandon', 'Moët Ice', 'Dom Pérignon', 'Veuve Clicquot',
+];
+
+/** Refrescos habituales (se puede escribir cualquier otro) */
+export const MIXER_SUGGESTIONS = [
+  'Coca-Cola', 'Coca-Cola Zero', 'Fanta Naranja', 'Fanta Limón', 'Sprite', '7Up',
+  'Tónica', 'Ginger Ale', 'Red Bull', 'Red Bull Sin Azúcar', 'Agua', 'Agua con gas', 'Zumo de naranja', 'Zumo de piña',
+];
+
 /** Estados de una reserva (las canceladas y "no vino" dejan el reservado libre) */
 export const RESERVATION_STATUS: Record<ReservationStatus, { label: string; tone: Tone }> = {
   pending: { label: 'Pendiente', tone: 'orange' },
-  confirmed: { label: 'Confirmada', tone: 'blue' },
-  arrived: { label: 'Ha llegado', tone: 'green' },
+  confirmed: { label: 'Confirmada', tone: 'green' },
+  arrived: { label: 'Ha llegado', tone: 'purple' },
   cancelled: { label: 'Cancelada', tone: 'gray' },
   no_show: { label: 'No vino', tone: 'red' },
 };

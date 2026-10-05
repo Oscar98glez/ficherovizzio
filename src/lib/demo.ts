@@ -3,6 +3,7 @@
  * Se usa automáticamente mientras no haya credenciales de Supabase.
  */
 import type { Query, Repo } from './api';
+import { CLUB_TABLES } from './club-map';
 import { PAYROLL_CATEGORY } from './constants';
 import { addDays, addMonths, businessDate, businessToday, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
 import type {
@@ -21,7 +22,7 @@ import type {
   Transaction,
   VipTable,
 } from './types';
-import { entryCost, uid } from './utils';
+import { entryCost, sumBy, uid } from './utils';
 
 export type TableName =
   | 'profiles'
@@ -38,7 +39,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v10';
+const DB_KEY = 'vizzio.demo.db.v11';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -576,30 +577,24 @@ function seed(): DB {
     { id: uid(), employee_id: 'emp-8', kind: 'vacaciones', start_date: isoDate(addDays(today, -30)), end_date: isoDate(addDays(today, -24)), reason: null, status: 'rejected', reviewed_at: stamp, created_at: stamp },
   ];
 
-  // Reservados del local y reservas de las noches cercanas
-  const tableDefs: [string, string, number, number][] = [
-    ['VIP 1', 'Pista', 8, 300],
-    ['VIP 2', 'Pista', 8, 300],
-    ['VIP 3', 'Pista', 10, 400],
-    ['VIP 4', 'Pista', 10, 400],
-    ['Reservado 5', 'Altillo', 6, 200],
-    ['Reservado 6', 'Altillo', 6, 200],
-    ['Reservado 7', 'Altillo', 8, 250],
-    ['Reservado 8', 'Altillo', 8, 250],
-    ['Palco 1', 'Escenario', 12, 600],
-    ['Palco 2', 'Escenario', 15, 800],
-  ];
-  const vipTables: VipTable[] = tableDefs.map(([name, zone, capacity, min_spend], i) => ({
+  // Reservados del local (con su posición en el plano) y reservas de las noches cercanas
+  const vipTables: VipTable[] = CLUB_TABLES.map((t, i) => ({
     id: `vip-${i + 1}`,
-    name,
-    zone,
-    capacity,
-    min_spend,
+    name: t.name,
+    zone: t.zone,
+    capacity: t.capacity,
+    min_spend: t.capacity === 16 ? 500 : t.zone === 'Zona DJ' ? 300 : 200,
     active: true,
     sort: i + 1,
     notes: null,
+    map_x: t.x,
+    map_y: t.y,
+    map_w: t.w,
+    map_h: t.h,
     created_at: stamp,
   }));
+  const bottleNames = ['Grey Goose', 'Absolut', 'Beefeater', "Hendrick's", 'Bacardí', "Jack Daniel's", 'Moët & Chandon', 'Puerto de Indias'];
+  const mixerNames = ['Coca-Cola', 'Coca-Cola Zero', 'Tónica', 'Fanta Limón', 'Red Bull', 'Agua'];
   const customers = ['Álex Romero', 'Grupo Sergio M.', 'Cumpleaños Andrea', 'Despedida Pablo', 'Iván Herrera', 'Claudia Ramos', 'Empresa Nexo', 'Mario & friends', 'Rocío Peña', 'Daniel Gil', 'Laura Méndez', 'Tomás Vega'];
   const rrpps = [employees[5], employees[0]]; // Marta (RRPP) y Laura (gerente)
   const reservations: Reservation[] = [];
@@ -609,6 +604,9 @@ function seed(): DB {
     const picks = [...vipTables].sort(() => r() - 0.5).slice(0, count);
     picks.forEach((t, i) => {
       const rrpp = rrpps[r() < 0.7 ? 0 : 1];
+      const nBottles = int(1, 3);
+      const bottles = [...bottleNames].sort(() => r() - 0.5).slice(0, nBottles).map((name) => ({ name, qty: int(1, 2) }));
+      const mixers = [...mixerNames].sort(() => r() - 0.5).slice(0, int(1, 3)).map((name) => ({ name, qty: int(2, 8) }));
       const status: ReservationStatus = isPast ? (r() < 0.85 ? 'arrived' : 'no_show') : r() < 0.6 ? 'confirmed' : 'pending';
       reservations.push({
         id: uid(),
@@ -620,6 +618,9 @@ function seed(): DB {
         arrival_time: ['00:30', '01:00', '01:30', '02:00'][int(0, 3)],
         min_spend: t.min_spend,
         deposit: r() < 0.6 ? round(between(50, 150), 10) : 0,
+        bottles,
+        mixers,
+        total_amount: round(sumBy(bottles, (b) => b.qty) * between(120, 180) + sumBy(mixers, (m) => m.qty) * 3, 10),
         status,
         notes: r() < 0.25 ? 'Botella de bienvenida' : null,
         rrpp_id: rrpp.id,

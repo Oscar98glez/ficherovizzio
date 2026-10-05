@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, Minus, Plus, Trash2, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { hhmm } from '../lib/availability';
-import { isActiveReservation, RESERVATION_STATUS } from '../lib/constants';
+import { BOTTLE_SUGGESTIONS, isActiveReservation, MIXER_SUGGESTIONS, RESERVATION_STATUS } from '../lib/constants';
 import { fmtDateFull, fmtMoneyExact } from '../lib/format';
-import type { Employee, Reservation, ReservationStatus, VipTable } from '../lib/types';
+import type { Employee, OrderItem, Reservation, ReservationStatus, VipTable } from '../lib/types';
 import { cx, fullName, parseAmount } from '../lib/utils';
 import { Modal, useFeedback } from './overlay';
 import { Badge, Button, EmptyState, Field, Input, List, ListRow, Select, Switch, Textarea } from './ui';
@@ -12,6 +12,95 @@ import { Badge, Button, EmptyState, Field, Input, List, ListRow, Select, Switch,
 const amountText = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','));
 
 export const tableLabel = (t: VipTable) => [t.name, t.zone].filter(Boolean).join(' · ');
+
+/** "2× Grey Goose, 1× Moët" */
+export const itemsText = (items: OrderItem[] | null | undefined) => (items ?? []).map((i) => `${i.qty}× ${i.name}`).join(', ');
+
+/** Lista editable de botellas o refrescos con su cantidad */
+function ItemsEditor({
+  label,
+  addLabel,
+  items,
+  onChange,
+  suggestions,
+  placeholder,
+  listId,
+}: {
+  label: string;
+  addLabel: string;
+  items: OrderItem[];
+  onChange: (items: OrderItem[]) => void;
+  suggestions: string[];
+  placeholder: string;
+  listId: string;
+}) {
+  const set = (i: number, patch: Partial<OrderItem>) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <div>
+      <span className="mb-1.5 block text-[13px] font-medium text-ink-2">{label}</span>
+      <datalist id={listId}>
+        {suggestions.map((s) => (
+          <option key={s} value={s} />
+        ))}
+      </datalist>
+      <div className="space-y-2">
+        {items.map((it, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Input
+              value={it.name}
+              onChange={(e) => set(i, { name: e.target.value })}
+              placeholder={placeholder}
+              list={listId}
+              className="min-w-0 flex-1"
+            />
+            <div className="flex h-10 shrink-0 items-center rounded-[10px] bg-fill">
+              <button
+                type="button"
+                onClick={() => set(i, { qty: Math.max(1, it.qty - 1) })}
+                className="grid h-10 w-8 place-items-center text-ink-2 hover:text-ink"
+                aria-label="Una menos"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="tabular w-6 text-center text-[15px] font-semibold">{it.qty}</span>
+              <button
+                type="button"
+                onClick={() => set(i, { qty: it.qty + 1 })}
+                className="grid h-10 w-8 place-items-center text-ink-2 hover:text-ink"
+                aria-label="Una más"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange(items.filter((_, j) => j !== i))}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-fill hover:text-red"
+              aria-label="Quitar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange([...items, { name: '', qty: 1 }])}
+        className="mt-2 flex items-center gap-1.5 text-[14px] font-medium text-accent hover:opacity-70"
+      >
+        <Plus className="h-4 w-4" /> {addLabel}
+      </button>
+    </div>
+  );
+}
+
+const cleanItems = (items: OrderItem[]) =>
+  items
+    .map((i) => ({
+      name: i.name.trim(),
+      qty: Math.max(1, Math.round(i.qty) || 1),
+    }))
+    .filter((i) => i.name);
 
 // =====================================================================
 //  Reserva
@@ -26,6 +115,9 @@ interface ReservationFormState {
   arrival_time: string;
   min_spend: string;
   deposit: string;
+  bottles: OrderItem[];
+  mixers: OrderItem[];
+  total_amount: string;
   status: ReservationStatus;
   rrpp_id: string;
   notes: string;
@@ -40,8 +132,11 @@ const toForm = (date: string, r?: Reservation | null, table?: VipTable | null, r
   arrival_time: hhmm(r?.arrival_time),
   min_spend: amountText(r ? r.min_spend : table?.min_spend),
   deposit: r && r.deposit ? amountText(r.deposit) : '',
+  bottles: r?.bottles?.length ? r.bottles.map((b) => ({ ...b })) : [{ name: '', qty: 1 }],
+  mixers: r?.mixers?.length ? r.mixers.map((m) => ({ ...m })) : [],
+  total_amount: amountText(r?.total_amount),
   status: r?.status ?? 'pending',
-  rrpp_id: r ? r.rrpp_id ?? '' : rrppId ?? '',
+  rrpp_id: r ? (r.rrpp_id ?? '') : (rrppId ?? ''),
   notes: r?.notes ?? '',
 });
 
@@ -92,7 +187,11 @@ export function ReservationForm({
 
   function chooseTable(id: string) {
     const t = tables.find((x) => x.id === id);
-    setF((s) => ({ ...s, table_id: id, min_spend: t?.min_spend != null && (!s.min_spend || !reservation) ? amountText(t.min_spend) : s.min_spend }));
+    setF((s) => ({
+      ...s,
+      table_id: id,
+      min_spend: t?.min_spend != null && (!s.min_spend || !reservation) ? amountText(t.min_spend) : s.min_spend,
+    }));
   }
 
   async function submit() {
@@ -110,6 +209,9 @@ export function ReservationForm({
         arrival_time: f.arrival_time || null,
         min_spend: f.min_spend.trim() ? parseAmount(f.min_spend) : null,
         deposit: parseAmount(f.deposit),
+        bottles: cleanItems(f.bottles),
+        mixers: cleanItems(f.mixers),
+        total_amount: f.total_amount.trim() ? parseAmount(f.total_amount) : null,
         status: f.status,
         notes: f.notes.trim() || null,
         // El RRPP queda siempre como autor de sus reservas; el administrador puede asignarlas
@@ -129,7 +231,14 @@ export function ReservationForm({
 
   async function remove() {
     if (!reservation) return;
-    if (!(await confirm({ title: '¿Eliminar la reserva?', message: 'Si el cliente no viene, mejor márcala como "No vino" o "Cancelada".', confirmLabel: 'Eliminar', destructive: true })))
+    if (
+      !(await confirm({
+        title: '¿Eliminar la reserva?',
+        message: 'Si el cliente no viene, mejor márcala como "No vino" o "Cancelada".',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+      }))
+    )
       return;
     try {
       await api.reservations.remove(reservation.id);
@@ -160,6 +269,11 @@ export function ReservationForm({
             <ListRow title="Personas" trailing={<span className="tabular text-ink-2">{reservation.guests}</span>} />
             <ListRow title="Llegada" trailing={<span className="tabular text-ink-2">{hhmm(reservation.arrival_time) || '—'}</span>} />
             <ListRow title="RRPP" trailing={<span className="text-ink-2">{reservation.rrpp_name ?? '—'}</span>} />
+            {!!reservation.bottles?.length && <ListRow title="Botellas" subtitle={itemsText(reservation.bottles)} />}
+            {!!reservation.mixers?.length && <ListRow title="Refrescos" subtitle={itemsText(reservation.mixers)} />}
+            {reservation.total_amount != null && (
+              <ListRow title="Importe total" trailing={<span className="tabular font-semibold">{fmtMoneyExact(reservation.total_amount)}</span>} />
+            )}
           </List>
           <p className="text-center text-[13px] text-ink-3">Sólo quien gestiona la reserva (o un administrador) puede modificarla.</p>
         </div>
@@ -168,14 +282,32 @@ export function ReservationForm({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={reservation ? 'Editar reserva' : 'Nueva reserva'} onSubmit={submit} submitLabel={reservation ? 'Guardar' : 'Crear'} saving={saving}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={reservation ? 'Editar reserva' : 'Nueva reserva'}
+      onSubmit={submit}
+      submitLabel={reservation ? 'Guardar' : 'Crear'}
+      saving={saving}
+    >
       <div className="space-y-4">
         <Field label="Cliente">
-          <Input value={f.customer_name} onChange={(e) => set('customer_name', e.target.value)} placeholder="Nombre o grupo" autoFocus={!reservation} />
+          <Input
+            value={f.customer_name}
+            onChange={(e) => set('customer_name', e.target.value)}
+            placeholder="Nombre o grupo"
+            autoFocus={!reservation}
+          />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Teléfono">
-            <Input type="tel" inputMode="tel" value={f.customer_phone} onChange={(e) => set('customer_phone', e.target.value)} placeholder="Opcional" />
+            <Input
+              type="tel"
+              inputMode="tel"
+              value={f.customer_phone}
+              onChange={(e) => set('customer_phone', e.target.value)}
+              placeholder="Opcional"
+            />
           </Field>
           <Field label="Personas" hint={selected?.capacity && guests > selected.capacity ? `El reservado es para ${selected.capacity}` : undefined}>
             <Input type="number" inputMode="numeric" min={1} value={f.guests} onChange={(e) => set('guests', e.target.value)} />
@@ -203,13 +335,33 @@ export function ReservationForm({
               ))}
           </Select>
         </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Consumo mínimo (€)">
-            <Input inputMode="decimal" value={f.min_spend} onChange={(e) => set('min_spend', e.target.value)} placeholder="0" />
-          </Field>
-          <Field label="Señal cobrada (€)">
-            <Input inputMode="decimal" value={f.deposit} onChange={(e) => set('deposit', e.target.value)} placeholder="0" />
-          </Field>
+        <div className="space-y-4 rounded-2xl bg-fill/50 p-3.5">
+          <ItemsEditor
+            label="Botellas"
+            addLabel="Añadir botella"
+            items={f.bottles}
+            onChange={(v) => set('bottles', v)}
+            suggestions={BOTTLE_SUGGESTIONS}
+            placeholder="Grey Goose, Moët…"
+            listId="bottle-suggestions"
+          />
+          <ItemsEditor
+            label="Refrescos"
+            addLabel="Añadir refresco"
+            items={f.mixers}
+            onChange={(v) => set('mixers', v)}
+            suggestions={MIXER_SUGGESTIONS}
+            placeholder="Coca-Cola, tónica…"
+            listId="mixer-suggestions"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Importe total (€)" hint={f.min_spend ? `Consumo mínimo: ${f.min_spend} €` : undefined}>
+              <Input inputMode="decimal" value={f.total_amount} onChange={(e) => set('total_amount', e.target.value)} placeholder="0" />
+            </Field>
+            <Field label="Señal cobrada (€)">
+              <Input inputMode="decimal" value={f.deposit} onChange={(e) => set('deposit', e.target.value)} placeholder="0" />
+            </Field>
+          </div>
         </div>
         <Field label="Estado">
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
@@ -275,7 +427,17 @@ const toTableForm = (t?: VipTable | null): TableFormState => ({
   notes: t?.notes ?? '',
 });
 
-export function VipTablesManager({ open, onClose, tables, onSaved }: { open: boolean; onClose: () => void; tables: VipTable[]; onSaved: () => void }) {
+export function VipTablesManager({
+  open,
+  onClose,
+  tables,
+  onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tables: VipTable[];
+  onSaved: () => void;
+}) {
   const { toast, confirm } = useFeedback();
   // null = lista · 'new' = nuevo reservado · VipTable = edición
   const [editing, setEditing] = useState<VipTable | 'new' | null>(null);
@@ -305,7 +467,11 @@ export function VipTablesManager({ open, onClose, tables, onSaved }: { open: boo
         notes: f.notes.trim() || null,
       };
       if (editing && editing !== 'new') await api.vipTables.update(editing.id, values);
-      else await api.vipTables.create({ ...values, sort: Math.max(0, ...tables.map((t) => t.sort)) + 1 });
+      else
+        await api.vipTables.create({
+          ...values,
+          sort: Math.max(0, ...tables.map((t) => t.sort)) + 1,
+        });
       toast.success(editing === 'new' ? 'Reservado creado' : 'Cambios guardados');
       onSaved();
       setEditing(null);
@@ -317,7 +483,14 @@ export function VipTablesManager({ open, onClose, tables, onSaved }: { open: boo
   }
 
   async function remove(t: VipTable) {
-    if (!(await confirm({ title: `¿Eliminar ${t.name}?`, message: 'Sus reservas se conservan, pero quedarán sin reservado asignado. Si sólo no se usa, mejor desactívalo.', confirmLabel: 'Eliminar', destructive: true })))
+    if (
+      !(await confirm({
+        title: `¿Eliminar ${t.name}?`,
+        message: 'Sus reservas se conservan, pero quedarán sin reservado asignado. Si sólo no se usa, mejor desactívalo.',
+        confirmLabel: 'Eliminar',
+        destructive: true,
+      }))
+    )
       return;
     try {
       await api.vipTables.remove(t.id);
@@ -331,7 +504,14 @@ export function VipTablesManager({ open, onClose, tables, onSaved }: { open: boo
 
   if (editing)
     return (
-      <Modal open={open} onClose={() => setEditing(null)} title={editing === 'new' ? 'Nuevo reservado' : 'Editar reservado'} onSubmit={submit} submitLabel={editing === 'new' ? 'Crear' : 'Guardar'} saving={saving}>
+      <Modal
+        open={open}
+        onClose={() => setEditing(null)}
+        title={editing === 'new' ? 'Nuevo reservado' : 'Editar reservado'}
+        onSubmit={submit}
+        submitLabel={editing === 'new' ? 'Crear' : 'Guardar'}
+        saving={saving}
+      >
         <div className="space-y-4">
           <button type="button" onClick={() => setEditing(null)} className="-mt-1 flex items-center gap-1 text-[15px] text-accent hover:opacity-70">
             <ChevronLeft className="h-4 w-4" /> Reservados
@@ -386,7 +566,11 @@ export function VipTablesManager({ open, onClose, tables, onSaved }: { open: boo
                     {!t.active && ' · inactivo'}
                   </span>
                 }
-                subtitle={[t.zone, t.capacity ? `${t.capacity} pers.` : null, t.min_spend != null ? `mín. ${fmtMoneyExact(t.min_spend)}` : null].filter(Boolean).join(' · ') || 'Sin detalles'}
+                subtitle={
+                  [t.zone, t.capacity ? `${t.capacity} pers.` : null, t.min_spend != null ? `mín. ${fmtMoneyExact(t.min_spend)}` : null]
+                    .filter(Boolean)
+                    .join(' · ') || 'Sin detalles'
+                }
               />
             ))}
           </List>

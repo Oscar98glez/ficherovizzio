@@ -48,6 +48,7 @@ const ERRORS: [RegExp, string][] = [
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
   [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
+  [/map_x|total_amount|bottles|mixers/i, 'Falta aplicar en Supabase la migración del mapa de reservados (20261005130000_vip_map_and_orders.sql).'],
   [/public.reservations|public.vip_tables|profiles_role_check/i, 'Falta aplicar en Supabase la migración de RRPP y reservados (20261005120000_rrpp_reservations.sql).'],
   [/availability_one_per_day/i, 'Ya hay disponibilidad guardada para ese día.'],
   [/row-level security|permission denied/i, 'No tienes permisos para realizar esta acción.'],

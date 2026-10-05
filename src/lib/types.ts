@@ -157,7 +157,18 @@ export interface VipTable {
   active: boolean;
   sort: number;
   notes: string | null;
+  /** Posición en el plano (null = sin ubicar) */
+  map_x: number | null;
+  map_y: number | null;
+  map_w: number | null;
+  map_h: number | null;
   created_at: string;
+}
+
+/** Una línea de la consumición: botella o refresco y cuántas */
+export interface OrderItem {
+  name: string;
+  qty: number;
 }
 
 export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'cancelled' | 'no_show';
@@ -176,6 +187,12 @@ export interface Reservation {
   min_spend: number | null;
   /** Señal cobrada */
   deposit: number;
+  /** Botellas pedidas */
+  bottles: OrderItem[];
+  /** Refrescos pedidos */
+  mixers: OrderItem[];
+  /** Importe total del reservado */
+  total_amount: number | null;
   status: ReservationStatus;
   notes: string | null;
   /** Empleado RRPP que la gestiona */
