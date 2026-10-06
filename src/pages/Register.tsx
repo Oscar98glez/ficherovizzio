@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GlassWater, MailCheck, Sofa, type LucideIcon } from 'lucide-react';
+import { GlassWater, Headphones, MailCheck, Sofa, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../auth';
 import { useFeedback } from '../components/overlay';
 import { Button, Field, Input } from '../components/ui';
@@ -8,10 +8,11 @@ import { errorMessage } from '../lib/api';
 import { cx } from '../lib/utils';
 import { AuthLayout } from './Login';
 
-type WorkerRole = 'worker' | 'rrpp';
+type WorkerRole = 'worker' | 'rrpp' | 'tech';
 
 const ROLE_OPTIONS: { value: WorkerRole; title: string; text: string; icon: LucideIcon }[] = [
   { value: 'worker', title: 'Camarero/a', text: 'Fichar, horas, turnos y disponibilidad', icon: GlassWater },
+  { value: 'tech', title: 'DJ / Técnico', text: 'Fichar, horas, turnos y disponibilidad', icon: Headphones },
   { value: 'rrpp', title: 'RRPP', text: 'Fichar y gestionar los reservados', icon: Sofa },
 ];
 
@@ -28,7 +29,7 @@ export default function Register() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!role) return toast.error('Elige si eres camarero/a o RRPP');
+    if (!role) return toast.error('Elige tu puesto: camarero/a, DJ / técnico o RRPP');
     if (password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
     setLoading(true);
     try {
@@ -62,7 +63,7 @@ export default function Register() {
       <form onSubmit={submit} className="card space-y-4 p-6">
         <div>
           <span className="mb-1.5 block text-[13px] font-medium text-ink-2">¿Cuál es tu puesto?</span>
-          <div className="grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Puesto">
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Puesto">
             {ROLE_OPTIONS.map((o) => {
               const active = role === o.value;
               return (

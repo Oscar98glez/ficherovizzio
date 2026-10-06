@@ -17,6 +17,7 @@ type Kind = Role;
 
 const KINDS: { value: Kind; label: string }[] = [
   { value: 'worker', label: 'Camareros' },
+  { value: 'tech', label: 'DJ / Técnicos' },
   { value: 'rrpp', label: 'RRPP' },
   { value: 'admin', label: 'Administración' },
 ];
@@ -25,14 +26,15 @@ const KIND_KEY = 'vizzio.personal.kind';
 const savedKind = (): Kind => {
   try {
     const v = localStorage.getItem(KIND_KEY);
-    return v === 'rrpp' || v === 'admin' ? v : 'worker';
+    return v === 'rrpp' || v === 'admin' || v === 'tech' ? v : 'worker';
   } catch {
     return 'worker';
   }
 };
 
-/** Tipo de usuario: el rol de su cuenta; sin cuenta, RRPP si es de relaciones públicas y camarero si no */
-const kindOf = (e: Employee, roles: Map<string, Role>): Kind => (e.user_id && roles.get(e.user_id)) || (e.department === 'relaciones' ? 'rrpp' : 'worker');
+/** Tipo de usuario: el rol de su cuenta; sin cuenta, por su departamento (relaciones públicas → RRPP, cabina → DJ / técnico) */
+const kindOf = (e: Employee, roles: Map<string, Role>): Kind =>
+  (e.user_id && roles.get(e.user_id)) || (e.department === 'relaciones' ? 'rrpp' : e.department === 'cabina' ? 'tech' : 'worker');
 
 export default function Employees() {
   const navigate = useNavigate();

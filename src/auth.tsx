@@ -19,7 +19,7 @@ interface AuthContext extends AuthState {
   /** Relaciones públicas: ficha como un trabajador y gestiona reservados */
   isRrpp: boolean;
   signIn(email: string, password: string): Promise<void>;
-  /** Registro de un trabajador: elige si es camarero/a ('worker') o RRPP ('rrpp') */
+  /** Registro de un trabajador: elige si es camarero/a ('worker'), RRPP ('rrpp') o DJ / técnico ('tech') */
   signUp(name: string, email: string, password: string, role: Exclude<Role, 'admin'>): Promise<{ needsConfirmation: boolean }>;
   signOut(): Promise<void>;
   demoSignIn(role: Role): Promise<void>;

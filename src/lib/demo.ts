@@ -44,13 +44,14 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v16';
+const DB_KEY = 'vizzio.demo.db.v17';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
   admin: 'demo-admin',
   worker: 'demo-worker',
   rrpp: 'demo-rrpp',
+  tech: 'demo-tech',
 } as const;
 
 // ---------- Sesión demo ----------
@@ -333,7 +334,7 @@ function seed(): DB {
     ['Marta', 'López', 'Relaciones públicas', 'relaciones', 'autonomo', 14, '#ff9500', 23.5, 4.5, DEMO_USERS.rrpp],
     ['David', 'Fernández', 'Portero', 'seguridad', 'fijo', 17, '#8e8e93', 23, 7.5],
     ['Álvaro', 'Torres', 'Vigilante de seguridad', 'seguridad', 'temporal', 17, '#a2845e', 23, 7.5],
-    ['Nacho', 'Vidal', 'DJ residente', 'cabina', 'autonomo', 45, '#ff2d55', 0.5, 5.5],
+    ['Nacho', 'Vidal', 'DJ residente', 'cabina', 'autonomo', 45, '#ff2d55', 0.5, 5.5, DEMO_USERS.tech],
     ['Sara', 'Jiménez', 'Taquillera', 'taquilla', 'fijo_discontinuo', 12.5, '#5856d6', 23.5, 4.5],
     ['Paula', 'Navarro', 'Guardarropa', 'guardarropa', 'extra', 11, '#30b0c7', 23.5, 7],
     ['Irene', 'Castro', 'Limpieza', 'limpieza', 'fijo_discontinuo', 12, '#34c759', 29.5, 4],
@@ -365,6 +366,7 @@ function seed(): DB {
     { id: DEMO_USERS.admin, email: 'laura.gomez@vizzio.club', full_name: 'Laura Gómez', role: 'admin', created_at: stamp },
     { id: DEMO_USERS.worker, email: 'lucia.martin@vizzio.club', full_name: 'Lucía Martín', role: 'worker', created_at: stamp },
     { id: DEMO_USERS.rrpp, email: 'marta.lopez@vizzio.club', full_name: 'Marta López', role: 'rrpp', created_at: stamp },
+    { id: DEMO_USERS.tech, email: 'nacho.vidal@vizzio.club', full_name: 'Nacho Vidal', role: 'tech', created_at: stamp },
   ];
 
   const events: ClubEvent[] = [];

@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShieldCheck, Sofa, UserRound } from 'lucide-react';
+import { Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
 import { useAuth } from '../auth';
 import { Logo } from '../components/AppShell';
 import { useFeedback } from '../components/overlay';
@@ -57,7 +57,7 @@ export default function Login() {
     }
   }
 
-  async function demo(role: 'admin' | 'worker' | 'rrpp') {
+  async function demo(role: 'admin' | 'worker' | 'rrpp' | 'tech') {
     await demoSignIn(role);
     navigate('/');
   }
@@ -77,6 +77,12 @@ export default function Login() {
             title="Trabajador"
             text="Fichar entrada y salida, horas, turnos y solicitudes."
             onClick={() => demo('worker')}
+          />
+          <DemoOption
+            icon={<Headphones className="h-6 w-6" />}
+            title="DJ / Técnico"
+            text="Lo mismo que un camarero: fichar, horas, turnos y disponibilidad."
+            onClick={() => demo('tech')}
           />
           <DemoOption
             icon={<Sofa className="h-6 w-6" />}

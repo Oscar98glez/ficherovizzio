@@ -14,8 +14,9 @@ import type {
 export type Tone = 'gray' | 'blue' | 'green' | 'red' | 'orange' | 'purple' | 'teal' | 'pink' | 'indigo';
 
 export const ROLES: Record<Role, string> = {
-  worker: 'Trabajador',
+  worker: 'Camarero',
   rrpp: 'RRPP',
+  tech: 'DJ / Técnico',
   admin: 'Administrador',
 };
 
@@ -40,7 +41,7 @@ export const POSITION_GROUPS: { department: Department; positions: string[] }[] 
     positions: ['Camarero/a de bandeja', 'Camarero/a de reservados VIP', 'Botellero/a', 'Runner', 'Host / Hostess', 'Gogó / Bailarín/a', 'Animador/a', 'Performer'],
   },
   { department: 'seguridad', positions: ['Jefe/a de seguridad', 'Portero/a', 'Vigilante de seguridad', 'Control de acceso', 'Auxiliar de seguridad'] },
-  { department: 'cabina', positions: ['DJ residente', 'DJ invitado', 'Técnico/a de sonido', 'Técnico/a de iluminación', 'VJ / Técnico/a de vídeo'] },
+  { department: 'cabina', positions: ['DJ / Técnico', 'DJ residente', 'DJ invitado', 'Técnico/a de sonido', 'Técnico/a de iluminación', 'VJ / Técnico/a de vídeo'] },
   { department: 'relaciones', positions: ['Relaciones públicas', 'Jefe/a de relaciones públicas', 'Promotor/a', 'Fotógrafo/a', 'Community manager'] },
   { department: 'taquilla', positions: ['Taquillero/a', 'Cajero/a'] },
   { department: 'guardarropa', positions: ['Guardarropa'] },

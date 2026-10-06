@@ -74,7 +74,7 @@ export default function EmployeeDetail() {
     if (!data?.profile) return;
     try {
       await api.profiles.update(data.profile.id, { role });
-      toast.success(`Ahora es ${role === 'rrpp' ? 'RRPP' : ROLES[role].toLowerCase()}`);
+      toast.success(`Ahora es ${role === 'rrpp' || role === 'tech' ? ROLES[role] : ROLES[role].toLowerCase()}`);
       reload();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -207,9 +207,10 @@ export default function EmployeeDetail() {
                       value={data.profile.role}
                       onChange={(r) => (data.profile!.id === userId ? toast.error('No puedes cambiar tu propio rol') : setRole(r))}
                       options={[
-                        { value: 'worker', label: 'Trabajador' },
+                        { value: 'worker', label: 'Camarero' },
+                        { value: 'tech', label: 'DJ / Técnico' },
                         { value: 'rrpp', label: 'RRPP' },
-                        { value: 'admin', label: 'Administrador' },
+                        { value: 'admin', label: 'Admin' },
                       ]}
                     />
                   )}
