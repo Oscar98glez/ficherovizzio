@@ -867,12 +867,15 @@ async function handleRpc(ctx: Ctx, msg: RpcRequest) {
   }
 }
 
-/** Código secreto del enlace: …/mcp/<código>, ?token=<código> o "Authorization: Bearer <código>" */
+/**
+ * Código secreto del enlace: …/<función>/<código>, ?token=<código> o "Authorization: Bearer <código>".
+ * Vale cualquier nombre de función (en el panel de Supabase se le puede haber puesto otro).
+ */
 function tokenOf(req: Request): string | null {
   const url = new URL(req.url);
   const parts = url.pathname.split('/').filter(Boolean);
-  const i = parts.lastIndexOf('mcp');
-  const fromPath = i >= 0 ? parts[i + 1] : null;
+  const last = parts.length > 1 ? decodeURIComponent(parts[parts.length - 1]) : null;
+  const fromPath = last && last.length >= 32 ? last : null;
   const bearer = req.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
   // Un JWT de Supabase (si la pasarela lo pide) no es nuestro código
   const fromHeader = bearer && !bearer.startsWith('eyJ') ? bearer : null;
