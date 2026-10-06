@@ -62,6 +62,8 @@ La función `supabase/functions/mcp` es un servidor MCP: Claude la usa como cone
 3. En la app: *Ajustes → Conector de Claude → Conectar con Claude* genera el enlace (`https://<proyecto>.supabase.co/functions/v1/mcp/<código>`). Se muestra una sola vez; en la base de datos solo se guarda su hash.
 4. En Claude: *Ajustes → Conectores → Añadir conector personalizado*, pega el enlace y actívalo en el chat.
 
+**Comprobar el enlace:** ábrelo en el navegador. Si todo está bien, verás "✅ Conector de Vizzio listo"; si no, la página dice qué falla. Si en lugar de esa página aparece un error 401 (`Missing authorization header` / `Invalid JWT`), la función todavía tiene la verificación JWT activada.
+
 Cada enlace actúa en nombre del administrador que lo generó (deja de funcionar si deja de serlo) y se puede desactivar en cualquier momento desde Ajustes.
 
 ### Uso

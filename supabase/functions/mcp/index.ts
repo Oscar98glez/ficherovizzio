@@ -879,25 +879,58 @@ function tokenOf(req: Request): string | null {
   return fromPath || url.searchParams.get('token') || fromHeader || null;
 }
 
-async function authenticate(db: SupabaseClient, token: string | null): Promise<string | null> {
-  if (!token || token.length < 32) return null;
+type Auth = { ok: true; userId: string; label: string } | { ok: false; status: number; message: string };
+
+const INVALID_LINK = 'Enlace no válido o desactivado. Genera uno nuevo en Vizzio → Ajustes → Conector de Claude.';
+
+async function authenticate(db: SupabaseClient | null, token: string | null): Promise<Auth> {
+  // Un enlace incorrecto responde 403 (no 401): con 401 Claude intenta iniciar sesión con OAuth
+  if (!db) return { ok: false, status: 500, message: 'La función no tiene la clave de servicio de Supabase (SUPABASE_SERVICE_ROLE_KEY / SUPABASE_SECRET_KEYS).' };
+  if (!token || token.length < 32) return { ok: false, status: 403, message: INVALID_LINK };
   const hash = await sha256(token);
-  const { data: link } = await db.from('claude_connectors').select('id, created_by').eq('token_hash', hash).maybeSingle();
-  if (!link?.created_by) return null;
-  const { data: profile } = await db.from('profiles').select('role').eq('id', link.created_by).maybeSingle();
-  if (profile?.role !== 'admin') return null;
+  const { data: link, error } = await db.from('claude_connectors').select('id, label, created_by').eq('token_hash', hash).maybeSingle();
+  if (error) return { ok: false, status: 500, message: `No se pudo leer la base de datos: ${error.message}` };
+  if (!link?.created_by) return { ok: false, status: 403, message: INVALID_LINK };
+  const { data: profile, error: profileError } = await db.from('profiles').select('role').eq('id', link.created_by).maybeSingle();
+  if (profileError) return { ok: false, status: 500, message: `No se pudo leer la base de datos: ${profileError.message}` };
+  if (profile?.role !== 'admin') return { ok: false, status: 403, message: 'Quien creó este enlace ya no es administrador. Genera uno nuevo en Vizzio → Ajustes → Conector de Claude.' };
   await db.from('claude_connectors').update({ last_used_at: new Date().toISOString() }).eq('id', link.id);
-  return link.created_by as string;
+  return { ok: true, userId: link.created_by as string, label: link.label as string };
 }
 
-export async function handler(req: Request, db: SupabaseClient): Promise<Response> {
+const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Página de diagnóstico: al abrir el enlace del conector en el navegador */
+async function diagnostics(req: Request, db: SupabaseClient | null): Promise<Response> {
+  const auth = await authenticate(db, tokenOf(req));
+  const rows: [boolean, string, string][] = [
+    [true, 'Función publicada', 'La función "mcp" responde y la verificación JWT está desactivada.'],
+    [!!db, 'Clave de servicio', db ? 'Disponible.' : 'Falta: la función no puede acceder a la base de datos.'],
+  ];
+  if (auth.ok) rows.push([true, 'Enlace', `Válido ("${auth.label}"). Ya puedes añadirlo en Claude como conector personalizado.`]);
+  else rows.push([false, auth.status === 500 ? 'Base de datos' : 'Enlace', auth.message]);
+  const ok = rows.every(([good]) => good);
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conector Vizzio</title>
+<style>body{font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px;background:#111;color:#eee}h1{font-size:22px}li{margin:10px 0;list-style:none}b{display:block}.ok{color:#4ade80}.ko{color:#f87171}small{color:#999}</style></head>
+<body><h1>${ok ? '✅ Conector de Vizzio listo' : '⚠️ Conector de Vizzio: hay un problema'}</h1><ul>${rows
+    .map(([good, title, text]) => `<li><b class="${good ? 'ok' : 'ko'}">${good ? '✔' : '✘'} ${escapeHtml(title)}</b>${escapeHtml(text)}</li>`)
+    .join('')}</ul><small>Esta página es solo para comprobar el enlace. Claude se conecta a esta misma dirección.</small></body></html>`;
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', ...CORS } });
+}
+
+export async function handler(req: Request, db: SupabaseClient | null): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  // Abierto desde el navegador: página de diagnóstico
+  if (req.method === 'GET' && !(req.headers.get('accept') ?? '').includes('text/event-stream')) return diagnostics(req, db);
   // Sin estado: no hay canal SSE ni sesiones que cerrar
-  if (req.method === 'GET' || req.method === 'DELETE') return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'POST', ...CORS } });
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'POST', ...CORS } });
 
-  const userId = await authenticate(db, tokenOf(req));
-  if (!userId) return json(rpcError(null, -32001, 'Enlace no válido o desactivado. Genera uno nuevo en Vizzio → Ajustes → Conector de Claude.'), 401);
+  const auth = await authenticate(db, tokenOf(req));
+  if (!auth.ok) {
+    if (auth.status === 500) console.error('[mcp]', auth.message);
+    return json(rpcError(null, -32001, auth.message), auth.status);
+  }
+  const userId = auth.userId;
 
   let body: unknown;
   try {
@@ -906,7 +939,7 @@ export async function handler(req: Request, db: SupabaseClient): Promise<Respons
     return json(rpcError(null, -32700, 'JSON no válido'), 400);
   }
 
-  const ctx: Ctx = { db, userId };
+  const ctx: Ctx = { db: db!, userId }; // si hay enlace válido, hay base de datos
   const messages = (Array.isArray(body) ? body : [body]) as RpcRequest[];
   const responses = [];
   for (const msg of messages) {
@@ -924,9 +957,26 @@ export async function handler(req: Request, db: SupabaseClient): Promise<Respons
   return json(Array.isArray(body) ? responses : responses[0]);
 }
 
+/**
+ * Clave de servicio: la de VIZZIO_SERVICE_KEY si se ha configurado; si no, la clave
+ * secreta nueva de Supabase (SUPABASE_SECRET_KEYS) o la antigua (SUPABASE_SERVICE_ROLE_KEY).
+ */
+function serviceKey(): string | undefined {
+  const custom = Deno.env.get('VIZZIO_SERVICE_KEY');
+  if (custom) return custom;
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, string>;
+    const key = keys.default ?? Object.values(keys)[0];
+    if (key) return key;
+  } catch {
+    /* sin claves nuevas */
+  }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || undefined;
+}
+
 if (!Deno.env.get('VIZZIO_MCP_TEST')) {
-  const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = serviceKey();
+  const db = url && key ? createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
   Deno.serve((req) => handler(req, db));
 }
