@@ -50,16 +50,18 @@ Todas las tablas usan Row Level Security: el trabajador solo puede leer sus prop
 
 ## Conector de Claude (MCP)
 
-La función `supabase/functions/mcp` es un servidor MCP: Claude la usa como conector para registrar ingresos y gastos en **Finanzas**, subir facturas (PDF o foto) a **Facturas** y crear o actualizar **proveedores**.
+La función `supabase/functions/rapid-responder` es un servidor MCP: Claude la usa como conector para registrar ingresos y gastos en **Finanzas**, subir facturas (PDF o foto) a **Facturas** y crear o actualizar **proveedores**.
 
 **Herramientas:** `ver_categorias`, `registrar_movimientos` (hasta 500 por llamada; omite duplicados), `listar_movimientos`, `eliminar_movimientos`, `buscar_proveedores`, `crear_proveedor`, `actualizar_proveedor`, `preparar_subida_factura`, `registrar_factura`, `listar_facturas` y `eliminar_factura`.
 
 ### Instalación (una vez)
 1. Aplica las migraciones `20261006130000_suppliers.sql` y `20261006140000_claude_connector.sql` (se aplican solas al hacer push a `main`).
-2. Publica la función **sin verificación JWT** (Claude no envía el token de Supabase; el acceso lo controla el enlace secreto):
-   - Panel de Supabase → *Edge Functions* → *Deploy a new function* → *Via editor*, nombre `mcp`, pega `supabase/functions/mcp/index.ts` y despliega. Después, en los ajustes de la función, desactiva *Verify JWT* / *Enforce JWT verification*.
-   - O con la CLI: `supabase functions deploy mcp --no-verify-jwt --project-ref <ref>`.
-3. En la app: *Ajustes → Conector de Claude → Conectar con Claude* genera el enlace (`https://<proyecto>.supabase.co/functions/v1/mcp/<código>`). Se muestra una sola vez; en la base de datos solo se guarda su hash.
+2. Publica la función **sin verificación JWT** (Claude no envía el token de Supabase; el acceso lo controla el enlace secreto). Lo hace sola la acción de GitHub *Publicar funciones de Supabase* cada vez que cambia `supabase/functions/` en `main`, si el repositorio tiene estos secretos (*GitHub → Settings → Secrets and variables → Actions*):
+   - `SUPABASE_ACCESS_TOKEN`: un token de *Supabase → Account → Access Tokens*.
+   - `SUPABASE_PROJECT_REF`: el identificador del proyecto (lo que va antes de `.supabase.co` en su URL).
+
+   A mano: `supabase functions deploy rapid-responder --no-verify-jwt --project-ref <ref>`, o pegando el archivo en el editor del panel y desactivando *Verify JWT*.
+3. En la app: *Ajustes → Conector de Claude → Conectar con Claude* genera el enlace (`https://<proyecto>.supabase.co/functions/v1/rapid-responder/<código>`). Se muestra una sola vez; en la base de datos solo se guarda su hash.
 4. En Claude: *Ajustes → Conectores → Añadir conector personalizado*, pega el enlace y actívalo en el chat.
 
 **Comprobar el enlace:** ábrelo en el navegador. Si todo está bien, verás "✅ Conector de Vizzio listo"; si no, la página dice qué falla. Si en lugar de esa página aparece un error 401 (`Missing authorization header` / `Invalid JWT`), la función todavía tiene la verificación JWT activada.

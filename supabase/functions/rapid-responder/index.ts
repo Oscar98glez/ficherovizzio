@@ -10,7 +10,9 @@
 //    (Ajustes → Conector de Claude). Sólo se guarda su hash en
 //    public.claude_connectors y deja de funcionar si se borra o si quien lo
 //    creó ya no es administrador.
-//  · Despliegue: `supabase functions deploy mcp --no-verify-jwt`
+//  · Despliegue: lo hace GitHub (.github/workflows/deploy-functions.yml) al
+//    cambiar este archivo en main; a mano:
+//    `supabase functions deploy rapid-responder --no-verify-jwt`
 //    (Claude no envía el token de Supabase, así que la verificación JWT
 //    de la pasarela debe estar desactivada para esta función).
 //
@@ -907,7 +909,7 @@ const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '
 async function diagnostics(req: Request, db: SupabaseClient | null): Promise<Response> {
   const auth = await authenticate(db, tokenOf(req));
   const rows: [boolean, string, string][] = [
-    [true, 'Función publicada', 'La función "mcp" responde y la verificación JWT está desactivada.'],
+    [true, 'Función publicada', 'La función responde y la verificación JWT está desactivada.'],
     [!!db, 'Clave de servicio', db ? 'Disponible.' : 'Falta: la función no puede acceder a la base de datos.'],
   ];
   if (auth.ok) rows.push([true, 'Enlace', `Válido ("${auth.label}"). Ya puedes añadirlo en Claude como conector personalizado.`]);

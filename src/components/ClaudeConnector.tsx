@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Copy, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useLoad } from '../hooks';
 import { api, errorMessage } from '../lib/api';
-import { IS_DEMO, SUPABASE_URL } from '../lib/config';
+import { CLAUDE_FUNCTION, IS_DEMO, SUPABASE_URL } from '../lib/config';
 import { fmtDate } from '../lib/format';
 import type { ClaudeConnector } from '../lib/types';
 import { Modal, useFeedback } from './overlay';
@@ -19,11 +19,11 @@ async function sha256(text: string) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const connectorUrl = (token: string) => `${SUPABASE_URL?.replace(/\/$/, '')}/functions/v1/mcp/${token}`;
+const connectorUrl = (token: string) => `${SUPABASE_URL?.replace(/\/$/, '')}/functions/v1/${CLAUDE_FUNCTION}/${token}`;
 
 /**
  * Enlaces del conector de Claude: con uno de ellos, Claude puede registrar movimientos
- * en Finanzas, subir facturas y crear proveedores (función "mcp" de Supabase).
+ * en Finanzas, subir facturas y crear proveedores (función "rapid-responder" de Supabase).
  */
 export function ClaudeConnectorCard() {
   const { toast, confirm } = useFeedback();
