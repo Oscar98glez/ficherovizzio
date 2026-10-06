@@ -20,6 +20,7 @@ import type {
   Reservation,
   ReservationStatus,
   Shift,
+  Supplier,
   TicketSale,
   TimeEntry,
   Transaction,
@@ -40,11 +41,12 @@ export type TableName =
   | 'vip_tables'
   | 'reservations'
   | 'rrpp_commission_rates'
-  | 'rrpp_ticket_sales';
+  | 'rrpp_ticket_sales'
+  | 'suppliers';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v17';
+const DB_KEY = 'vizzio.demo.db.v18';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -675,6 +677,15 @@ function seed(): DB {
     .filter((e) => e.date >= isoDate(addDays(today, -30)) && e.date < isoDate(businessToday()) && e.kind !== 'evento_privado')
     .map((e) => ({ id: uid(), date: e.date, employee_id: 'emp-6', quantity: int(8, 40), unit_price: 15, list_quantity: int(10, 60), notes: null, created_at: stamp }));
 
+  const suppliers: Supplier[] = (
+    [
+      ['Distribuidora Martínez', 'Proveedores bebida', 'B12345678', 'Antonio Martínez', '+34 612 345 678'],
+      ['Hielos del Sur', 'Proveedores bebida', 'B87654321', null, '+34 655 111 222'],
+      ['Limpiezas Brillo', 'Mantenimiento', 'B11223344', 'Rosa', null],
+      ['Iberdrola', 'Suministros', 'A95758389', null, null],
+    ] as [string, string, string, string | null, string | null][]
+  ).map(([name, category, tax_id, contact, phone], i) => ({ id: `sup-${i + 1}`, name, category, tax_id, contact, phone, email: null, notes: null, created_at: stamp }));
+
   return {
     profiles,
     employees,
@@ -688,5 +699,6 @@ function seed(): DB {
     reservations,
     rrpp_commission_rates: commissionRates,
     rrpp_ticket_sales: ticketSales,
+    suppliers,
   } as unknown as DB;
 }

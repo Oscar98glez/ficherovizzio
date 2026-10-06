@@ -4,7 +4,7 @@ import { demoClockIn, demoClockOut, demoFiles, demoRepo, demoReservationStaff, d
 import { blobToDataUrl } from './image';
 import { uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Reservation, Shift, StaffOption, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
+import type { Availability, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Reservation, Shift, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -43,6 +43,8 @@ const ERRORS: [RegExp, string][] = [
   [/employees_email_unique/i, 'Ya existe un empleado con ese email.'],
   [/out_after_in|end_after_start/i, 'La hora de salida debe ser posterior a la de entrada.'],
   [/public.availability/i, 'Falta crear la tabla de disponibilidad en Supabase (ejecuta la migración 20260930130000_availability.sql).'],
+  [/suppliers_name_unique/i, 'Ya existe un proveedor con ese nombre.'],
+  [/public.suppliers|supplier_id/i, 'Falta aplicar en Supabase la migración de proveedores (20261006130000_suppliers.sql).'],
   [/public.invoices/i, 'Falta crear el apartado de facturas en Supabase (ejecuta la migración 20260930160000_invoices.sql).'],
   [/Bucket not found|set_my_photo|photo_url/i, 'Falta aplicar en Supabase la última migración (fotos de perfil).'],
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
@@ -255,6 +257,7 @@ export const api = {
   requests: repo<LeaveRequest>('leave_requests'),
   availability: repo<Availability>('availability'),
   invoices: repo<Invoice>('invoices'),
+  suppliers: repo<Supplier>('suppliers'),
   vipTables: repo<VipTable>('vip_tables'),
   reservations: repo<Reservation>('reservations'),
   commissionRates: repo<CommissionRate>('rrpp_commission_rates'),

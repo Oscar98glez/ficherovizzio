@@ -148,6 +148,23 @@ export interface Invoice {
   file_size: number | null;
   mime_type: string | null;
   transaction_id: string | null;
+  /** Proveedor (facturas recibidas) */
+  supplier_id: string | null;
+  created_at: string;
+}
+
+/** Proveedor del local: cada uno tiene su apartado de facturas */
+export interface Supplier {
+  id: string;
+  name: string;
+  /** Categoría de gasto por defecto de sus facturas */
+  category: string | null;
+  /** CIF / NIF */
+  tax_id: string | null;
+  contact: string | null;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
   created_at: string;
 }
 
