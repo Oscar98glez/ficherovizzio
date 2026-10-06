@@ -42,7 +42,8 @@ export type TableName =
   | 'reservations'
   | 'rrpp_commission_rates'
   | 'rrpp_ticket_sales'
-  | 'suppliers';
+  | 'suppliers'
+  | 'claude_connectors';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 

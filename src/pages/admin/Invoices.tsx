@@ -7,6 +7,7 @@ import {
   Eye,
   FileImage,
   FileText,
+  FileX,
   Folder,
   FolderPlus,
   Pencil,
@@ -50,6 +51,8 @@ const NEW_SUPPLIER = '__nuevo__';
 
 const KIND_LABEL: Record<InvoiceKind, string> = { received: 'Recibida', issued: 'Emitida' };
 const isPdf = (i: Pick<Invoice, 'mime_type' | 'file_name'>) => i.mime_type === 'application/pdf' || /\.pdf$/i.test(i.file_name);
+/** Las facturas que registra Claude sin poder subir el archivo quedan sin él hasta que se adjunte */
+const hasFile = (i: Pick<Invoice, 'file_path'>) => !!i.file_path;
 
 const fmtSize = (bytes: number | null) =>
   bytes == null
@@ -199,7 +202,7 @@ function InvoiceForm({
       if (invoice) {
         await api.invoices.update(invoice.id, values);
         // Si se ha sustituido el archivo, se borra el anterior
-        if (file) await files.remove(invoice.file_path).catch(() => {});
+        if (file && hasFile(invoice)) await files.remove(invoice.file_path).catch(() => {});
       } else {
         if (f.addMovement && amount > 0) {
           const tx = await api.transactions.create({
@@ -226,7 +229,7 @@ function InvoiceForm({
     }
   }
 
-  const currentName = file?.name ?? invoice?.file_name;
+  const currentName = file?.name ?? (invoice && hasFile(invoice) ? invoice.file_name : undefined);
 
   return (
     <Modal
@@ -269,7 +272,7 @@ function InvoiceForm({
             <div className="text-[13px] text-ink-2">
               {file
                 ? `${fmtSize(file.size)} · pulsa para cambiarlo`
-                : invoice
+                : invoice && hasFile(invoice)
                   ? 'Pulsa para sustituir el archivo'
                   : 'PDF o foto (JPG, PNG, HEIC) · máx. 15 MB · también puedes arrastrarlo aquí'}
             </div>
@@ -589,14 +592,14 @@ export default function Invoices() {
   async function remove(inv: Invoice) {
     const ok = await confirm({
       title: '¿Eliminar esta factura?',
-      message: `Se borrará el archivo "${inv.file_name}".${inv.transaction_id ? ' El movimiento de Finanzas se conserva.' : ''}`,
+      message: `${hasFile(inv) ? `Se borrará el archivo "${inv.file_name}".` : 'La factura no tiene archivo.'}${inv.transaction_id ? ' El movimiento de Finanzas se conserva.' : ''}`,
       confirmLabel: 'Eliminar',
       destructive: true,
     });
     if (!ok) return;
     try {
       await api.invoices.remove(inv.id);
-      await files.remove(inv.file_path).catch(() => {});
+      if (hasFile(inv)) await files.remove(inv.file_path).catch(() => {});
       toast.success('Factura eliminada');
       reload();
     } catch (e) {
@@ -609,18 +612,19 @@ export default function Invoices() {
       <Card className="divide-y divide-line overflow-hidden">
         {items.map((inv) => {
           const overdue = inv.status === 'pending' && inv.due_date && inv.due_date < today;
+          const withFile = hasFile(inv);
           return (
             <div key={inv.id} className="flex items-center gap-3 px-4 py-3 md:px-5">
               <button
                 type="button"
-                onClick={() => openFile(inv, false, toast.error)}
-                title="Ver factura"
+                onClick={() => (withFile ? openFile(inv, false, toast.error) : setModal({ invoice: inv }))}
+                title={withFile ? 'Ver factura' : 'Sin archivo: pulsa para adjuntarlo'}
                 className={cx(
                   'grid h-11 w-11 shrink-0 place-items-center rounded-xl transition hover:brightness-95',
-                  isPdf(inv) ? 'bg-red/10 text-red' : 'bg-accent/15 text-accent',
+                  !withFile ? 'bg-fill text-ink-3' : isPdf(inv) ? 'bg-red/10 text-red' : 'bg-accent/15 text-accent',
                 )}
               >
-                {isPdf(inv) ? <FileText className="h-5 w-5" /> : <FileImage className="h-5 w-5" />}
+                {!withFile ? <FileX className="h-5 w-5" /> : isPdf(inv) ? <FileText className="h-5 w-5" /> : <FileImage className="h-5 w-5" />}
               </button>
               <button type="button" onClick={() => setModal({ invoice: inv })} className="min-w-0 flex-1 text-left">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -631,6 +635,7 @@ export default function Invoices() {
                   {fmtDate(inv.date, { day: 'numeric', month: 'short', year: 'numeric' })} · {KIND_LABEL[inv.kind]}
                   {inv.category && ` · ${inv.category}`}
                   {inv.due_date && inv.status === 'pending' && ` · vence ${fmtDate(inv.due_date)}`}
+                  {!withFile && ' · sin archivo'}
                 </div>
               </button>
               <button type="button" onClick={() => setModal({ invoice: inv })} className="shrink-0 text-right">
@@ -646,12 +651,16 @@ export default function Invoices() {
                 )}
               </button>
               <div className="hidden shrink-0 items-center gap-0.5 sm:flex">
-                <IconButton label="Ver" onClick={() => openFile(inv, false, toast.error)}>
-                  <Eye />
-                </IconButton>
-                <IconButton label="Descargar" onClick={() => openFile(inv, true, toast.error)}>
-                  <Download />
-                </IconButton>
+                {withFile && (
+                  <>
+                    <IconButton label="Ver" onClick={() => openFile(inv, false, toast.error)}>
+                      <Eye />
+                    </IconButton>
+                    <IconButton label="Descargar" onClick={() => openFile(inv, true, toast.error)}>
+                      <Download />
+                    </IconButton>
+                  </>
+                )}
                 {inv.status === 'pending' && (
                   <IconButton
                     label={inv.kind === 'received' ? 'Marcar como pagada' : 'Marcar como cobrada'}
@@ -711,12 +720,18 @@ export default function Invoices() {
         footer={
           modal?.invoice && (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Button variant="secondary" icon={<Eye />} onClick={() => openFile(modal.invoice!, false, toast.error)}>
-                Ver
-              </Button>
-              <Button variant="secondary" icon={<Download />} onClick={() => openFile(modal.invoice!, true, toast.error)}>
-                Descargar
-              </Button>
+              {hasFile(modal.invoice) ? (
+                <>
+                  <Button variant="secondary" icon={<Eye />} onClick={() => openFile(modal.invoice!, false, toast.error)}>
+                    Ver
+                  </Button>
+                  <Button variant="secondary" icon={<Download />} onClick={() => openFile(modal.invoice!, true, toast.error)}>
+                    Descargar
+                  </Button>
+                </>
+              ) : (
+                <span className="col-span-2 hidden sm:block" />
+              )}
               {modal.invoice.status === 'pending' ? (
                 <Button variant="tinted" icon={<CheckCircle2 />} onClick={() => (setModal(null), markPaid(modal.invoice!))}>
                   {modal.invoice.kind === 'received' ? 'Pagada' : 'Cobrada'}

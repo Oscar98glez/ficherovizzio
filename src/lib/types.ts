@@ -153,6 +153,17 @@ export interface Invoice {
   created_at: string;
 }
 
+/** Enlace con el que Claude (conector MCP) accede a Finanzas y Facturas */
+export interface ClaudeConnector {
+  id: string;
+  label: string;
+  token_hash: string;
+  token_hint: string | null;
+  created_by: string | null;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 /** Proveedor del local: cada uno tiene su apartado de facturas */
 export interface Supplier {
   id: string;
