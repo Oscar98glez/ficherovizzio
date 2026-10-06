@@ -92,10 +92,10 @@ export const BOTTLE_GROUPS: MenuGroup[] = [
   },
 ];
 
-/** Refrescos de los reservados: van incluidos con la botella; sólo el Monster suma 1 € cada uno */
+/** Refrescos de los reservados: van incluidos con la botella; sólo suman el Monster (1 €) y el Red Bull (1,50 €) */
 export const MIXER_GROUPS: MenuGroup[] = [
   { label: 'Refrescos', items: items(0, ['Coca-Cola', 'Coca-Cola Zero', 'Fanta Naranja', 'Fanta Limón', 'Sprite', 'Tónica', 'Ginger Ale']) },
-  { label: 'Bebidas energéticas', items: [...items(1, ['Monster', 'Monster Ultra']), ...items(0, ['Red Bull', 'Red Bull Sin Azúcar'])] },
+  { label: 'Bebidas energéticas', items: [...items(1, ['Monster', 'Monster Ultra']), ...items(1.5, ['Red Bull', 'Red Bull Sin Azúcar'])] },
   { label: 'Zumos y agua', items: items(0, ['Zumo de naranja', 'Zumo de piña', 'Agua', 'Agua con gas']) },
 ];
 
