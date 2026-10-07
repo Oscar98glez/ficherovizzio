@@ -62,6 +62,14 @@ FACTURAS Y PROVEEDORES
 - registrar_en_finanzas crea también el gasto (o ingreso) en Finanzas. Ponlo a false si ese pago ya está (o va a estar) en los movimientos, para no contarlo dos veces.
 - Las facturas recibidas son de proveedores; las emitidas, a clientes (se indica el cliente en "proveedor").
 
+FICHAJES (hoja de firmas)
+- Cuando el usuario pase una hoja de firmas (PDF o foto), léela: por cada persona, nombre, noche, hora de entrada, hora de salida y descanso si lo hay.
+- Usa listar_personal para emparejar cada nombre de la hoja con su ficha (pueden venir con apodo, solo nombre o con faltas de ortografía). Si dudas entre dos fichas, pregunta.
+- Quien no esté en la app NO se registra en ningún sitio: no se crea su ficha ni sus fichajes. Solo dile al usuario quiénes eran.
+- Usa ver_fichajes_noche para ver lo fichado esa noche y compáralo con la hoja. La noche va de 06:00 a 06:00: una salida a las 05:30 es de la noche anterior.
+- Enséñale una tabla con las diferencias (persona, app y hoja) antes de cambiar nada, salvo que te haya dicho que corrijas directamente. Por defecto, una diferencia de 10 minutos o menos se da por buena.
+- Corrige con corregir_fichajes: modifica la entrada/salida del fichaje que está mal, crea el fichaje si la persona está en la hoja pero no fichó, y solo borra fichajes si el usuario lo pide. Las horas se indican en hora española (HH:MM) junto con la noche (AAAA-MM-DD).
+
 Si te equivocas, puedes deshacer con eliminar_movimientos o eliminar_factura.`;
 
 // ---------------------------------------------------------------------
@@ -107,6 +115,73 @@ const safeName = (name: string) =>
 
 /** Fecha de hoy en España (YYYY-MM-DD) */
 const todayMadrid = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+
+// ---------- Hora de Madrid y noches (de 06:00 a 06:00) ----------
+
+const HOUR_MS = 3_600_000;
+const NIGHT_START_HOUR = 6;
+const madridParts = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Europe/Madrid',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** Fecha y hora de Madrid de un instante: { date: 'AAAA-MM-DD', time: 'HH:MM' } */
+function toMadrid(ms: number) {
+  const p = Object.fromEntries(madridParts.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return { date: `${p.year}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}` };
+}
+
+/** Minutos que Madrid va por delante de UTC en ese instante (60 en invierno, 120 en verano) */
+function madridOffset(ms: number) {
+  const { date, time } = toMadrid(ms);
+  const asUtc = Date.parse(`${date}T${time}:00Z`);
+  return Math.round((asUtc - Math.floor(ms / 60000) * 60000) / 60000);
+}
+
+/** Instante (ms) de una fecha y hora de Madrid */
+function fromMadrid(date: string, time: string) {
+  const guess = Date.parse(`${date}T${time}:00Z`);
+  let ms = guess - madridOffset(guess) * 60000;
+  ms = guess - madridOffset(ms) * 60000; // cambio de hora
+  return ms;
+}
+
+const addDaysIso = (date: string, n: number) => new Date(Date.parse(`${date}T12:00:00Z`) + n * 24 * HOUR_MS).toISOString().slice(0, 10);
+
+/** Noche a la que pertenece un instante */
+const nightOf = (ms: number) => {
+  const { date, time } = toMadrid(ms);
+  return Number(time.slice(0, 2)) < NIGHT_START_HOUR ? addDaysIso(date, -1) : date;
+};
+
+/** Instante de una hora "HH:MM" dentro de una noche: antes de las 06:00 es ya el día siguiente */
+function nightTime(night: string, hhmm: string, key: string): number {
+  const m = /^(\d{1,2})[:.h](\d{2})$/.exec(hhmm.trim());
+  if (!m || +m[1] > 23 || +m[2] > 59) throw new UserError(`"${key}" debe ser una hora HH:MM (recibido: ${hhmm})`);
+  const time = `${m[1].padStart(2, '0')}:${m[2]}`;
+  return fromMadrid(+m[1] < NIGHT_START_HOUR ? addDaysIso(night, 1) : night, time);
+}
+
+const MAX_SHIFT_HOURS = 16;
+
+/** Salida "HH:MM" de un fichaje: si queda antes de la entrada (p. ej. 06:30 tras entrar a las 00:15), es del día siguiente */
+function nightOut(night: string, hhmm: string, inMs: number): number {
+  let ms = nightTime(night, hhmm, 'salida');
+  if (ms <= inMs) {
+    const { date, time } = toMadrid(ms);
+    ms = fromMadrid(addDaysIso(date, 1), time);
+  }
+  if (ms - inMs > MAX_SHIFT_HOURS * HOUR_MS) throw new UserError(`de ${toMadrid(inMs).time} a ${hhmm} salen más de ${MAX_SHIFT_HOURS} horas: revisa la entrada y la salida`);
+  return ms;
+}
+
+/** Límites [desde, hasta) de una noche en ISO */
+const nightRange = (night: string) => [new Date(fromMadrid(night, '06:00')).toISOString(), new Date(fromMadrid(addDaysIso(night, 1), '06:00')).toISOString()];
 
 function str(a: Args, key: string, opts: { required?: boolean; max?: number } = {}): string | null {
   const v = a[key];
@@ -629,6 +704,256 @@ const TOOLS: Tool[] = [
         movement = true;
       }
       return { eliminada: invoiceOut(inv), movimiento_eliminado: movement };
+    },
+  },
+
+  {
+    name: 'listar_personal',
+    title: 'Listar personal',
+    description: 'Trabajadores dados de alta en la app (nombre, puesto, departamento). Úsalo para emparejar los nombres de una hoja de firmas con sus fichas.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        texto: { type: 'string', description: 'Parte del nombre o apellido' },
+        incluir_inactivos: { type: 'boolean', default: false },
+      },
+    },
+    annotations: READ_ONLY,
+    run: async ({ db }, a) => {
+      let q = db.from('employees').select('id, first_name, last_name, position, department, active, email');
+      if (a.incluir_inactivos !== true) q = q.eq('active', true);
+      const all = check(await q.order('first_name'), 'No se pudo leer el personal') as Record<string, unknown>[];
+      const t = str(a, 'texto');
+      const list = t ? all.filter((e) => norm(`${e.first_name} ${e.last_name}`).includes(norm(t))) : all;
+      return {
+        cantidad: list.length,
+        personal: list.map((e) => ({
+          id: e.id,
+          nombre: `${e.first_name} ${e.last_name ?? ''}`.trim(),
+          puesto: e.position,
+          departamento: e.department,
+          activo: e.active,
+        })),
+      };
+    },
+  },
+
+  {
+    name: 'ver_fichajes_noche',
+    title: 'Ver fichajes de una noche',
+    description:
+      'Fichajes de una noche (de 06:00 a 06:00, hora española) con entrada, salida, descanso y horas de cada persona, y quién tenía turno pero no fichó. Con "hasta" devuelve varias noches.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fecha: { ...DATE, description: 'La noche (AAAA-MM-DD): el día en que empieza' },
+        hasta: { ...DATE, description: 'Última noche, para ver varias seguidas (máx. 31)' },
+        empleado_id: { type: 'string' },
+      },
+      required: ['fecha'],
+    },
+    annotations: READ_ONLY,
+    run: async ({ db }, a) => {
+      const from = date(a, 'fecha', true)!;
+      const to = date(a, 'hasta') ?? from;
+      if (to < from) throw new UserError('"hasta" debe ser igual o posterior a "fecha"');
+      if (Date.parse(to) - Date.parse(from) > 31 * 24 * HOUR_MS) throw new UserError('Como mucho 31 noches por consulta');
+      const [start] = nightRange(from);
+      const [, end] = nightRange(to);
+      const employeeId = str(a, 'empleado_id');
+      let te = db.from('time_entries').select('*').gte('clock_in', start).lt('clock_in', end);
+      let sh = db.from('shifts').select('employee_id, start_at, status').gte('start_at', start).lt('start_at', end).neq('status', 'cancelled');
+      if (employeeId) {
+        te = te.eq('employee_id', employeeId);
+        sh = sh.eq('employee_id', employeeId);
+      }
+      const [entriesRes, shiftsRes, employeesRes] = await Promise.all([
+        te.order('clock_in'),
+        sh,
+        db.from('employees').select('id, first_name, last_name'),
+      ]);
+      const entries = check(entriesRes, 'No se pudieron leer los fichajes') as Record<string, unknown>[];
+      const shifts = check(shiftsRes, 'No se pudieron leer los turnos') as Record<string, unknown>[];
+      const names = new Map(
+        (check(employeesRes, 'No se pudo leer el personal') as Record<string, unknown>[]).map((e) => [e.id, `${e.first_name} ${e.last_name ?? ''}`.trim()]),
+      );
+      const fichajes = entries.map((e) => {
+        const inMs = Date.parse(e.clock_in as string);
+        const outMs = e.clock_out ? Date.parse(e.clock_out as string) : null;
+        const brk = Number(e.break_minutes ?? 0);
+        return {
+          id: e.id,
+          noche: nightOf(inMs),
+          empleado_id: e.employee_id,
+          empleado: names.get(e.employee_id) ?? '¿?',
+          entrada: toMadrid(inMs).time,
+          salida: outMs ? toMadrid(outMs).time : null,
+          descanso_min: brk,
+          horas: outMs ? Math.round(((outMs - inMs) / HOUR_MS - brk / 60) * 100) / 100 : null,
+          origen: e.source === 'manual' ? 'manual' : 'app',
+          notas: e.notes ?? null,
+          ...(outMs ? {} : { aviso: 'Fichaje abierto (sin salida)' }),
+        };
+      });
+      const fichado = new Set(fichajes.map((f) => `${f.noche}|${f.empleado_id}`));
+      const sinFichar = shifts
+        .map((s) => ({ noche: nightOf(Date.parse(s.start_at as string)), empleado_id: s.employee_id as string, turno: toMadrid(Date.parse(s.start_at as string)).time }))
+        .filter((s) => !fichado.has(`${s.noche}|${s.empleado_id}`))
+        .map((s) => ({ ...s, empleado: names.get(s.empleado_id) ?? '¿?' }));
+      return { desde: from, hasta: to, cantidad: fichajes.length, fichajes, turno_sin_fichar: sinFichar };
+    },
+  },
+
+  {
+    name: 'corregir_fichajes',
+    title: 'Corregir fichajes',
+    description:
+      'Modifica, crea o borra fichajes según la hoja de firmas. Con fichaje_id se modifican las horas indicadas (o se borra con eliminar=true); sin fichaje_id se crea un fichaje nuevo para un trabajador que ya existe en la app. Las horas, en hora española HH:MM; las de antes de las 06:00 son del día siguiente. Si algún cambio no es válido, no se aplica ninguno.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cambios: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 200,
+          items: {
+            type: 'object',
+            properties: {
+              fichaje_id: { type: 'string', description: 'Fichaje a modificar o borrar (de ver_fichajes_noche)' },
+              empleado_id: { type: 'string', description: 'Para crear un fichaje: ficha del trabajador (de listar_personal)' },
+              noche: { ...DATE, description: 'Noche del fichaje (obligatoria al crear; al modificar, por defecto la del fichaje)' },
+              entrada: { type: 'string', description: 'HH:MM' },
+              salida: { type: 'string', description: 'HH:MM' },
+              descanso_min: { type: 'integer', minimum: 0 },
+              eliminar: { type: 'boolean', default: false },
+              motivo: { type: 'string', description: 'Se guarda en las notas del fichaje, p. ej. "Hoja de firmas"' },
+            },
+          },
+        },
+      },
+      required: ['cambios'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    run: async ({ db }, a) => {
+      const raw = a.cambios;
+      if (!Array.isArray(raw) || !raw.length) throw new UserError('"cambios" debe ser una lista con al menos un cambio');
+      if (raw.length > 200) throw new UserError('Máximo 200 cambios por llamada');
+
+      const ids = raw.map((c) => (c && typeof c === 'object' ? (c as Args).fichaje_id : null)).filter((x): x is string => typeof x === 'string' && !!x);
+      const [entriesRes, employeesRes] = await Promise.all([
+        ids.length ? db.from('time_entries').select('*').in('id', ids) : Promise.resolve({ data: [], error: null }),
+        db.from('employees').select('id, first_name, last_name, active'),
+      ]);
+      const existing = new Map((check(entriesRes, 'No se pudieron leer los fichajes') as Record<string, unknown>[]).map((e) => [e.id as string, e]));
+      const employees = new Map((check(employeesRes, 'No se pudo leer el personal') as Record<string, unknown>[]).map((e) => [e.id as string, e]));
+      const nameOf = (id: unknown) => {
+        const e = employees.get(id as string);
+        return e ? `${e.first_name} ${e.last_name ?? ''}`.trim() : '¿?';
+      };
+      const hhmm = (iso: unknown) => (iso ? toMadrid(Date.parse(iso as string)).time : '—');
+
+      type Op =
+        | { kind: 'update'; id: string; patch: Record<string, unknown>; summary: Record<string, unknown> }
+        | { kind: 'insert'; row: Record<string, unknown>; summary: Record<string, unknown> }
+        | { kind: 'delete'; id: string; summary: Record<string, unknown> };
+      const ops: Op[] = [];
+      const errors: string[] = [];
+      const stamp = (motivo: string | null, before: string) => `${motivo ?? 'Corregido según hoja de firmas'} (antes ${before})`;
+
+      raw.forEach((c, i) => {
+        try {
+          if (!c || typeof c !== 'object') throw new UserError('no es un objeto');
+          const r = c as Args;
+          const id = str(r, 'fichaje_id');
+          const motivo = str(r, 'motivo', { max: 300 });
+          const brk = r.descanso_min == null ? null : Number(r.descanso_min);
+          if (brk != null && (!Number.isInteger(brk) || brk < 0 || brk > 600)) throw new UserError('"descanso_min" debe ser un número entero de minutos');
+
+          if (id) {
+            const e = existing.get(id);
+            if (!e) throw new UserError(`no existe el fichaje ${id}`);
+            const who = nameOf(e.employee_id);
+            const before = `${hhmm(e.clock_in)}–${hhmm(e.clock_out)}`;
+            if (r.eliminar === true) {
+              ops.push({ kind: 'delete', id, summary: { accion: 'eliminado', empleado: who, antes: before } });
+              return;
+            }
+            const night = date(r, 'noche') ?? nightOf(Date.parse(e.clock_in as string));
+            const inStr = str(r, 'entrada');
+            const outStr = str(r, 'salida');
+            const inMs = inStr ? nightTime(night, inStr, 'entrada') : Date.parse(e.clock_in as string);
+            const outMs = outStr ? nightOut(night, outStr, inMs) : e.clock_out ? Date.parse(e.clock_out as string) : null;
+            if (!inStr && !outStr && brk == null) throw new UserError('no indica nada que cambiar (entrada, salida, descanso_min o eliminar)');
+            if (outMs != null && outMs <= inMs) throw new UserError(`la salida (${outStr ?? hhmm(e.clock_out)}) debe ser posterior a la entrada (${inStr ?? hhmm(e.clock_in)})`);
+            const patch: Record<string, unknown> = {
+              clock_in: new Date(inMs).toISOString(),
+              clock_out: outMs == null ? null : new Date(outMs).toISOString(),
+              notes: [e.notes, stamp(motivo, before)].filter(Boolean).join(' · '),
+            };
+            if (brk != null) patch.break_minutes = brk;
+            ops.push({
+              kind: 'update',
+              id,
+              patch,
+              summary: { accion: 'modificado', empleado: who, noche: night, antes: before, ahora: `${toMadrid(inMs).time}–${outMs == null ? '—' : toMadrid(outMs).time}` },
+            });
+            return;
+          }
+
+          // Crear un fichaje: solo para trabajadores que ya están en la app
+          const employeeId = str(r, 'empleado_id');
+          if (!employeeId) throw new UserError('indica "fichaje_id" para modificar uno, o "empleado_id" para crearlo');
+          const emp = employees.get(employeeId);
+          if (!emp) throw new UserError(`no existe ningún trabajador con id ${employeeId} (no se crean trabajadores nuevos)`);
+          const night = date(r, 'noche', true)!;
+          const inMs = nightTime(night, str(r, 'entrada', { required: true })!, 'entrada');
+          const outMs = nightOut(night, str(r, 'salida', { required: true })!, inMs);
+          ops.push({
+            kind: 'insert',
+            row: {
+              employee_id: employeeId,
+              clock_in: new Date(inMs).toISOString(),
+              clock_out: new Date(outMs).toISOString(),
+              break_minutes: brk ?? 0,
+              source: 'manual',
+              notes: motivo ?? 'Añadido según hoja de firmas',
+            },
+            summary: { accion: 'creado', empleado: nameOf(employeeId), noche: night, ahora: `${toMadrid(inMs).time}–${toMadrid(outMs).time}` },
+          });
+        } catch (e) {
+          errors.push(`Cambio ${i + 1}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      });
+      if (errors.length) throw new UserError(`No se ha cambiado nada. Corrige estos cambios:\n${errors.join('\n')}`);
+
+      // Un fichaje nuevo no puede pisar otro de la misma persona
+      for (const op of ops.filter((o): o is Extract<Op, { kind: 'insert' }> => o.kind === 'insert')) {
+        const [start, end] = nightRange(op.summary.noche as string);
+        const same = check(
+          await db.from('time_entries').select('id, clock_in, clock_out').eq('employee_id', op.row.employee_id).gte('clock_in', start).lt('clock_in', end),
+          'No se pudieron comprobar los fichajes',
+        ) as Record<string, unknown>[];
+        const pending = same.filter((x) => !ops.some((o) => o.kind === 'delete' && o.id === x.id));
+        if (pending.length)
+          throw new UserError(
+            `No se ha cambiado nada: ${op.summary.empleado} ya tiene un fichaje la noche del ${op.summary.noche} (${hhmm(pending[0].clock_in)}–${hhmm(pending[0].clock_out)}, id ${pending[0].id}). Modifícalo con su fichaje_id en lugar de crear otro.`,
+          );
+      }
+
+      const done: Record<string, unknown>[] = [];
+      for (const op of ops) {
+        try {
+          if (op.kind === 'update') check(await db.from('time_entries').update(op.patch).eq('id', op.id).select('id').single(), 'No se pudo modificar');
+          else if (op.kind === 'insert') check(await db.from('time_entries').insert(op.row).select('id').single(), 'No se pudo crear');
+          else check(await db.from('time_entries').delete().eq('id', op.id), 'No se pudo eliminar');
+          done.push(op.summary);
+        } catch (e) {
+          throw new Error(
+            `${e instanceof Error ? e.message : String(e)} (${op.summary.empleado}). Antes de este error ya se aplicaron ${done.length} cambio(s): ${JSON.stringify(done)}`,
+          );
+        }
+      }
+      return { aplicados: done.length, cambios: done };
     },
   },
 ];

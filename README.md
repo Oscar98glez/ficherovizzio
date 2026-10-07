@@ -52,7 +52,7 @@ Todas las tablas usan Row Level Security: el trabajador solo puede leer sus prop
 
 La función `supabase/functions/rapid-responder` es un servidor MCP: Claude la usa como conector para registrar ingresos y gastos en **Finanzas**, subir facturas (PDF o foto) a **Facturas** y crear o actualizar **proveedores**.
 
-**Herramientas:** `ver_categorias`, `registrar_movimientos` (hasta 500 por llamada; omite duplicados), `listar_movimientos`, `eliminar_movimientos`, `buscar_proveedores`, `crear_proveedor`, `actualizar_proveedor`, `preparar_subida_factura`, `registrar_factura`, `listar_facturas` y `eliminar_factura`.
+**Herramientas:** `ver_categorias`, `registrar_movimientos` (hasta 500 por llamada; omite duplicados), `listar_movimientos`, `eliminar_movimientos`, `buscar_proveedores`, `crear_proveedor`, `actualizar_proveedor`, `preparar_subida_factura`, `registrar_factura`, `listar_facturas`, `eliminar_factura`, `listar_personal`, `ver_fichajes_noche` y `corregir_fichajes`.
 
 ### Instalación (una vez)
 1. Aplica las migraciones `20261006130000_suppliers.sql` y `20261006140000_claude_connector.sql` (se aplican solas al hacer push a `main`).
@@ -70,6 +70,8 @@ Cada enlace actúa en nombre del administrador que lo generó (deja de funcionar
 
 ### Uso
 Adjunta el archivo en el chat y pide, p. ej., *"carga estos gastos en Finanzas"* o *"sube estas facturas"*. Claude lee el archivo, te enseña un resumen y lo registra. Para las facturas busca el proveedor (por nombre o CIF) y, si no existe, lo crea.
+
+**Hoja de firmas:** pásale el PDF o la foto y pide que revise las horas. Claude empareja cada nombre con su ficha, compara con los fichajes de esa noche (de 06:00 a 06:00, hora española), te enseña las diferencias y corrige las que estén mal (por defecto da por buenas las de 10 minutos o menos). Si alguien de la hoja no está en la app, no se registra en ningún sitio. Cada fichaje corregido guarda en sus notas la hora que tenía antes.
 
 Para subir el **archivo** de la factura, Claude necesita poder ejecutar comandos: lo sube con `curl` al enlace que le da `preparar_subida_factura`. En claude.ai eso requiere tener activada la ejecución de código y permitir salida de red al dominio `*.supabase.co` (*Ajustes → Funciones/Capacidades*); en Claude Code o en la app de escritorio con acceso a tus archivos funciona directamente. Si no puede, guarda la factura sin archivo (aparece como "sin archivo" y se adjunta desde la app).
 
