@@ -30,7 +30,7 @@ const MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 
 const MAX_ROWS = 500;
 
 // Mismas categorías y métodos de pago que la app (src/lib/constants.ts)
-const INCOME_CATEGORIES = ['Taquilla', 'Barra 1', 'Barra 2', 'Barra 3', 'Reservados VIP', 'Guardarropa', 'Eventos privados', 'Patrocinios', 'Otros ingresos'];
+const INCOME_CATEGORIES = ['Taquilla', 'Entradas online', 'Barra 1', 'Barra 2', 'Barra 3', 'Reservados VIP', 'Guardarropa', 'Eventos privados', 'Patrocinios', 'Otros ingresos'];
 const EXPENSE_CATEGORIES = [
   'Nóminas',
   'Personal',

@@ -14,6 +14,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Finanzas** — movimientos, cierre de caja por noche (efectivo / tarjeta por concepto), gráficos y desglose por categoría.
 - **Facturas** — archivo de facturas recibidas y emitidas (PDF o foto) con importe, IVA, estado de pago y vencimiento; se guardan en un almacenamiento privado de Supabase.
 - **Proveedores** (en Facturas) — cada proveedor tiene su apartado con sus facturas, total y pendiente de pago, y su ficha (CIF, contacto, categoría habitual).
+- **Fourvenues** (en Ajustes) — trae las noches, la venta de entradas online y las entradas de cada RRPP para sus comisiones. Ver más abajo.
 - **Conector de Claude** (en Ajustes) — pásale a Claude extractos, tickets o facturas y los registra en Finanzas y Facturas, creando los proveedores que falten. Ver más abajo.
 - **Nóminas** — devengado por empleado según fichajes, pagado y pendiente; registro de pagos.
 - **Solicitudes** — aprobar o rechazar vacaciones, ausencias y cambios de turno.
@@ -87,6 +88,25 @@ Adjunta el archivo en el chat y pide, p. ej., *"carga estos gastos en Finanzas"*
 **Hoja de firmas:** pásale el PDF o la foto y pide que revise las horas. Claude empareja cada nombre con su ficha, compara con los fichajes de esa noche (de 06:00 a 06:00, hora española), te enseña las diferencias y corrige las que estén mal (por defecto da por buenas las de 10 minutos o menos). Si alguien de la hoja no está en la app, no se registra en ningún sitio. Cada fichaje corregido guarda en sus notas la hora que tenía antes.
 
 Para subir el **archivo** de la factura, Claude necesita poder ejecutar comandos: lo sube con `curl` al enlace que le da `preparar_subida_factura`. En claude.ai eso requiere tener activada la ejecución de código y permitir salida de red al dominio `*.supabase.co` (*Ajustes → Funciones/Capacidades*); en Claude Code o en la app de escritorio con acceso a tus archivos funciona directamente. Si no puede, guarda la factura sin archivo (aparece como "sin archivo" y se adjunta desde la app).
+
+## Fourvenues (venta de entradas)
+
+La función `supabase/functions/fourvenues-sync` trae de Fourvenues (Integrations API) las noches de la última semana y de los próximos dos meses:
+
+- **Noches** — cada evento de Fourvenues crea su noche (tipo *Sesión*). Si ese día ya había una noche creada a mano, se asocia a ella en lugar de duplicarla. En cada noche se ve cuántas personas tienen entrada y cuántas han entrado ya.
+- **Ingresos** — lo vendido online en cada noche se apunta como un único movimiento de **Entradas online** (tarjeta), sin gastos de gestión ni devoluciones, que se actualiza en cada sincronización. No cuenta las invitaciones ni lo vendido en la puerta con la taquilla de Fourvenues: eso sigue en el cierre de caja como *Taquilla*.
+- **Comisiones RRPP** — las entradas vendidas con el enlace de cada RRPP rellenan sus *Entradas* de esa noche (cantidad y precio medio), y la comisión se calcula con los % que ya hay configurados. Las personas de lista siguen siendo a mano.
+
+Todo lo importado lleva el id de Fourvenues: sincronizar varias veces no duplica nada. Si se cambia a mano un importe importado, la siguiente sincronización lo vuelve a poner como en Fourvenues.
+
+### Puesta en marcha (una vez)
+1. Aplica la migración `20261008160000_fourvenues.sql` (se aplica sola al hacer push a `main`).
+2. Guarda la clave en *Supabase → Edge Functions → Secrets*: `FOURVENUES_API_KEY`. Si es una clave de pruebas, añade `FOURVENUES_ENV` = `alpha` (por defecto se usa producción). La clave nunca llega al navegador.
+3. La acción *Publicar funciones de Supabase* publica `fourvenues-sync` (sin verificación JWT de la pasarela: dentro se comprueba que quien llama es administrador). A mano: `supabase functions deploy fourvenues-sync --no-verify-jwt`.
+4. En la app: *Ajustes → Fourvenues → Sincronizar ahora*. Para traer noches más antiguas (hasta 180 días): *Traer noches anteriores*.
+5. *Asociar RRPP*: cada usuario de Fourvenues que vende entradas se asocia a su ficha. Si el email de Fourvenues coincide con el de su ficha, se asocia solo. Mientras un RRPP no esté asociado, sus ventas cuentan en los ingresos pero no en sus comisiones (Ajustes avisa).
+
+Después se sincroniza sola al abrir *Noches* (como mucho cada 10 minutos). La clave necesita acceso a los eventos, las entradas y los usuarios de Fourvenues.
 
 ## Despliegue
 

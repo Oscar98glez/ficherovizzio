@@ -95,8 +95,12 @@ export const PRIVATE_EVENT_CATEGORY = 'Eventos privados';
 
 export const BAR_CATEGORIES = ['Barra 1', 'Barra 2', 'Barra 3'];
 
+/** Venta online de Fourvenues: un movimiento por noche que se actualiza al sincronizar */
+export const ONLINE_TICKETS_CATEGORY = 'Entradas online';
+
 export const INCOME_CATEGORIES = [
   'Taquilla',
+  ONLINE_TICKETS_CATEGORY,
   ...BAR_CATEGORIES,
   'Reservados VIP',
   'Guardarropa',

@@ -60,6 +60,7 @@ const ERRORS: [RegExp, string][] = [
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
   [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
+  [/fourvenues|tickets_sold|tickets_entered|external_id/i, 'Falta aplicar en Supabase la migración de Fourvenues (20261008160000_fourvenues.sql).'],
   [/rrpp_bottle_pct|rrpp_ticket_pct|rrpp_list_fee|list_fee|list_quantity/i, 'Falta aplicar en Supabase la migración de comisiones propias de RRPP (20261005180000_rrpp_personal_commissions.sql).'],
   [/rrpp_commission_rates|rrpp_ticket_sales/i, 'Falta aplicar en Supabase la migración de comisiones de RRPP (20261005170000_rrpp_commissions.sql).'],
   [/rrpp_origin/i, 'Falta aplicar en Supabase la migración de origen de reservas (20261005160000_reservation_origin.sql).'],

@@ -209,6 +209,11 @@ export function TicketSalesForm({ open, onClose, staff, onSaved }: { open: boole
   return (
     <Modal open={open} onClose={onClose} title="Entradas y listas" onSubmit={submit} saving={saving || loadingDay}>
       <div className="space-y-4">
+        {existing.some((s) => s.fourvenues_synced_at) && (
+          <p className="rounded-xl bg-indigo/10 px-3 py-2 text-[13px] text-indigo">
+            Las entradas de los RRPP asociados a Fourvenues se rellenan solas al sincronizar: si las cambias aquí, la próxima sincronización las vuelve a poner. La lista sí es a mano.
+          </p>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <Field label="Noche">
             <Input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} />
