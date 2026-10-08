@@ -2,9 +2,9 @@ import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
 import { demoClockIn, demoClockOut, demoFiles, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
-import { uid } from './utils';
+import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, Profile, Reservation, Shift, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
+import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, MyTimeEntry, Profile, Reservation, Shift, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -179,14 +179,21 @@ async function myEmployee(userId: string): Promise<Employee | null> {
   return emp && { ...withoutRate(emp), notes: null };
 }
 
-/** Fichajes del trabajador conectado, sin la tarifa aplicada */
-async function myTimeEntries(q: Query = {}): Promise<TimeEntry[]> {
-  if (IS_DEMO) return (await demoRepo<TimeEntry>('time_entries').list(q)).map(withoutRate);
+/** Lo ganado en un fichaje cerrado (null mientras siga abierto) */
+const earnedOf = (e: TimeEntry) => (e.clock_out ? Math.round(entryCost(e) * 100) / 100 : null);
+
+/** Fichajes del trabajador conectado, sin la tarifa aplicada pero con lo ganado en cada uno */
+async function myTimeEntries(q: Query = {}): Promise<MyTimeEntry[]> {
+  const fromTable = (list: TimeEntry[]) => list.map((e) => ({ ...withoutRate(e), earned: earnedOf(e) }));
+  if (IS_DEMO) return fromTable(await demoRepo<TimeEntry>('time_entries').list(q));
   try {
-    return (await sbRepo<TimeEntry>('my_time_entries').list(q)).map(withoutRate);
+    return (await sbRepo<MyTimeEntry>('my_time_entries').list(q)).map((e) => ({
+      ...withoutRate(e),
+      earned: e.earned == null ? e.earned : Number(e.earned),
+    }));
   } catch (e) {
     if (!missingView(e)) throw e;
-    return (await sbRepo<TimeEntry>('time_entries').list(q)).map(withoutRate);
+    return fromTable(await sbRepo<TimeEntry>('time_entries').list(q));
   }
 }
 

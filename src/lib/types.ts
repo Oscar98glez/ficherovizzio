@@ -74,6 +74,12 @@ export interface TimeEntry {
   created_at: string;
 }
 
+/** Fichaje propio del trabajador: sin tarifa, con lo ganado (calculado en el servidor; null si sigue abierto) */
+export interface MyTimeEntry extends TimeEntry {
+  /** undefined si la base de datos aún no tiene la migración que lo calcula */
+  earned?: number | null;
+}
+
 export interface Shift {
   id: string;
   employee_id: string;
