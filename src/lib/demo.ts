@@ -17,6 +17,7 @@ import type {
   LeaveRequest,
   Message,
   MessageRecipient,
+  MessageReply,
   PaymentMethod,
   Profile,
   Reservation,
@@ -48,11 +49,12 @@ export type TableName =
   | 'suppliers'
   | 'claude_connectors'
   | 'messages'
-  | 'message_recipients';
+  | 'message_recipients'
+  | 'message_replies';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v19';
+const DB_KEY = 'vizzio.demo.db.v20';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -212,7 +214,11 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
       await wait();
       getDb()[table] = rows().filter((x) => x.id !== id);
       // Como "on delete cascade": al borrar un mensaje se borran sus destinatarios
-      if (table === 'messages') getDb().message_recipients = (getDb().message_recipients ?? []).filter((x) => x.message_id !== id);
+      if (table === 'messages') {
+        const gone = new Set((getDb().message_recipients ?? []).filter((x) => x.message_id === id).map((x) => x.id));
+        getDb().message_recipients = (getDb().message_recipients ?? []).filter((x) => x.message_id !== id);
+        getDb().message_replies = (getDb().message_replies ?? []).filter((x) => !gone.has(x.recipient_id as string));
+      }
       persist();
     },
   };
@@ -326,6 +332,38 @@ export async function demoMarkMessageRead(recipientId: string): Promise<void> {
     r.read_at = new Date().toISOString();
     persist();
   }
+}
+
+const demoIsAdmin = () => getDb().profiles.some((p) => p.id === demoSession.get() && p.role === 'admin');
+
+/** Como reply_message de Supabase: el trabajador responde en su conversación; el administrador, en cualquiera */
+export async function demoReplyMessage(recipientId: string, body: string): Promise<MessageReply> {
+  const d = getDb();
+  const admin = demoIsAdmin();
+  const text = body.trim();
+  if (!text) throw new Error('EMPTY_REPLY');
+  const recs = (d.message_recipients ?? []) as unknown as MessageRecipient[];
+  const r = recs.find((x) => x.id === recipientId && (admin || x.employee_id === currentEmployee().id));
+  if (!r) throw new Error('MESSAGE_NOT_FOUND');
+  const now = new Date().toISOString();
+  const reply: MessageReply = { id: uid(), recipient_id: r.id, author_id: demoSession.get(), from_admin: admin, body: text.slice(0, 2000), created_at: now, read_at: null };
+  const replies = (d.message_replies ??= []) as unknown as MessageReply[];
+  replies.forEach((x) => x.recipient_id === r.id && x.from_admin !== admin && !x.read_at && (x.read_at = now));
+  replies.push(reply);
+  if (!admin) r.read_at ??= now;
+  persist();
+  await wait();
+  return clone(reply);
+}
+
+/** Como mark_replies_read de Supabase: marca como leídas las respuestas del otro lado */
+export async function demoMarkRepliesRead(recipientId: string): Promise<void> {
+  const admin = demoIsAdmin();
+  const now = new Date().toISOString();
+  let changed = false;
+  for (const x of (getDb().message_replies ?? []) as unknown as MessageReply[])
+    if (x.recipient_id === recipientId && x.from_admin !== admin && !x.read_at) (x.read_at = now), (changed = true);
+  if (changed) persist();
 }
 
 /** Como respond_task de Supabase: el trabajador acepta o rechaza una tarea suya */
@@ -757,6 +795,15 @@ function seed(): DB {
     ...['emp-2', 'emp-3', 'emp-4', 'emp-5', 'emp-9'].map((e, i) => rec(`rcp-m${i}`, 'msg-2', e, i % 2 ? { read_at: hoursAgo(20) } : {})),
     rec('rcp-3', 'msg-3', 'emp-9', { read_at: hoursAgo(40), response: 'declined', responded_at: hoursAgo(40), response_note: 'Este finde no estoy, mejor el lunes' }),
   ];
+  // Conversaciones de ejemplo: Lucía pregunta por la reunión y la gerente le contesta; Nacho pregunta por las luces
+  const reply = (id: string, recipient_id: string, from_admin: boolean, body: string, h: number, read: boolean): MessageReply => ({
+    id, recipient_id, author_id: from_admin ? DEMO_USERS.admin : null, from_admin, body, created_at: hoursAgo(h), read_at: read ? hoursAgo(h - 0.5) : null,
+  });
+  const messageReplies: MessageReply[] = [
+    reply('rpl-1', 'rcp-m1', false, '¿Hay que venir con el uniforme puesto?', 22, true),
+    reply('rpl-2', 'rcp-m1', true, 'Sí, ya cambiados para empezar a las 23:00.', 21, false),
+    reply('rpl-3', 'rcp-3', false, 'El lunes por la tarde puedo pasarme a revisarlas si os viene bien.', 39, false),
+  ];
 
   return {
     profiles,
@@ -774,5 +821,6 @@ function seed(): DB {
     suppliers,
     messages,
     message_recipients: messageRecipients,
+    message_replies: messageReplies,
   } as unknown as DB;
 }

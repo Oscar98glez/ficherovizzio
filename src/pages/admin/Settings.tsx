@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Database, LogOut, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { ClaudeConnectorCard } from '../../components/ClaudeConnector';
+import { NotificationsCard } from '../../components/NotificationsCard';
 import { useFeedback } from '../../components/overlay';
 import { Avatar, Badge, Button, Card, CardHeader, ListRow, PageHeader, SectionTitle, Select } from '../../components/ui';
 import { useLoad } from '../../hooks';
@@ -54,9 +55,14 @@ export default function Settings() {
           </Card>
 
           {!IS_DEMO && (
-            <div className="mt-4">
-              <PasswordCard />
-            </div>
+            <>
+              <div className="mt-4">
+                <PasswordCard />
+              </div>
+              <div className="mt-4">
+                <NotificationsCard admin />
+              </div>
+            </>
           )}
 
           <SectionTitle>Base de datos</SectionTitle>

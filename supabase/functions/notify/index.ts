@@ -2,7 +2,8 @@
 //  Notificaciones al móvil (Web Push) de Vizzio
 //
 //  · La base de datos apunta en public.notifications cada aviso para un
-//    trabajador (turno asignado, cambiado o cancelado; mensaje o tarea nueva).
+//    trabajador (turno asignado, cambiado o cancelado; mensaje o tarea nueva;
+//    respuesta del administrador) o para un administrador (respuesta de un trabajador).
 //  · La app llama a esta función justo después de hacer esos cambios y ella
 //    envía los avisos pendientes a los dispositivos de cada trabajador
 //    (public.push_subscriptions). Si alguien tiene varios avisos a la vez, le
@@ -37,8 +38,11 @@ const TZ = 'Europe/Madrid';
 
 interface Notification {
   id: string;
-  employee_id: string;
-  kind: 'shift_new' | 'shift_changed' | 'shift_cancelled' | 'message' | 'task';
+  /** Para un trabajador... */
+  employee_id: string | null;
+  /** ...o directamente para un usuario (administradores) */
+  user_id: string | null;
+  kind: 'shift_new' | 'shift_changed' | 'shift_cancelled' | 'message' | 'task' | 'reply';
   ref_id: string | null;
   data: Record<string, string | null>;
   created_at: string;
@@ -82,6 +86,9 @@ function dateLabel(date: string) {
   return s.replace(/\./g, '').replace(',', '');
 }
 
+/** Respuesta escrita por la administración (el dato llega como booleano del JSON) */
+const fromAdmin = (n: Pick<Notification, 'data'>) => (n.data as Record<string, unknown> | null)?.from_admin === true;
+
 /** Título y texto de un aviso suelto */
 export function describe(n: Pick<Notification, 'kind' | 'data'>): { title: string; body: string } {
   const d = n.data ?? {};
@@ -94,6 +101,10 @@ export function describe(n: Pick<Notification, 'kind' | 'data'>): { title: strin
       return { title: 'Turno cancelado', body: `${nightLabel(d.start_at!)} · ${timeLabel(d.start_at!)}` };
     case 'task':
       return { title: 'Nueva tarea', body: `${d.title ?? ''}${d.due_date ? ` · hasta el ${dateLabel(d.due_date)}` : ''}` };
+    case 'reply':
+      return fromAdmin(n)
+        ? { title: `Respuesta a «${d.title ?? ''}»`, body: (d.body ?? '').slice(0, 180) }
+        : { title: `${d.from ?? 'Un trabajador'} ha respondido`, body: `«${d.title ?? ''}»: ${d.body ?? ''}`.slice(0, 180) };
     default:
       return { title: 'Nuevo mensaje', body: `${d.title ?? ''}${d.body ? ` · ${d.body}` : ''}`.slice(0, 180) };
   }
@@ -101,8 +112,12 @@ export function describe(n: Pick<Notification, 'kind' | 'data'>): { title: strin
 
 /** Un solo aviso por persona: el suyo o un resumen si tiene varios */
 export function payloadFor(list: Pick<Notification, 'kind' | 'data'>[]): Payload {
-  const isMessage = (n: Pick<Notification, 'kind'>) => n.kind === 'message' || n.kind === 'task';
-  const url = list.some(isMessage) ? '/mis-mensajes' : '/mis-turnos';
+  const isMessage = (n: Pick<Notification, 'kind'>) => n.kind === 'message' || n.kind === 'task' || n.kind === 'reply';
+  // Las respuestas de los trabajadores van a los administradores: se abren en Mensajes del panel
+  const toAdmin = list.every((n) => n.kind === 'reply' && !fromAdmin(n));
+  const url = toAdmin
+    ? list.length === 1 && list[0].data?.message_id ? `/mensajes?m=${list[0].data.message_id}` : '/mensajes'
+    : list.some(isMessage) ? '/mis-mensajes' : '/mis-turnos';
   if (list.length === 1) return { ...describe(list[0]), url };
   const lines = list.map((n) => {
     const { title, body } = describe(n);
@@ -150,19 +165,22 @@ async function sendPending(db: SupabaseClient, keys: Keys, subject: string) {
     .update({ sent_at: now.toISOString() })
     .is('sent_at', null)
     .gte('created_at', cutoff)
-    .select('id, employee_id, kind, ref_id, data, created_at');
+    .select('id, employee_id, user_id, kind, ref_id, data, created_at');
   if (error) throw new Error(error.message);
   const pending = ((data ?? []) as Notification[]).sort((a, b) => a.created_at.localeCompare(b.created_at));
   if (!pending.length) return { notifications: 0, sent: 0, failed: 0, removed: 0 };
 
-  const byEmployee = new Map<string, Notification[]>();
-  for (const n of pending) byEmployee.set(n.employee_id, [...(byEmployee.get(n.employee_id) ?? []), n]);
-
-  const { data: emps } = await db.from('employees').select('id, user_id').in('id', [...byEmployee.keys()]);
+  // Cada aviso va al usuario de la app: el del trabajador o el indicado directamente
+  const employeeIds = [...new Set(pending.map((n) => n.employee_id).filter((x): x is string => !!x))];
+  const { data: emps } = employeeIds.length ? await db.from('employees').select('id, user_id').in('id', employeeIds) : { data: [] };
   const userOf = new Map((emps ?? []).filter((e) => e.user_id).map((e) => [e.id as string, e.user_id as string]));
-  const userIds = [...new Set(userOf.values())];
-  if (!userIds.length) return { notifications: pending.length, sent: 0, failed: 0, removed: 0 };
-  const { data: subs } = await db.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth').in('user_id', userIds);
+  const byUser = new Map<string, Notification[]>();
+  for (const n of pending) {
+    const userId = n.user_id ?? (n.employee_id ? userOf.get(n.employee_id) : undefined);
+    if (userId) byUser.set(userId, [...(byUser.get(userId) ?? []), n]);
+  }
+  if (!byUser.size) return { notifications: pending.length, sent: 0, failed: 0, removed: 0 };
+  const { data: subs } = await db.from('push_subscriptions').select('id, user_id, endpoint, p256dh, auth').in('user_id', [...byUser.keys()]);
 
   const options = { vapidDetails: { subject, publicKey: keys.public_key, privateKey: keys.private_key }, TTL: 24 * 3600, urgency: 'high' as const };
   let sent = 0;
@@ -170,8 +188,7 @@ async function sendPending(db: SupabaseClient, keys: Keys, subject: string) {
   const gone: string[] = [];
 
   const jobs: Promise<void>[] = [];
-  for (const [employeeId, list] of byEmployee) {
-    const userId = userOf.get(employeeId);
+  for (const [userId, list] of byUser) {
     const devices = (subs ?? []).filter((s) => s.user_id === userId);
     if (!devices.length) continue;
     const body = JSON.stringify(payloadFor(list));
@@ -197,7 +214,7 @@ async function sendPending(db: SupabaseClient, keys: Keys, subject: string) {
 /** Aviso de prueba a los dispositivos del usuario que lo pide */
 async function sendTest(db: SupabaseClient, keys: Keys, subject: string, userId: string) {
   const { data: subs } = await db.from('push_subscriptions').select('id, endpoint, p256dh, auth').eq('user_id', userId);
-  const body = JSON.stringify({ title: 'Notificaciones activadas', body: 'Así te avisaremos de tus turnos, mensajes y tareas.', url: '/' });
+  const body = JSON.stringify({ title: 'Notificaciones activadas', body: 'Así te avisaremos de las novedades en la app.', url: '/' });
   const options = { vapidDetails: { subject, publicKey: keys.public_key, privateKey: keys.private_key }, TTL: 600, urgency: 'high' as const };
   let sent = 0;
   const gone: string[] = [];
