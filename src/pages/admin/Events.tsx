@@ -101,7 +101,7 @@ export default function Events() {
                 </div>
                 <div className="tabular mt-2 grid grid-cols-3 gap-1.5 text-center">
                   <Stat icon={<Ticket />} value={ev.tickets_paid ?? ev.tickets_sold} label="vendidas" />
-                  <Stat icon={<QrCode />} value={ev.tickets_free} label="QR gratis" />
+                  <Stat icon={<QrCode />} value={ev.tickets_free} label="QR gratis" title="Personas apuntadas en las listas de Fourvenues" />
                   <Stat icon={<Sofa />} value={reservations} label={reservations === 1 ? 'reservado' : 'reservados'} />
                 </div>
               </div>
@@ -125,9 +125,9 @@ export default function Events() {
 }
 
 /** Cifra de la noche: entradas vendidas, QR gratis o reservados ("—" si aún no hay dato de Fourvenues) */
-function Stat({ icon, value, label }: { icon: ReactNode; value: number | null | undefined; label: string }) {
+function Stat({ icon, value, label, title }: { icon: ReactNode; value: number | null | undefined; label: string; title?: string }) {
   return (
-    <div className="rounded-lg bg-fill/60 px-1 py-1.5">
+    <div className="rounded-lg bg-fill/60 px-1 py-1.5" title={title}>
       <div className="flex items-center justify-center gap-1 text-[15px] font-semibold [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:text-ink-2">
         {icon}
         {value == null ? '—' : fmtNum(value, 0)}

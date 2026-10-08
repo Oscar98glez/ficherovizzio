@@ -5,8 +5,8 @@
 //  · Noches: cada evento crea su noche en public.events (o se asocia a la
 //    que ya hubiera ese día sin evento de Fourvenues).
 //  · Entradas de cada noche: vendidas (de pago, cualquier canal), QR gratis
-//    (invitaciones o 0 €) y cuántas personas han entrado. No se apunta ningún
-//    ingreso en Finanzas: la venta la mete el administrador a mano.
+//    (las personas apuntadas en las listas de Fourvenues) y cuántas han entrado.
+//    No se apunta ningún ingreso en Finanzas: la venta la mete el administrador a mano.
 //  · Comisiones RRPP: las entradas vendidas con el enlace de cada RRPP pasan a
 //    public.rrpp_ticket_sales (cantidad y precio medio; la lista sigue a mano).
 //    El RRPP de Fourvenues se asocia a su ficha por employees.fourvenues_user_id
@@ -103,6 +103,18 @@ export interface FvTicket {
   referral_id?: string | null;
 }
 
+/** Inscripción en una lista de Fourvenues (QR gratis); sólo los campos que se usan */
+export interface FvListEntry {
+  _id: string;
+  event_id?: string;
+  /** Igual que en las entradas: activated · cancelled · ... */
+  status?: string | string[];
+  /** Personas de la inscripción */
+  for?: number;
+  /** Personas que han entrado */
+  enter?: number;
+}
+
 export interface FvUser {
   _id: string;
   name?: string;
@@ -133,10 +145,10 @@ export function eventNight(e: FvEvent): string | null {
   return null;
 }
 
-const statuses = (t: FvTicket) => (Array.isArray(t.status) ? t.status : t.status ? [t.status] : []);
+const statuses = (t: { status?: string | string[] }) => (Array.isArray(t.status) ? t.status : t.status ? [t.status] : []);
 /** Canceladas o sin terminar de rellenar (SMS) no cuentan */
 const isValid = (t: FvTicket) => !statuses(t).some((s) => s === 'cancelled' || s === 'filling_client');
-const people = (t: FvTicket) => Math.max(1, Math.round(num(t.for ?? 1)));
+const people = (t: { for?: number }) => Math.max(1, Math.round(num(t.for ?? 1)));
 /** Lo que se queda el local: lo pagado sin gastos de gestión ni devoluciones */
 export const netAmount = (t: FvTicket) => round2(Math.max(0, num(t.total_paid ?? t.price) - num(t.total_fees) - num(t.refunded)));
 
@@ -148,9 +160,8 @@ export interface Sales {
 export interface TicketSummary {
   /** Personas con entrada (cualquier tipo, sin canceladas ni devueltas del todo) */
   people: number;
-  /** De ellas: con entrada de pago (cualquier canal) y con QR gratis / invitación */
+  /** De ellas, con entrada de pago (cualquier canal); las invitaciones de 0 € no cuentan */
   paid: number;
-  free: number;
   /** Personas que ya han entrado */
   entered: number;
   /** Venta online: personas e importe */
@@ -161,7 +172,7 @@ export interface TicketSummary {
 }
 
 export function summarize(tickets: FvTicket[]): TicketSummary {
-  const out: TicketSummary = { people: 0, paid: 0, free: 0, entered: 0, sold: 0, revenue: 0, byReferral: new Map() };
+  const out: TicketSummary = { people: 0, paid: 0, entered: 0, sold: 0, revenue: 0, byReferral: new Map() };
   for (const t of tickets) {
     if (!isValid(t)) continue;
     const net = netAmount(t);
@@ -169,9 +180,7 @@ export function summarize(tickets: FvTicket[]): TicketSummary {
     const p = people(t);
     out.people += p;
     out.entered += Math.min(p, Math.max(0, Math.round(num(t.enter))));
-    // QR gratis: invitaciones o entradas de 0 €
-    if (t.sale_type === 'invitation' || num(t.total_paid ?? t.price) <= 0) out.free += p;
-    else out.paid += p;
+    if (t.sale_type !== 'invitation' && num(t.total_paid ?? t.price) > 0) out.paid += p;
     if (NOT_ONLINE_SALES.has(t.sale_type ?? '') || net <= 0) continue;
     out.sold += p;
     out.revenue += net;
@@ -184,6 +193,18 @@ export function summarize(tickets: FvTicket[]): TicketSummary {
   }
   out.revenue = round2(out.revenue);
   for (const r of out.byReferral.values()) r.revenue = round2(r.revenue);
+  return out;
+}
+
+/** Listas (QR gratis): personas apuntadas, sin las canceladas, y cuántas han entrado */
+export function summarizeLists(entries: FvListEntry[]) {
+  const out = { people: 0, entered: 0 };
+  for (const e of entries) {
+    if (statuses(e).some((s) => s === 'cancelled')) continue;
+    const p = people(e);
+    out.people += p;
+    out.entered += Math.min(p, Math.max(0, Math.round(num(e.enter))));
+  }
   return out;
 }
 
@@ -211,6 +232,7 @@ function authHeaders(): Record<string, string> | null {
 const RESOURCES: Record<string, string> = {
   events: 'los eventos',
   tickets: 'las entradas',
+  lists: 'las listas',
   users: 'los usuarios (RRPP)',
   channels: 'los canales',
 };
@@ -251,10 +273,20 @@ async function fv<T>(path: string, params: Record<string, string> = {}): Promise
 
 /** Todas las entradas de un evento (de 500 en 500) */
 async function eventTickets(eventId: string): Promise<FvTicket[]> {
-  const byId = new Map<string, FvTicket>();
+  return eventItems<FvTicket>('/tickets/', eventId);
+}
+
+/** Todas las inscripciones en las listas de un evento */
+async function eventLists(eventId: string): Promise<FvListEntry[]> {
+  return eventItems<FvListEntry>('/lists/', eventId);
+}
+
+/** Todo lo de un evento en un recurso paginado (entradas o listas), de 500 en 500 */
+async function eventItems<T extends { _id: string }>(path: string, eventId: string): Promise<T[]> {
+  const byId = new Map<string, T>();
   let previousFirst: string | undefined;
   for (let offset = 0; offset < 100_000; offset += TICKETS_PAGE) {
-    const page = (await fv<FvTicket[]>('/tickets/', { event_id: eventId, limit: String(TICKETS_PAGE), offset: String(offset) })) ?? [];
+    const page = (await fv<T[]>(path, { event_id: eventId, limit: String(TICKETS_PAGE), offset: String(offset) })) ?? [];
     // Si la API ignorase el desplazamiento, devolvería la misma página: se para
     if (!page.length || page[0]._id === previousFirst) break;
     previousFirst = page[0]._id;
@@ -289,7 +321,7 @@ export interface SyncResult {
   created: number;
   linked: number;
   moved: number;
-  /** Entradas vendidas y QR gratis de la ventana */
+  /** Entradas vendidas y QR gratis (personas en las listas) de la ventana */
   paid: number;
   free: number;
   /** Venta online (para las comisiones de los RRPP) */
@@ -372,17 +404,36 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
   }
 
   // ---------- Entradas de cada noche (sin ingresos: la venta se apunta a mano en Finanzas) ----------
+  let listsUnavailable = false;
   for (const { fvId, local } of synced) {
     const s = summarize(await eventTickets(fvId));
     result.paid += s.paid;
-    result.free += s.free;
     result.tickets += s.sold;
     result.revenue = round2(result.revenue + s.revenue);
+
+    // QR gratis: las listas de Fourvenues. Si la clave no tiene acceso a ellas, se sigue sin ellas
+    let lists: { people: number; entered: number } | null = null;
+    if (!listsUnavailable) {
+      try {
+        lists = summarizeLists(await eventLists(fvId));
+        result.free += lists.people;
+      } catch (e) {
+        if (!(e instanceof FvError) || ![403, 404].includes(e.status)) throw e;
+        listsUnavailable = true;
+        result.warnings.push(`${e.message} Sin eso no se pueden contar los QR gratis de las listas.`);
+      }
+    }
 
     check(
       await db
         .from('events')
-        .update({ tickets_sold: s.people, tickets_paid: s.paid, tickets_free: s.free, tickets_entered: s.entered, fourvenues_synced_at: now })
+        .update({
+          tickets_sold: s.people,
+          tickets_paid: s.paid,
+          tickets_free: lists?.people ?? null,
+          tickets_entered: s.entered + (lists?.entered ?? 0),
+          fourvenues_synced_at: now,
+        })
         .eq('id', local.id),
       'Noches',
     );

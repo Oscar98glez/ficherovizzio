@@ -62,7 +62,7 @@ export function FourvenuesCard() {
             <Ticket className="h-4 w-4 text-accent" /> Fourvenues
           </span>
         }
-        subtitle="Trae las noches, sus entradas vendidas y QR gratis, y las entradas que vende cada RRPP. No apunta ingresos en Finanzas."
+        subtitle="Trae las noches, sus entradas vendidas, los QR gratis de las listas y las entradas que vende cada RRPP. No apunta ingresos en Finanzas."
         action={status?.configured ? <Badge tone={status.env === 'alpha' ? 'orange' : 'green'}>{status.env === 'alpha' ? 'Pruebas' : 'Producción'}</Badge> : undefined}
       />
       <div className="space-y-3 px-5 pb-5 text-[13px]">
@@ -134,7 +134,7 @@ export function FourvenuesCard() {
             <Input type="date" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} />
           </Field>
           <p className="text-[13px] text-ink-2">
-            Crea las noches que falten y rellena sus entradas vendidas, los QR gratis y las entradas de cada RRPP. Lo que ya estaba importado se actualiza (no se duplica). Puede tardar un minuto.
+            Crea las noches que falten y rellena sus entradas vendidas, los QR gratis de las listas y las entradas de cada RRPP. Lo que ya estaba importado se actualiza (no se duplica). Puede tardar un minuto.
           </p>
         </div>
       </Modal>
