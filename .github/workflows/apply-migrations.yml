@@ -5,8 +5,9 @@ name: Aplicar migraciones de Supabase
 # (la CLI entra con un rol temporal, no hace falta la contraseña de la base de datos).
 #
 # En cualquier otra rama, o al lanzarla a mano sin marcar "aplicar", sólo muestra qué se aplicaría.
-# Por seguridad no aplica nada si quedan pendientes migraciones anteriores a la primera que se aplica
-# con esta acción (se aplicaron a mano y no constan en el historial de Supabase).
+#
+# Las migraciones anteriores a DESDE se aplicaron a mano (editor SQL) y no constan en el historial de
+# Supabase: esas sólo se apuntan como aplicadas ("migration repair", no se vuelven a ejecutar).
 on:
   push:
     branches: [main, 'claude/**']
@@ -63,14 +64,19 @@ jobs:
         id: plan
         run: |
           supabase db push --linked --dry-run 2>&1 | tee plan.txt
-          pending=$(grep -oE '[0-9]{14}_[A-Za-z0-9_.-]+\.sql' plan.txt | sort -u || true)
-          old=$(echo "$pending" | awk -v d="$DESDE" 'NF && substr($0,1,14) < d')
-          echo "Pendientes:"; echo "${pending:-(ninguna)}"
-          if [ -n "$old" ]; then
-            echo "::error::Hay migraciones antiguas pendientes que seguramente ya se aplicaron a mano: $(echo $old). No se aplica nada. Márcalas como aplicadas con 'supabase migration repair --status applied <versión>' y vuelve a lanzar la acción."
-            exit 1
-          fi
+          pending=$(grep -oE '[0-9]{14}_[A-Za-z0-9_.-]+\.sql' plan.txt | cut -c1-14 | sort -u || true)
+          old=$(echo "$pending" | awk -v d="$DESDE" 'NF && $0 < d' | xargs)
+          new=$(echo "$pending" | awk -v d="$DESDE" 'NF && $0 >= d' | xargs)
+          echo "Ya aplicadas a mano (sólo se apuntan en el historial): ${old:-ninguna}"
+          echo "Se aplicarán: ${new:-ninguna}"
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+
+      - name: Apuntar como aplicadas las migraciones anteriores
+        if: steps.secrets.outputs.ok == 'true' && env.APLICAR == 'true' && steps.plan.outputs.old != ''
+        run: supabase migration repair --linked --status applied ${{ steps.plan.outputs.old }}
 
       - name: Aplicar
         if: steps.secrets.outputs.ok == 'true' && env.APLICAR == 'true'
-        run: supabase db push --linked --yes
+        run: |
+          supabase db push --linked --yes
+          supabase migration list --linked
