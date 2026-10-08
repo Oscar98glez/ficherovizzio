@@ -1,10 +1,10 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoFiles, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoFiles, demoRespondShift, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, MyTimeEntry, Profile, Reservation, Shift, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
+import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -34,6 +34,9 @@ const ERRORS: [RegExp, string][] = [
   [/ALREADY_CLOCKED_IN|time_entries_one_open/i, 'Ya hay un fichaje abierto para este empleado.'],
   [/NOT_CLOCKED_IN/i, 'No tienes ningún fichaje abierto.'],
   [/NO_EMPLOYEE/i, 'Tu usuario no está vinculado a ninguna ficha de empleado activa.'],
+  [/SHIFT_CLOSED/i, 'Este turno ya ha empezado o está cancelado: ya no se puede responder.'],
+  [/SHIFT_NOT_FOUND/i, 'No se ha encontrado el turno.'],
+  [/respond_shift/i, 'Falta aplicar en Supabase la migración 20261008130000_shift_responses.sql.'],
   [/email rate limit exceeded|over_email_send_rate_limit/i, 'Ahora mismo no se pueden enviar más emails de confirmación. Espera unos minutos y vuelve a intentarlo, o avisa al administrador.'],
   [/rate limit|too many requests/i, 'Demasiados intentos seguidos. Espera un par de minutos y vuelve a intentarlo.'],
   [/Invalid login credentials/i, 'Email o contraseña incorrectos.'],
@@ -285,5 +288,9 @@ export const api = {
   setMyPhoto,
 
   /** RRPP que se pueden elegir en una reserva (sólo id y nombre) */
+  /** El trabajador acepta o rechaza uno de sus turnos */
+  respondShift: (shiftId: string, response: ShiftResponse, note?: string): Promise<Shift> =>
+    IS_DEMO ? demoRespondShift(shiftId, response, note) : sbRpc<Shift>('respond_shift', { p_shift: shiftId, p_response: response, p_note: note ?? null }),
+
   reservationStaff: (): Promise<StaffOption[]> => (IS_DEMO ? demoReservationStaff() : sbRpc<StaffOption[]>('reservation_staff', {})),
 };

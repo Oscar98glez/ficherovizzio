@@ -42,9 +42,14 @@ export function Logo({ size = 32 }: { size?: number }) {
   return <img src="/icon.svg" alt="" width={size} height={size} className="shrink-0 rounded-[22%] shadow-sm" />;
 }
 
+/** Evento para avisar al menú de que han cambiado los turnos del trabajador */
+export const SHIFTS_CHANGED = 'vizzio:shifts-changed';
+
 export function AppShell() {
   const { profile, employee, isAdmin, isRrpp, signOut } = useAuth();
   const [pending, setPending] = useState(0);
+  const [unanswered, setUnanswered] = useState(0);
+  const [shiftsTick, setShiftsTick] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,6 +58,20 @@ export function AppShell() {
     if (!isAdmin) return;
     api.requests.list({ eq: { status: 'pending' } }).then((r) => setPending(r.length)).catch(() => {});
   }, [isAdmin, location.pathname]);
+
+  // Turnos próximos que el trabajador aún no ha aceptado ni rechazado (se recuenta al responder uno)
+  useEffect(() => {
+    const onChange = () => setShiftsTick((t) => t + 1);
+    window.addEventListener(SHIFTS_CHANGED, onChange);
+    return () => window.removeEventListener(SHIFTS_CHANGED, onChange);
+  }, []);
+  useEffect(() => {
+    if (isAdmin || isRrpp || !employee) return;
+    api.shifts
+      .list({ eq: { employee_id: employee.id }, gte: ['start_at', new Date().toISOString()] })
+      .then((list) => setUnanswered(list.filter((s) => s.status !== 'cancelled' && !s.response).length))
+      .catch(() => {});
+  }, [isAdmin, isRrpp, employee?.id, location.pathname, shiftsTick]);
 
   useEffect(() => setMoreOpen(false), [location.pathname]);
 
@@ -103,7 +122,7 @@ export function AppShell() {
             ...(isRrpp
               ? []
               : [
-                  { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays },
+                  { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays, badge: unanswered },
                   { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
                   { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
                 ]),
