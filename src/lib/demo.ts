@@ -54,7 +54,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v20';
+const DB_KEY = 'vizzio.demo.db.v21';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -514,6 +514,12 @@ function seed(): DB {
       notes: null,
       created_at: stamp,
     };
+    // Como si viniera de Fourvenues: entradas vendidas y QR gratis (los eventos privados no venden)
+    if (kind !== 'evento_privado') {
+      const paid = Math.round(expected * (0.15 + r() * 0.25));
+      const free = Math.round(expected * (0.04 + r() * 0.08));
+      Object.assign(event, { tickets_paid: paid, tickets_free: free, tickets_sold: paid + free });
+    }
     events.push(event);
 
     const nightEnd = d.getTime() + 31 * HOUR; // 07:00 del día siguiente
