@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api, errorMessage } from './lib/api';
 import { IS_DEMO } from './lib/config';
 import { DEMO_USERS, demoSession } from './lib/demo';
-import { supabase } from './lib/supabase';
+import { OPENED_FROM_RECOVERY_LINK, supabase } from './lib/supabase';
 import type { Employee, Profile, Role } from './lib/types';
 
 interface AuthState {
@@ -15,6 +15,9 @@ interface AuthState {
 }
 
 interface AuthContext extends AuthState {
+  /** Ha entrado con el enlace de "He olvidado la contraseña": tiene que elegir una nueva */
+  recovering: boolean;
+  finishRecovery(): void;
   isAdmin: boolean;
   /** Relaciones públicas: ficha como un trabajador y gestiona reservados */
   isRrpp: boolean;
@@ -24,7 +27,11 @@ interface AuthContext extends AuthState {
   signOut(): Promise<void>;
   demoSignIn(role: Role): Promise<void>;
   resetPassword(email: string): Promise<void>;
-  updatePassword(password: string): Promise<void>;
+  /**
+   * Cambia la contraseña. Con la actual, antes se vuelve a iniciar sesión: Supabase puede exigir
+   * una sesión reciente para cambiarla ("Secure password change") y así nunca falla por eso.
+   */
+  updatePassword(password: string, currentPassword?: string): Promise<void>;
   refresh(): Promise<void>;
 }
 
@@ -39,6 +46,7 @@ function sb() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ ...EMPTY, loading: true });
+  const [recovering, setRecovering] = useState(OPENED_FROM_RECOVERY_LINK);
 
   const loadUser = useCallback(async (userId: string | null, email: string | null) => {
     if (!userId) return setState(EMPTY);
@@ -61,7 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     const { data } = sb().auth.onAuthStateChange((event, session) => {
-      if (!['INITIAL_SESSION', 'SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'].includes(event)) return;
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+      if (event === 'SIGNED_OUT') setRecovering(false);
+      if (!['INITIAL_SESSION', 'SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'PASSWORD_RECOVERY'].includes(event)) return;
       // Diferido: no se debe llamar a Supabase dentro del propio callback
       setTimeout(() => loadUser(session?.user.id ?? null, session?.user.email ?? null), 0);
     });
@@ -72,6 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ...state,
     isAdmin: state.profile?.role === 'admin',
     isRrpp: state.profile?.role === 'rrpp',
+    recovering: recovering && !!state.userId,
+    finishRecovery: () => setRecovering(false),
 
     async signIn(email, password) {
       const { error } = await sb().auth.signInWithPassword({ email: email.trim(), password });
@@ -104,12 +116,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
 
     async resetPassword(email) {
-      const { error } = await sb().auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/perfil` });
+      // A la raíz de la app (la dirección que seguro está permitida en Supabase); la app detecta el enlace sola
+      const { error } = await sb().auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
       if (error) throw new Error(errorMessage(error));
     },
 
-    async updatePassword(password) {
+    async updatePassword(password, currentPassword) {
       if (IS_DEMO) return;
+      if (currentPassword !== undefined) {
+        const email = state.email ?? (await sb().auth.getUser()).data.user?.email;
+        if (!email) throw new Error('No se ha podido comprobar tu cuenta. Cierra sesión y vuelve a entrar.');
+        const { error } = await sb().auth.signInWithPassword({ email, password: currentPassword });
+        if (error) throw new Error(/invalid login credentials/i.test(error.message) ? 'La contraseña actual no es correcta.' : errorMessage(error));
+      }
       const { error } = await sb().auth.updateUser({ password });
       if (error) throw new Error(errorMessage(error));
     },

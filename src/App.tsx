@@ -20,6 +20,7 @@ import Schedule from './pages/admin/Schedule';
 import Settings from './pages/admin/Settings';
 import TimeEntries from './pages/admin/TimeEntries';
 import Login from './pages/Login';
+import NewPassword from './pages/NewPassword';
 import Register from './pages/Register';
 import Reservations from './pages/Reservations';
 import Clock from './pages/worker/Clock';
@@ -39,9 +40,11 @@ function Splash() {
 }
 
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { loading, userId, profile, error, signOut } = useAuth();
+  const { loading, userId, profile, error, signOut, recovering } = useAuth();
   if (loading) return <Splash />;
   if (!userId) return <Navigate to="/login" replace />;
+  // Viene del email de "¿Has olvidado la contraseña?": primero elige la nueva
+  if (recovering) return <NewPassword />;
   if (!profile)
     return (
       <div className="grid min-h-dvh place-items-center p-6">
@@ -58,8 +61,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 function PublicOnly({ children }: { children: ReactNode }) {
-  const { loading, userId } = useAuth();
+  const { loading, userId, recovering } = useAuth();
   if (loading) return <Splash />;
+  if (recovering) return <NewPassword />;
   if (userId) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
