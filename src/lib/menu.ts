@@ -36,6 +36,8 @@ export const BOTTLE_GROUPS: MenuGroup[] = [
       ...items(100, ['Legendario', 'Legendario Oro', 'Santa Teresa Gran Reserva', 'Barceló']),
       { name: 'Barceló Imperial', price: 110 },
       ...items(100, ['Havana 7', 'Havana 3']),
+      { name: 'Brugal', price: 100 },
+      { name: 'Brugal Doble Reserva', price: 150 },
     ],
   },
   {
