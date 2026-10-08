@@ -56,7 +56,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v22';
+const DB_KEY = 'vizzio.demo.db.v23';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -734,15 +734,19 @@ function seed(): DB {
   for (const ev of events.filter((e) => e.tickets_paid != null)) {
     ev.fourvenues_id = `fv-${ev.date}`;
     // Reparto de las entradas y las listas de la noche entre los RRPP (lo que sobra, sin RRPP)
+    ev.bookings = int(2, 9);
     let tLeft = ev.tickets_paid!;
     let lLeft = ev.tickets_free ?? 0;
+    let bLeft = ev.bookings;
     fvRrpp.forEach(([fvId, name], i) => {
       const last = i === fvRrpp.length - 1;
       const t = last ? tLeft : Math.round(tLeft * (0.3 + r() * 0.3));
       const l = last ? lLeft : Math.round(lLeft * (0.3 + r() * 0.3));
+      const bk = last ? bLeft : Math.round(bLeft * (0.3 + r() * 0.3));
       tLeft -= t;
       lLeft -= l;
-      fourvenuesRrppNights.push({ id: uid(), event_id: ev.id, fourvenues_user_id: fvId, name, tickets: t, lists: l, synced_at: stamp });
+      bLeft -= bk;
+      fourvenuesRrppNights.push({ id: uid(), event_id: ev.id, fourvenues_user_id: fvId, name, tickets: t, lists: l, bookings: bk, synced_at: stamp });
     });
   }
   const reservations: Reservation[] = [];

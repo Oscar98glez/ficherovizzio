@@ -70,6 +70,8 @@ export interface ClubEvent {
   /** Fourvenues: de ellas, con entrada de pago y con QR gratis / invitación */
   tickets_paid?: number | null;
   tickets_free?: number | null;
+  /** Fourvenues: reservados (reservas de mesa, sin canceladas) */
+  bookings?: number | null;
   fourvenues_synced_at?: string | null;
   created_at: string;
 }
@@ -359,6 +361,8 @@ export interface FourvenuesRrppNight {
   tickets: number;
   /** Personas en sus listas (QR gratis); null si la clave no tiene acceso a las listas */
   lists: number | null;
+  /** Sus reservados en Fourvenues; null si la clave no tiene acceso a las reservas */
+  bookings?: number | null;
   synced_at: string;
 }
 
@@ -373,6 +377,7 @@ export interface FourvenuesResult {
   /** Entradas vendidas y QR gratis (las versiones anteriores de la función no las traen) */
   paid?: number;
   free?: number;
+  bookings?: number;
   /** Venta online (para las comisiones de los RRPP) */
   tickets: number;
   revenue: number;

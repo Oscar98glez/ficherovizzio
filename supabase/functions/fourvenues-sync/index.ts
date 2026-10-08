@@ -7,8 +7,11 @@
 //  · Entradas de cada noche: vendidas (de pago, cualquier canal), QR gratis
 //    (las personas apuntadas en las listas de Fourvenues) y cuántas han entrado.
 //    No se apunta ningún ingreso en Finanzas: la venta la mete el administrador a mano.
+//  · Reservados: las reservas de mesa de Fourvenues de cada noche (sin canceladas).
 //  · Desglose por RRPP de cada noche (public.fourvenues_rrpp_nights): entradas de
-//    pago y personas en listas de cada RRPP, con el nombre que tiene en Fourvenues.
+//    pago, personas en listas y reservados de cada RRPP, con su nombre de Fourvenues.
+//  Si la clave no tiene acceso a las listas o a las reservas, se sincroniza el resto
+//  y se avisa (el dato queda vacío) en lugar de fallar toda la sincronización.
 //  · Comisiones RRPP: las entradas vendidas con el enlace de cada RRPP pasan a
 //    public.rrpp_ticket_sales (cantidad y precio medio; la lista sigue a mano).
 //    El RRPP de Fourvenues se asocia a su ficha por employees.fourvenues_user_id
@@ -119,6 +122,15 @@ export interface FvListEntry {
   referral_id?: string | null;
 }
 
+/** Reserva de mesa de Fourvenues; sólo los campos que se usan */
+export interface FvBooking {
+  _id: string;
+  event_id?: string;
+  status?: string | string[];
+  /** RRPP de la reserva (usuario de Fourvenues) */
+  referral_id?: string | null;
+}
+
 export interface FvUser {
   _id: string;
   name?: string;
@@ -221,6 +233,21 @@ export function summarizeLists(entries: FvListEntry[]) {
   return out;
 }
 
+/** Reservas que no cuentan */
+const DEAD_BOOKING = /cancel|reject|expire|refund|delete/i;
+
+/** Reservados (reservas de mesa, sin canceladas ni rechazadas) de la noche y de cada RRPP */
+export function summarizeBookings(bookings: FvBooking[]) {
+  const out = { count: 0, byReferral: new Map<string, number>() };
+  for (const b of bookings) {
+    if (statuses(b).some((st) => DEAD_BOOKING.test(st))) continue;
+    out.count++;
+    const ref = b.referral_id ?? '';
+    out.byReferral.set(ref, (out.byReferral.get(ref) ?? 0) + 1);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------
 //  API de Fourvenues
 // ---------------------------------------------------------------------
@@ -246,6 +273,7 @@ const RESOURCES: Record<string, string> = {
   events: 'los eventos',
   tickets: 'las entradas',
   lists: 'las listas',
+  bookings: 'las reservas (reservados)',
   users: 'los usuarios (RRPP)',
   channels: 'los canales',
 };
@@ -291,15 +319,33 @@ async function eventTickets(eventId: string): Promise<FvTicket[]> {
 
 /** Todas las inscripciones en las listas de un evento */
 async function eventLists(eventId: string): Promise<FvListEntry[]> {
-  return eventItems<FvListEntry>('/lists/', eventId);
+  return eventItemsWithFallback<FvListEntry>('/lists/', eventId);
 }
 
-/** Todo lo de un evento en un recurso paginado (entradas o listas), de 500 en 500 */
-async function eventItems<T extends { _id: string }>(path: string, eventId: string): Promise<T[]> {
+/** Todas las reservas de mesa de un evento */
+async function eventBookings(eventId: string): Promise<FvBooking[]> {
+  return eventItemsWithFallback<FvBooking>('/bookings/', eventId);
+}
+
+/**
+ * Como eventItems, pero si Fourvenues rechaza la petición por los parámetros (400/422) se
+ * reintenta con date_field=updated_at, que es como aparece en sus ejemplos para las listas.
+ */
+async function eventItemsWithFallback<T extends { _id: string }>(path: string, eventId: string): Promise<T[]> {
+  try {
+    return await eventItems<T>(path, eventId);
+  } catch (e) {
+    if (!(e instanceof FvError) || ![400, 422].includes(e.status)) throw e;
+    return await eventItems<T>(path, eventId, { date_field: 'updated_at' });
+  }
+}
+
+/** Todo lo de un evento en un recurso paginado (entradas, listas o reservas), de 500 en 500 */
+async function eventItems<T extends { _id: string }>(path: string, eventId: string, extra: Record<string, string> = {}): Promise<T[]> {
   const byId = new Map<string, T>();
   let previousFirst: string | undefined;
   for (let offset = 0; offset < 100_000; offset += TICKETS_PAGE) {
-    const page = (await fv<T[]>(path, { event_id: eventId, limit: String(TICKETS_PAGE), offset: String(offset) })) ?? [];
+    const page = (await fv<T[]>(path, { ...extra, event_id: eventId, limit: String(TICKETS_PAGE), offset: String(offset) })) ?? [];
     // Si la API ignorase el desplazamiento, devolvería la misma página: se para
     if (!page.length || page[0]._id === previousFirst) break;
     previousFirst = page[0]._id;
@@ -334,9 +380,10 @@ export interface SyncResult {
   created: number;
   linked: number;
   moved: number;
-  /** Entradas vendidas y QR gratis (personas en las listas) de la ventana */
+  /** Entradas vendidas, QR gratis (personas en las listas) y reservados de la ventana */
   paid: number;
   free: number;
+  bookings: number;
   /** Venta online (para las comisiones de los RRPP) */
   tickets: number;
   revenue: number;
@@ -357,7 +404,7 @@ const fullName = (u: FvUser) => [u.name, u.last_name].filter(Boolean).join(' ').
 
 export async function runSync(db: SupabaseClient, from: string, to: string): Promise<SyncResult> {
   const now = new Date().toISOString();
-  const result: SyncResult = { from, to, events: 0, created: 0, linked: 0, moved: 0, paid: 0, free: 0, tickets: 0, revenue: 0, rrpp: 0, rrppLinked: 0, unmatched: [], warnings: [] };
+  const result: SyncResult = { from, to, events: 0, created: 0, linked: 0, moved: 0, paid: 0, free: 0, bookings: 0, tickets: 0, revenue: 0, rrpp: 0, rrppLinked: 0, unmatched: [], warnings: [] };
 
   // ---------- Noches ----------
   // Se pide un día más por cada lado por si Fourvenues filtra por la fecha "de calendario"
@@ -418,24 +465,36 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
 
   // ---------- Entradas de cada noche (sin ingresos: la venta se apunta a mano en Finanzas) ----------
   let listsUnavailable = false;
-  /** Desglose por RRPP de cada noche: entradas de pago y personas en listas */
-  const breakdowns: { eventId: string; tickets: Map<string, number>; lists: Map<string, number> | null }[] = [];
+  let bookingsUnavailable = false;
+  /** Desglose por RRPP de cada noche: entradas de pago, personas en listas y reservados */
+  const breakdowns: { eventId: string; tickets: Map<string, number>; lists: Map<string, number> | null; bookings: Map<string, number> | null }[] = [];
   for (const { fvId, local } of synced) {
     const s = summarize(await eventTickets(fvId));
     result.paid += s.paid;
     result.tickets += s.sold;
     result.revenue = round2(result.revenue + s.revenue);
 
-    // QR gratis: las listas de Fourvenues. Si la clave no tiene acceso a ellas, se sigue sin ellas
+    // QR gratis (listas) y reservados (reservas de mesa). Si Fourvenues no los da, se sigue sin ellos
     let lists: ReturnType<typeof summarizeLists> | null = null;
     if (!listsUnavailable) {
       try {
         lists = summarizeLists(await eventLists(fvId));
         result.free += lists.people;
       } catch (e) {
-        if (!(e instanceof FvError) || ![403, 404].includes(e.status)) throw e;
+        if (!(e instanceof FvError)) throw e;
         listsUnavailable = true;
         result.warnings.push(`${e.message} Sin eso no se pueden contar los QR gratis de las listas.`);
+      }
+    }
+    let bookings: ReturnType<typeof summarizeBookings> | null = null;
+    if (!bookingsUnavailable) {
+      try {
+        bookings = summarizeBookings(await eventBookings(fvId));
+        result.bookings += bookings.count;
+      } catch (e) {
+        if (!(e instanceof FvError)) throw e;
+        bookingsUnavailable = true;
+        result.warnings.push(`${e.message} Sin eso no se pueden contar los reservados.`);
       }
     }
 
@@ -447,13 +506,14 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
           tickets_paid: s.paid,
           tickets_free: lists?.people ?? null,
           tickets_entered: s.entered + (lists?.entered ?? 0),
+          bookings: bookings?.count ?? null,
           fourvenues_synced_at: now,
         })
         .eq('id', local.id),
       'Noches',
     );
 
-    breakdowns.push({ eventId: local.id, tickets: s.paidByReferral, lists: lists?.byReferral ?? null });
+    breakdowns.push({ eventId: local.id, tickets: s.paidByReferral, lists: lists?.byReferral ?? null, bookings: bookings?.byReferral ?? null });
 
     const night = rrppByNight.get(local.date) ?? new Map<string, Sales>();
     for (const [ref, v] of s.byReferral) {
@@ -480,7 +540,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
   // Usuarios de Fourvenues: para el nombre de cada RRPP en el desglose y para asociarlos a su ficha
   let users = new Map<string, FvUser>();
   const missing = [...referrals.keys()].filter((id) => !byFvUser.has(id));
-  const anyReferral = breakdowns.some((b) => [...b.tickets.keys(), ...(b.lists?.keys() ?? [])].some(Boolean));
+  const anyReferral = breakdowns.some((b) => [...b.tickets.keys(), ...(b.lists?.keys() ?? []), ...(b.bookings?.keys() ?? [])].some(Boolean));
   if (missing.length || anyReferral) {
     try {
       users = new Map(((await fv<FvUser[]>('/users/')) ?? []).map((u) => [u._id, u]));
@@ -508,7 +568,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
 
   // Desglose por RRPP de cada noche: se rehace entero
   for (const b of breakdowns) {
-    const refs = new Set([...b.tickets.keys(), ...(b.lists?.keys() ?? [])]);
+    const refs = new Set([...b.tickets.keys(), ...(b.lists?.keys() ?? []), ...(b.bookings?.keys() ?? [])]);
     check(await db.from('fourvenues_rrpp_nights').delete().eq('event_id', b.eventId), 'Desglose por RRPP');
     if (!refs.size) continue;
     check(
@@ -519,6 +579,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
           name: ref && users.has(ref) ? fullName(users.get(ref)!) : null,
           tickets: b.tickets.get(ref) ?? 0,
           lists: b.lists ? b.lists.get(ref) ?? 0 : null,
+          bookings: b.bookings ? b.bookings.get(ref) ?? 0 : null,
           synced_at: now,
         })),
       ),

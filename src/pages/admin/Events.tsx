@@ -9,11 +9,7 @@ import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
 import { fmtDate, fmtNum, fmtWeekday } from '../../lib/format';
 import { autoSyncFourvenues } from '../../lib/fourvenues';
-import type { ReservationStatus } from '../../lib/types';
 import { groupBy } from '../../lib/utils';
-
-/** Reservados que cuentan para la noche (sin cancelados ni los que no se presentaron) */
-const LIVE_RESERVATION: ReservationStatus[] = ['pending', 'confirmed', 'arrived'];
 
 type Tab = 'upcoming' | 'past';
 
@@ -26,12 +22,11 @@ export default function Events() {
   const { data, loading, error, reload } = useLoad(async () => {
     const from = isoDate(addDays(businessToday(), -90));
     const to = isoDate(addDays(businessToday(), 120));
-    const [events, shifts, reservations] = await Promise.all([
+    const [events, shifts] = await Promise.all([
       api.events.list({ gte: ['date', from], lt: ['date', to], order: ['date', 'asc'] }),
       api.shifts.list({ gte: ['start_at', businessStart(today)], lt: ['start_at', businessStart(to)] }),
-      api.reservations.list({ gte: ['date', from], lt: ['date', to] }).catch(() => []),
     ]);
-    return { events, shifts, reservations };
+    return { events, shifts };
   }, []);
 
   // Trae de Fourvenues las noches y la venta online (el servidor no lo repite si se hizo hace poco)
@@ -42,11 +37,10 @@ export default function Events() {
   const rows = useMemo(() => {
     if (!data) return [];
     const shiftsByDate = groupBy(data.shifts.filter((s) => s.status !== 'cancelled'), (s) => businessDate(s.start_at));
-    const reservationsByDate = groupBy(data.reservations.filter((r) => LIVE_RESERVATION.includes(r.status)), (r) => r.date);
     return data.events
       .filter((e) => (tab === 'upcoming' ? e.date >= today : e.date < today))
       .sort((a, b) => (tab === 'upcoming' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)))
-      .map((ev) => ({ ev, reservations: reservationsByDate[ev.date]?.length ?? 0, staffCount: shiftsByDate[ev.date]?.length ?? 0 }));
+      .map((ev) => ({ ev, staffCount: shiftsByDate[ev.date]?.length ?? 0 }));
   }, [data, tab, today]);
 
   if (loading && !data) return <Loading />;
@@ -56,7 +50,7 @@ export default function Events() {
     <>
       <PageHeader
         title="Noches"
-        subtitle="Sesiones y eventos: entradas vendidas, QR gratis y reservados"
+        subtitle="Entradas vendidas, QR gratis y reservados de Fourvenues"
         actions={
           <Button icon={<Plus />} onClick={() => setCreating(true)}>
             Nueva noche
@@ -76,7 +70,7 @@ export default function Events() {
 
       {rows.length ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {rows.map(({ ev, reservations, staffCount }) => (
+          {rows.map(({ ev, staffCount }) => (
             <Card
               key={ev.id}
               role="button"
@@ -102,7 +96,7 @@ export default function Events() {
                 <div className="tabular mt-2 grid grid-cols-3 gap-1.5 text-center">
                   <Stat icon={<Ticket />} value={ev.tickets_paid ?? ev.tickets_sold} label="vendidas" />
                   <Stat icon={<QrCode />} value={ev.tickets_free} label="QR gratis" title="Personas apuntadas en las listas de Fourvenues" />
-                  <Stat icon={<Sofa />} value={reservations} label={reservations === 1 ? 'reservado' : 'reservados'} />
+                  <Stat icon={<Sofa />} value={ev.bookings} label={ev.bookings === 1 ? 'reservado' : 'reservados'} title="Reservas de mesa en Fourvenues" />
                 </div>
               </div>
             </Card>
