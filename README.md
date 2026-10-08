@@ -14,7 +14,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Finanzas** — movimientos, cierre de caja por noche (efectivo / tarjeta por concepto), gráficos y desglose por categoría.
 - **Facturas** — archivo de facturas recibidas y emitidas (PDF o foto) con importe, IVA, estado de pago y vencimiento; se guardan en un almacenamiento privado de Supabase.
 - **Proveedores** (en Facturas) — cada proveedor tiene su apartado con sus facturas, total y pendiente de pago, y su ficha (CIF, contacto, categoría habitual).
-- **Fourvenues** (en Ajustes) — trae las noches, sus entradas vendidas y QR gratis, y las entradas de cada RRPP para sus comisiones (no apunta ingresos en Finanzas). Ver más abajo.
+- **Fourvenues** (en Ajustes) — trae las noches, sus entradas vendidas, los QR gratis de las listas y las entradas de cada RRPP para sus comisiones (no apunta ingresos en Finanzas). Ver más abajo.
 - **Conector de Claude** (en Ajustes) — pásale a Claude extractos, tickets o facturas y los registra en Finanzas y Facturas, creando los proveedores que falten. Ver más abajo.
 - **Nóminas** — devengado por empleado según fichajes, pagado y pendiente; registro de pagos.
 - **Solicitudes** — aprobar o rechazar vacaciones, ausencias y cambios de turno.
@@ -93,7 +93,7 @@ Para subir el **archivo** de la factura, Claude necesita poder ejecutar comandos
 
 La función `supabase/functions/fourvenues-sync` trae de Fourvenues (Integrations API) las noches de la última semana y de los próximos dos meses:
 
-- **Noches** — cada evento de Fourvenues crea su noche (tipo *Sesión*). Si ese día ya había una noche creada a mano, se asocia a ella en lugar de duplicarla. En *Noches* se ve, por noche, las **entradas vendidas** (de pago, por cualquier canal), los **QR gratis** (invitaciones o 0 €) y los **reservados** de la app; en el detalle, también cuántos han entrado ya.
+- **Noches** — cada evento de Fourvenues crea su noche (tipo *Sesión*). Si ese día ya había una noche creada a mano, se asocia a ella en lugar de duplicarla. En *Noches* se ve, por noche, las **entradas vendidas** (de pago, por cualquier canal), los **QR gratis** (personas apuntadas en las listas de Fourvenues, sin las canceladas) y los **reservados** de la app; en el detalle, también cuántos han entrado ya.
 - **Sin ingresos** — la sincronización **no apunta nada en Finanzas**: la venta de entradas la mete el administrador a mano (p. ej. en *Entradas online* o en el cierre de caja).
 - **Comisiones RRPP** — las entradas vendidas con el enlace de cada RRPP rellenan sus *Entradas* de esa noche (cantidad y precio medio), y la comisión se calcula con los % que ya hay configurados. Las personas de lista siguen siendo a mano.
 
@@ -106,7 +106,7 @@ Todo lo importado lleva el id de Fourvenues: sincronizar varias veces no duplica
 4. En la app: *Ajustes → Fourvenues → Sincronizar ahora*. Para traer noches más antiguas (hasta 180 días): *Traer noches anteriores*.
 5. *Asociar RRPP*: cada usuario de Fourvenues que vende entradas se asocia a su ficha. Si el email de Fourvenues coincide con el de su ficha, se asocia solo. Mientras un RRPP no esté asociado, sus ventas no cuentan en sus comisiones (Ajustes avisa).
 
-Después se sincroniza sola al abrir *Noches* (como mucho cada 10 minutos). La clave necesita acceso a los eventos, las entradas y los usuarios de Fourvenues.
+Después se sincroniza sola al abrir *Noches* (como mucho cada 10 minutos). La clave necesita acceso a los eventos, las entradas, las listas y los usuarios de Fourvenues (sin acceso a las listas, la sincronización sigue pero los QR gratis salen como "—" y Ajustes lo avisa).
 
 ## Despliegue
 
