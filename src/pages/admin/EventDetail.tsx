@@ -66,7 +66,11 @@ export default function EventDetail() {
             {ev.expected_attendance != null && <span className="text-[13px] text-ink-2">Aforo previsto {fmtNum(ev.expected_attendance, 0)}</span>}
             {ev.tickets_sold != null && (
               <span className="text-[13px] text-ink-2">
-                Fourvenues: {fmtNum(ev.tickets_sold, 0)} con entrada{ev.tickets_entered ? ` · ${fmtNum(ev.tickets_entered, 0)} dentro` : ''}
+                Fourvenues:{' '}
+                {ev.tickets_paid != null
+                  ? `${fmtNum(ev.tickets_paid, 0)} vendidas · ${fmtNum(ev.tickets_free ?? 0, 0)} QR gratis`
+                  : `${fmtNum(ev.tickets_sold, 0)} con entrada`}
+                {ev.tickets_entered ? ` · ${fmtNum(ev.tickets_entered, 0)} dentro` : ''}
               </span>
             )}
           </div>

@@ -67,6 +67,9 @@ export interface ClubEvent {
   /** Fourvenues: personas con entrada y cuántas han entrado ya */
   tickets_sold?: number | null;
   tickets_entered?: number | null;
+  /** Fourvenues: de ellas, con entrada de pago y con QR gratis / invitación */
+  tickets_paid?: number | null;
+  tickets_free?: number | null;
   fourvenues_synced_at?: string | null;
   created_at: string;
 }
@@ -352,6 +355,10 @@ export interface FourvenuesResult {
   created: number;
   linked: number;
   moved: number;
+  /** Entradas vendidas y QR gratis (las versiones anteriores de la función no las traen) */
+  paid?: number;
+  free?: number;
+  /** Venta online (para las comisiones de los RRPP) */
   tickets: number;
   revenue: number;
   rrpp: number;

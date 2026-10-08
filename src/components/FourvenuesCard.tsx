@@ -17,7 +17,7 @@ function resultText(r: FourvenuesResult) {
   const nights = [r.created && `${r.created} creadas`, r.linked && `${r.linked} asociadas`, r.moved && `${r.moved} con fecha cambiada`].filter(Boolean);
   return [
     `${r.events} ${r.events === 1 ? 'noche' : 'noches'}${nights.length ? ` (${nights.join(', ')})` : ''}`,
-    `${fmtNum(r.tickets, 0)} entradas online · ${fmtMoney(r.revenue)}`,
+    r.paid != null ? `${fmtNum(r.paid, 0)} entradas vendidas · ${fmtNum(r.free ?? 0, 0)} QR gratis` : `${fmtNum(r.tickets, 0)} entradas online`,
     r.rrpp ? `entradas de ${r.rrpp} RRPP` : null,
   ]
     .filter(Boolean)
@@ -62,7 +62,7 @@ export function FourvenuesCard() {
             <Ticket className="h-4 w-4 text-accent" /> Fourvenues
           </span>
         }
-        subtitle="Trae las noches, la venta de entradas online (ingresos de cada noche) y las entradas que vende cada RRPP."
+        subtitle="Trae las noches, sus entradas vendidas y QR gratis, y las entradas que vende cada RRPP. No apunta ingresos en Finanzas."
         action={status?.configured ? <Badge tone={status.env === 'alpha' ? 'orange' : 'green'}>{status.env === 'alpha' ? 'Pruebas' : 'Producción'}</Badge> : undefined}
       />
       <div className="space-y-3 px-5 pb-5 text-[13px]">
@@ -134,7 +134,7 @@ export function FourvenuesCard() {
             <Input type="date" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} />
           </Field>
           <p className="text-[13px] text-ink-2">
-            Crea las noches que falten y rellena sus entradas online y las de cada RRPP. Lo que ya estaba importado se actualiza (no se duplica). Puede tardar un minuto.
+            Crea las noches que falten y rellena sus entradas vendidas, los QR gratis y las entradas de cada RRPP. Lo que ya estaba importado se actualiza (no se duplica). Puede tardar un minuto.
           </p>
         </div>
       </Modal>

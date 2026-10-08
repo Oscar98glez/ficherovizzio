@@ -1,15 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PartyPopper, Plus, Ticket, Users } from 'lucide-react';
+import { PartyPopper, Plus, QrCode, Sofa, Ticket, Users } from 'lucide-react';
 import { EventForm } from '../../components/finance-forms';
 import { Badge, Button, Card, EmptyState, ErrorBox, Loading, PageHeader, Segmented } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
-import { fmtDate, fmtMoney0, fmtNum, fmtWeekday, fmtMoneyExact } from '../../lib/format';
+import { fmtDate, fmtNum, fmtWeekday } from '../../lib/format';
 import { autoSyncFourvenues } from '../../lib/fourvenues';
-import { cx, entryCost, groupBy, sumBy } from '../../lib/utils';
+import type { ReservationStatus } from '../../lib/types';
+import { groupBy } from '../../lib/utils';
+
+/** Reservados que cuentan para la noche (sin cancelados ni los que no se presentaron) */
+const LIVE_RESERVATION: ReservationStatus[] = ['pending', 'confirmed', 'arrived'];
 
 type Tab = 'upcoming' | 'past';
 
@@ -22,14 +26,12 @@ export default function Events() {
   const { data, loading, error, reload } = useLoad(async () => {
     const from = isoDate(addDays(businessToday(), -90));
     const to = isoDate(addDays(businessToday(), 120));
-    const [events, entries, tx, shifts, employees] = await Promise.all([
+    const [events, shifts, reservations] = await Promise.all([
       api.events.list({ gte: ['date', from], lt: ['date', to], order: ['date', 'asc'] }),
-      api.timeEntries.list({ gte: ['clock_in', businessStart(from)], lt: ['clock_in', businessStart(today)] }),
-      api.transactions.list({ gte: ['date', from], lt: ['date', to] }),
       api.shifts.list({ gte: ['start_at', businessStart(today)], lt: ['start_at', businessStart(to)] }),
-      api.employees.list(),
+      api.reservations.list({ gte: ['date', from], lt: ['date', to] }).catch(() => []),
     ]);
-    return { events, entries, tx, shifts, employees };
+    return { events, shifts, reservations };
   }, []);
 
   // Trae de Fourvenues las noches y la venta online (el servidor no lo repite si se hizo hace poco)
@@ -39,20 +41,12 @@ export default function Events() {
 
   const rows = useMemo(() => {
     if (!data) return [];
-    const entriesByDate = groupBy(data.entries, (e) => businessDate(e.clock_in));
     const shiftsByDate = groupBy(data.shifts.filter((s) => s.status !== 'cancelled'), (s) => businessDate(s.start_at));
-    const txByEvent = groupBy(data.tx.filter((t) => t.event_id), (t) => t.event_id!);
+    const reservationsByDate = groupBy(data.reservations.filter((r) => LIVE_RESERVATION.includes(r.status)), (r) => r.date);
     return data.events
       .filter((e) => (tab === 'upcoming' ? e.date >= today : e.date < today))
       .sort((a, b) => (tab === 'upcoming' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)))
-      .map((ev) => {
-        const t = txByEvent[ev.id] ?? [];
-        const income = sumBy(t.filter((x) => x.kind === 'income'), (x) => x.amount);
-        const expenses = sumBy(t.filter((x) => x.kind === 'expense'), (x) => x.amount);
-        const staff = sumBy(entriesByDate[ev.date] ?? [], (e) => entryCost(e));
-        const planned = shiftsByDate[ev.date] ?? [];
-        return { ev, income, result: income - expenses - staff, staffCount: planned.length };
-      });
+      .map((ev) => ({ ev, reservations: reservationsByDate[ev.date]?.length ?? 0, staffCount: shiftsByDate[ev.date]?.length ?? 0 }));
   }, [data, tab, today]);
 
   if (loading && !data) return <Loading />;
@@ -62,7 +56,7 @@ export default function Events() {
     <>
       <PageHeader
         title="Noches"
-        subtitle="Sesiones, eventos y su rentabilidad"
+        subtitle="Sesiones y eventos: entradas vendidas, QR gratis y reservados"
         actions={
           <Button icon={<Plus />} onClick={() => setCreating(true)}>
             Nueva noche
@@ -82,7 +76,7 @@ export default function Events() {
 
       {rows.length ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {rows.map(({ ev, income, result, staffCount }) => (
+          {rows.map(({ ev, reservations, staffCount }) => (
             <Card
               key={ev.id}
               role="button"
@@ -98,32 +92,18 @@ export default function Events() {
                 <div className="truncate text-[16px] font-semibold">{ev.name}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
                   <Badge tone={EVENT_KINDS[ev.kind].tone}>{EVENT_KINDS[ev.kind].label}</Badge>
-                  {ev.tickets_sold != null && (
-                    <span className="flex items-center gap-1" title="Personas con entrada en Fourvenues">
-                      <Ticket className="h-3.5 w-3.5" /> {fmtNum(ev.tickets_sold, 0)}
-                    </span>
-                  )}
                   {ev.expected_attendance != null && (
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1" title="Aforo previsto">
                       <Users className="h-3.5 w-3.5" /> {fmtNum(ev.expected_attendance, 0)}
                     </span>
                   )}
+                  {tab === 'upcoming' && staffCount > 0 && <span>{staffCount} pers. de turno</span>}
                 </div>
-              </div>
-              <div className="shrink-0 text-right">
-                {tab === 'past' ? (
-                  <>
-                    <div className={cx('tabular text-[17px] font-semibold', result >= 0 ? 'text-green' : 'text-red')}>
-                      {result >= 0 ? '+' : ''}
-                      {fmtMoneyExact(result)}
-                    </div>
-                    <div className="tabular text-[12px] text-ink-2">{fmtMoney0(income)} ingresos</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="tabular text-[17px] font-semibold">{staffCount} pers.</div>
-                  </>
-                )}
+                <div className="tabular mt-2 grid grid-cols-3 gap-1.5 text-center">
+                  <Stat icon={<Ticket />} value={ev.tickets_paid ?? ev.tickets_sold} label="vendidas" />
+                  <Stat icon={<QrCode />} value={ev.tickets_free} label="QR gratis" />
+                  <Stat icon={<Sofa />} value={reservations} label={reservations === 1 ? 'reservado' : 'reservados'} />
+                </div>
               </div>
             </Card>
           ))}
@@ -141,5 +121,18 @@ export default function Events() {
 
       <EventForm open={creating} onClose={() => setCreating(false)} onSaved={(e) => navigate(`/noches/${e.id}`)} />
     </>
+  );
+}
+
+/** Cifra de la noche: entradas vendidas, QR gratis o reservados ("—" si aún no hay dato de Fourvenues) */
+function Stat({ icon, value, label }: { icon: ReactNode; value: number | null | undefined; label: string }) {
+  return (
+    <div className="rounded-lg bg-fill/60 px-1 py-1.5">
+      <div className="flex items-center justify-center gap-1 text-[15px] font-semibold [&_svg]:h-3.5 [&_svg]:w-3.5 [&_svg]:text-ink-2">
+        {icon}
+        {value == null ? '—' : fmtNum(value, 0)}
+      </div>
+      <div className="text-[11px] text-ink-2">{label}</div>
+    </div>
   );
 }

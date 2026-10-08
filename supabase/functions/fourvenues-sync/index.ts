@@ -4,8 +4,9 @@
 //  Trae de Fourvenues, para las noches de los últimos días y las próximas:
 //  · Noches: cada evento crea su noche en public.events (o se asocia a la
 //    que ya hubiera ese día sin evento de Fourvenues).
-//  · Ingresos: lo vendido online en cada noche, en un único movimiento de
-//    "Entradas online" (método tarjeta) que se actualiza en cada sincronización.
+//  · Entradas de cada noche: vendidas (de pago, cualquier canal), QR gratis
+//    (invitaciones o 0 €) y cuántas personas han entrado. No se apunta ningún
+//    ingreso en Finanzas: la venta la mete el administrador a mano.
 //  · Comisiones RRPP: las entradas vendidas con el enlace de cada RRPP pasan a
 //    public.rrpp_ticket_sales (cantidad y precio medio; la lista sigue a mano).
 //    El RRPP de Fourvenues se asocia a su ficha por employees.fourvenues_user_id
@@ -53,11 +54,9 @@ const LOCK_MS = 5 * 60_000;
 const REQUEST_GAP_MS = 120;
 const TICKETS_PAGE = 500;
 
-/** Categoría de ingresos de lo vendido online (la taquilla de la puerta sigue en el cierre de caja) */
-export const CATEGORY = 'Entradas online';
 /**
- * Entradas que no son venta online: las invitaciones (0 €) y las vendidas en la puerta con
- * la taquilla de Fourvenues (ya se cuentan como "Taquilla" en el cierre de caja de la noche).
+ * Entradas que no cuentan para las comisiones de los RRPP: las invitaciones (0 €) y las
+ * vendidas en la puerta con la taquilla de Fourvenues.
  */
 const NOT_ONLINE_SALES = new Set(['invitation', 'box-office']);
 
@@ -149,6 +148,9 @@ export interface Sales {
 export interface TicketSummary {
   /** Personas con entrada (cualquier tipo, sin canceladas ni devueltas del todo) */
   people: number;
+  /** De ellas: con entrada de pago (cualquier canal) y con QR gratis / invitación */
+  paid: number;
+  free: number;
   /** Personas que ya han entrado */
   entered: number;
   /** Venta online: personas e importe */
@@ -159,7 +161,7 @@ export interface TicketSummary {
 }
 
 export function summarize(tickets: FvTicket[]): TicketSummary {
-  const out: TicketSummary = { people: 0, entered: 0, sold: 0, revenue: 0, byReferral: new Map() };
+  const out: TicketSummary = { people: 0, paid: 0, free: 0, entered: 0, sold: 0, revenue: 0, byReferral: new Map() };
   for (const t of tickets) {
     if (!isValid(t)) continue;
     const net = netAmount(t);
@@ -167,6 +169,9 @@ export function summarize(tickets: FvTicket[]): TicketSummary {
     const p = people(t);
     out.people += p;
     out.entered += Math.min(p, Math.max(0, Math.round(num(t.enter))));
+    // QR gratis: invitaciones o entradas de 0 €
+    if (t.sale_type === 'invitation' || num(t.total_paid ?? t.price) <= 0) out.free += p;
+    else out.paid += p;
     if (NOT_ONLINE_SALES.has(t.sale_type ?? '') || net <= 0) continue;
     out.sold += p;
     out.revenue += net;
@@ -284,7 +289,10 @@ export interface SyncResult {
   created: number;
   linked: number;
   moved: number;
-  /** Venta online total de la ventana */
+  /** Entradas vendidas y QR gratis de la ventana */
+  paid: number;
+  free: number;
+  /** Venta online (para las comisiones de los RRPP) */
   tickets: number;
   revenue: number;
   /** Filas de entradas de RRPP escritas y RRPP asociados por email en esta sincronización */
@@ -304,7 +312,7 @@ const fullName = (u: FvUser) => [u.name, u.last_name].filter(Boolean).join(' ').
 
 export async function runSync(db: SupabaseClient, from: string, to: string): Promise<SyncResult> {
   const now = new Date().toISOString();
-  const result: SyncResult = { from, to, events: 0, created: 0, linked: 0, moved: 0, tickets: 0, revenue: 0, rrpp: 0, rrppLinked: 0, unmatched: [], warnings: [] };
+  const result: SyncResult = { from, to, events: 0, created: 0, linked: 0, moved: 0, paid: 0, free: 0, tickets: 0, revenue: 0, rrpp: 0, rrppLinked: 0, unmatched: [], warnings: [] };
 
   // ---------- Noches ----------
   // Se pide un día más por cada lado por si Fourvenues filtra por la fecha "de calendario"
@@ -363,38 +371,21 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     if (local) synced.push({ fvId: e._id, local });
   }
 
-  // ---------- Entradas e ingresos ----------
+  // ---------- Entradas de cada noche (sin ingresos: la venta se apunta a mano en Finanzas) ----------
   for (const { fvId, local } of synced) {
     const s = summarize(await eventTickets(fvId));
+    result.paid += s.paid;
+    result.free += s.free;
     result.tickets += s.sold;
     result.revenue = round2(result.revenue + s.revenue);
 
     check(
-      await db.from('events').update({ tickets_sold: s.people, tickets_entered: s.entered, fourvenues_synced_at: now }).eq('id', local.id),
+      await db
+        .from('events')
+        .update({ tickets_sold: s.people, tickets_paid: s.paid, tickets_free: s.free, tickets_entered: s.entered, fourvenues_synced_at: now })
+        .eq('id', local.id),
       'Noches',
     );
-
-    const externalId = `fourvenues:entradas:${fvId}`;
-    if (s.revenue > 0) {
-      check(
-        await db.from('transactions').upsert(
-          {
-            external_id: externalId,
-            kind: 'income',
-            category: CATEGORY,
-            amount: s.revenue,
-            method: 'tarjeta',
-            date: local.date,
-            event_id: local.id,
-            description: `Fourvenues · ${s.sold} ${s.sold === 1 ? 'entrada' : 'entradas'} online`,
-          },
-          { onConflict: 'external_id' },
-        ),
-        'Ingresos',
-      );
-    } else {
-      check(await db.from('transactions').delete().eq('external_id', externalId), 'Ingresos');
-    }
 
     const night = rrppByNight.get(local.date) ?? new Map<string, Sales>();
     for (const [ref, v] of s.byReferral) {
