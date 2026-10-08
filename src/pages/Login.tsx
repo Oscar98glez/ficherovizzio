@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
 import { useAuth } from '../auth';
@@ -7,6 +7,7 @@ import { useFeedback } from '../components/overlay';
 import { Button, Field, Input } from '../components/ui';
 import { errorMessage } from '../lib/api';
 import { APP_NAME, IS_DEMO } from '../lib/config';
+import { AUTH_LINK_ERROR } from '../lib/supabase';
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
@@ -34,6 +35,13 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Enlace del email caducado o ya usado: Supabase vuelve a la app sin sesión y con el error en la dirección
+  useEffect(() => {
+    if (AUTH_LINK_ERROR)
+      toast.error('El enlace del email ha caducado o ya se ha usado. Escribe tu email y pulsa «¿Has olvidado la contraseña?» para recibir otro.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -51,7 +59,7 @@ export default function Login() {
     if (!email) return toast.info('Escribe tu email y vuelve a pulsar');
     try {
       await resetPassword(email);
-      toast.success('Te hemos enviado un email para restablecer la contraseña');
+      toast.success('Te hemos enviado un email: ábrelo desde este móvil y elige tu contraseña nueva');
     } catch (err) {
       toast.error(errorMessage(err));
     }

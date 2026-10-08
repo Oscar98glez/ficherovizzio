@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { useFeedback } from '../../components/overlay';
-import { Avatar, Button, Card, CardHeader, Input, PageHeader, SectionTitle } from '../../components/ui';
+import { Avatar, Button, Card, CardHeader, Field, Input, PageHeader, SectionTitle } from '../../components/ui';
 import { errorMessage } from '../../lib/api';
 import { IS_DEMO } from '../../lib/config';
 import { DEPARTMENTS } from '../../lib/constants';
@@ -13,20 +13,31 @@ import { PhotoPicker } from '../../components/PhotoPicker';
 import { api } from '../../lib/api';
 import { fullName } from '../../lib/utils';
 
+/** Comprueba la contraseña nueva antes de enviarla; devuelve el error o null */
+export function checkNewPassword(pw: string, repeat: string, current?: string): string | null {
+  if (pw.length < 6) return 'La contraseña nueva debe tener al menos 6 caracteres.';
+  if (pw !== repeat) return 'Las dos contraseñas nuevas no coinciden.';
+  if (current !== undefined && pw === current) return 'La nueva contraseña tiene que ser distinta de la actual.';
+  return null;
+}
+
 export function PasswordCard() {
-  const { updatePassword } = useAuth();
+  const { updatePassword, resetPassword, email } = useAuth();
   const { toast } = useFeedback();
-  const [pw, setPw] = useState('');
+  const empty = { current: '', pw: '', repeat: '' };
+  const [f, setF] = useState(empty);
   const [saving, setSaving] = useState(false);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (pw.length < 6) return toast.error('Mínimo 6 caracteres');
+    if (!f.current) return toast.error('Escribe tu contraseña actual');
+    const problem = checkNewPassword(f.pw, f.repeat, f.current);
+    if (problem) return toast.error(problem);
     setSaving(true);
     try {
-      await updatePassword(pw);
-      setPw('');
-      toast.success('Contraseña actualizada');
+      await updatePassword(f.pw, f.current);
+      setF(empty);
+      toast.success('Contraseña cambiada');
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -34,14 +45,39 @@ export function PasswordCard() {
     }
   }
 
+  async function forgot() {
+    if (!email) return;
+    try {
+      await resetPassword(email);
+      toast.success(`Te hemos enviado un email a ${email} para crear una contraseña nueva`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
   return (
     <Card>
       <CardHeader title="Cambiar contraseña" />
-      <form onSubmit={submit} className="flex gap-2 px-5 pb-5">
-        <Input type="password" autoComplete="new-password" placeholder="Nueva contraseña" value={pw} onChange={(e) => setPw(e.target.value)} />
-        <Button type="submit" variant="secondary" loading={saving} className="!h-11">
-          Guardar
-        </Button>
+      <form onSubmit={submit} className="space-y-3 px-5 pb-5">
+        <Field label="Contraseña actual">
+          <Input type="password" autoComplete="current-password" value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} />
+        </Field>
+        <Field label="Contraseña nueva">
+          <Input type="password" autoComplete="new-password" value={f.pw} onChange={(e) => setF({ ...f, pw: e.target.value })} placeholder="Mínimo 6 caracteres" />
+        </Field>
+        <Field label="Repite la contraseña nueva">
+          <Input type="password" autoComplete="new-password" value={f.repeat} onChange={(e) => setF({ ...f, repeat: e.target.value })} />
+        </Field>
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+          {email && (
+            <button type="button" onClick={forgot} className="text-[14px] text-accent hover:underline">
+              ¿No recuerdas la actual?
+            </button>
+          )}
+          <Button type="submit" loading={saving} className="ml-auto">
+            Cambiar contraseña
+          </Button>
+        </div>
       </form>
     </Card>
   );
