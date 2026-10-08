@@ -7,6 +7,8 @@
 //  · Entradas de cada noche: vendidas (de pago, cualquier canal), QR gratis
 //    (las personas apuntadas en las listas de Fourvenues) y cuántas han entrado.
 //    No se apunta ningún ingreso en Finanzas: la venta la mete el administrador a mano.
+//  · Desglose por RRPP de cada noche (public.fourvenues_rrpp_nights): entradas de
+//    pago y personas en listas de cada RRPP, con el nombre que tiene en Fourvenues.
 //  · Comisiones RRPP: las entradas vendidas con el enlace de cada RRPP pasan a
 //    public.rrpp_ticket_sales (cantidad y precio medio; la lista sigue a mano).
 //    El RRPP de Fourvenues se asocia a su ficha por employees.fourvenues_user_id
@@ -113,6 +115,8 @@ export interface FvListEntry {
   for?: number;
   /** Personas que han entrado */
   enter?: number;
+  /** RRPP de la lista (usuario de Fourvenues), como en las entradas */
+  referral_id?: string | null;
 }
 
 export interface FvUser {
@@ -162,6 +166,8 @@ export interface TicketSummary {
   people: number;
   /** De ellas, con entrada de pago (cualquier canal); las invitaciones de 0 € no cuentan */
   paid: number;
+  /** Personas con entrada de pago de cada RRPP ('' = sin RRPP) */
+  paidByReferral: Map<string, number>;
   /** Personas que ya han entrado */
   entered: number;
   /** Venta online: personas e importe */
@@ -172,7 +178,7 @@ export interface TicketSummary {
 }
 
 export function summarize(tickets: FvTicket[]): TicketSummary {
-  const out: TicketSummary = { people: 0, paid: 0, entered: 0, sold: 0, revenue: 0, byReferral: new Map() };
+  const out: TicketSummary = { people: 0, paid: 0, paidByReferral: new Map(), entered: 0, sold: 0, revenue: 0, byReferral: new Map() };
   for (const t of tickets) {
     if (!isValid(t)) continue;
     const net = netAmount(t);
@@ -180,7 +186,11 @@ export function summarize(tickets: FvTicket[]): TicketSummary {
     const p = people(t);
     out.people += p;
     out.entered += Math.min(p, Math.max(0, Math.round(num(t.enter))));
-    if (t.sale_type !== 'invitation' && num(t.total_paid ?? t.price) > 0) out.paid += p;
+    if (t.sale_type !== 'invitation' && num(t.total_paid ?? t.price) > 0) {
+      out.paid += p;
+      const ref = t.referral_id ?? '';
+      out.paidByReferral.set(ref, (out.paidByReferral.get(ref) ?? 0) + p);
+    }
     if (NOT_ONLINE_SALES.has(t.sale_type ?? '') || net <= 0) continue;
     out.sold += p;
     out.revenue += net;
@@ -198,12 +208,15 @@ export function summarize(tickets: FvTicket[]): TicketSummary {
 
 /** Listas (QR gratis): personas apuntadas, sin las canceladas, y cuántas han entrado */
 export function summarizeLists(entries: FvListEntry[]) {
-  const out = { people: 0, entered: 0 };
+  /** byReferral: personas en las listas de cada RRPP ('' = sin RRPP) */
+  const out = { people: 0, entered: 0, byReferral: new Map<string, number>() };
   for (const e of entries) {
     if (statuses(e).some((s) => s === 'cancelled')) continue;
     const p = people(e);
     out.people += p;
     out.entered += Math.min(p, Math.max(0, Math.round(num(e.enter))));
+    const ref = e.referral_id ?? '';
+    out.byReferral.set(ref, (out.byReferral.get(ref) ?? 0) + p);
   }
   return out;
 }
@@ -405,6 +418,8 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
 
   // ---------- Entradas de cada noche (sin ingresos: la venta se apunta a mano en Finanzas) ----------
   let listsUnavailable = false;
+  /** Desglose por RRPP de cada noche: entradas de pago y personas en listas */
+  const breakdowns: { eventId: string; tickets: Map<string, number>; lists: Map<string, number> | null }[] = [];
   for (const { fvId, local } of synced) {
     const s = summarize(await eventTickets(fvId));
     result.paid += s.paid;
@@ -412,7 +427,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     result.revenue = round2(result.revenue + s.revenue);
 
     // QR gratis: las listas de Fourvenues. Si la clave no tiene acceso a ellas, se sigue sin ellas
-    let lists: { people: number; entered: number } | null = null;
+    let lists: ReturnType<typeof summarizeLists> | null = null;
     if (!listsUnavailable) {
       try {
         lists = summarizeLists(await eventLists(fvId));
@@ -438,6 +453,8 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
       'Noches',
     );
 
+    breakdowns.push({ eventId: local.id, tickets: s.paidByReferral, lists: lists?.byReferral ?? null });
+
     const night = rrppByNight.get(local.date) ?? new Map<string, Sales>();
     for (const [ref, v] of s.byReferral) {
       const acc = night.get(ref) ?? { people: 0, revenue: 0 };
@@ -460,15 +477,19 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
       referrals.set(ref, acc);
     }
 
+  // Usuarios de Fourvenues: para el nombre de cada RRPP en el desglose y para asociarlos a su ficha
   let users = new Map<string, FvUser>();
   const missing = [...referrals.keys()].filter((id) => !byFvUser.has(id));
-  if (missing.length) {
+  const anyReferral = breakdowns.some((b) => [...b.tickets.keys(), ...(b.lists?.keys() ?? [])].some(Boolean));
+  if (missing.length || anyReferral) {
     try {
       users = new Map(((await fv<FvUser[]>('/users/')) ?? []).map((u) => [u._id, u]));
     } catch (e) {
       if (!(e instanceof FvError)) throw e;
-      result.warnings.push(`${e.message} Asocia los RRPP a mano en Ajustes.`);
+      result.warnings.push(`${e.message} Asocia los RRPP a mano en Ajustes; en el desglose de cada noche saldrán sin nombre.`);
     }
+  }
+  if (missing.length) {
     // Se asocian solos los RRPP cuyo email de Fourvenues coincide con el de su ficha
     for (const id of missing) {
       const email = users.get(id)?.email?.trim().toLowerCase();
@@ -484,6 +505,26 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     .filter(([id]) => !byFvUser.has(id))
     .map(([id, v]) => ({ id, name: users.has(id) ? fullName(users.get(id)!) : null, email: users.get(id)?.email ?? null, tickets: v.people, revenue: v.revenue }))
     .sort((a, b) => b.revenue - a.revenue);
+
+  // Desglose por RRPP de cada noche: se rehace entero
+  for (const b of breakdowns) {
+    const refs = new Set([...b.tickets.keys(), ...(b.lists?.keys() ?? [])]);
+    check(await db.from('fourvenues_rrpp_nights').delete().eq('event_id', b.eventId), 'Desglose por RRPP');
+    if (!refs.size) continue;
+    check(
+      await db.from('fourvenues_rrpp_nights').insert(
+        [...refs].map((ref) => ({
+          event_id: b.eventId,
+          fourvenues_user_id: ref,
+          name: ref && users.has(ref) ? fullName(users.get(ref)!) : null,
+          tickets: b.tickets.get(ref) ?? 0,
+          lists: b.lists ? b.lists.get(ref) ?? 0 : null,
+          synced_at: now,
+        })),
+      ),
+      'Desglose por RRPP',
+    );
+  }
 
   for (const [date, night] of rrppByNight) {
     const rows = new Map<string, Sales>();

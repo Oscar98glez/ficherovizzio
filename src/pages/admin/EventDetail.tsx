@@ -10,7 +10,7 @@ import { EVENT_KINDS, METHODS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, isoDate, parseDate } from '../../lib/dates';
 import { fmtDateFull, fmtHours, fmtMoney, fmtMoney0, fmtNum, fmtTime, fmtMoneyExact, fmtShiftTimes } from '../../lib/format';
 import { isFourvenuesTx } from '../../lib/fourvenues';
-import type { Transaction } from '../../lib/types';
+import type { Employee, FourvenuesRrppNight, Reservation, ReservationStatus, Transaction } from '../../lib/types';
 import { byId, cx, entryCost, entryHours, fullName, groupBy, sumBy, categoryRank, compareByCategory } from '../../lib/utils';
 
 export default function EventDetail() {
@@ -24,14 +24,17 @@ export default function EventDetail() {
     const event = await api.events.get(id);
     if (!event) return null;
     const next = isoDate(addDays(parseDate(event.date), 1));
-    const [entries, tx, shifts, employees, events] = await Promise.all([
+    const [entries, tx, shifts, employees, events, rrppNights, reservations] = await Promise.all([
       api.timeEntries.list({ gte: ['clock_in', businessStart(event.date)], lt: ['clock_in', businessStart(next)] }),
       api.transactions.list({ eq: { event_id: id } }),
       api.shifts.list({ gte: ['start_at', businessStart(event.date)], lt: ['start_at', businessStart(next)] }),
       api.employees.list({ order: ['first_name', 'asc'] }),
       api.events.list({ gte: ['date', isoDate(addDays(parseDate(event.date), -14))], lt: ['date', isoDate(addDays(parseDate(event.date), 14))], order: ['date', 'asc'] }),
+      // Desglose por RRPP de Fourvenues y reservados de la noche (si faltan las migraciones, la noche se ve igual)
+      event.fourvenues_id ? api.fourvenuesRrppNights.list({ eq: { event_id: id } }).catch(() => [] as FourvenuesRrppNight[]) : ([] as FourvenuesRrppNight[]),
+      api.reservations.list({ eq: { date: event.date } }).catch(() => [] as Reservation[]),
     ]);
-    return { event, entries, tx, shifts, employees, events };
+    return { event, entries, tx, shifts, employees, events, rrppNights, reservations };
   }, [id]);
 
   if (loading && !data) return <Loading />;
@@ -104,6 +107,8 @@ export default function EventDetail() {
           sub={totalIncome ? `Margen ${Math.round((result / totalIncome) * 100)}%` : undefined}
         />
       </div>
+
+      {ev.fourvenues_id && <RrppBreakdown rows={data.rrppNights} reservations={data.reservations} employees={data.employees} />}
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:mt-5 lg:grid-cols-2 lg:gap-5">
         <Card className="p-5">
@@ -189,5 +194,103 @@ export default function EventDetail() {
         onSaved={reload}
       />
     </>
+  );
+}
+
+/** Reservados que cuentan (sin cancelados ni los que no se presentaron) */
+const LIVE_RESERVATION: ReservationStatus[] = ['pending', 'confirmed', 'arrived'];
+
+/**
+ * Por RRPP (con su nombre de Fourvenues): entradas de pago y personas en listas de la sincronización,
+ * y los reservados de la app de esa noche. Un RRPP de la app cuenta como su usuario de Fourvenues si
+ * está asociado (Ajustes → Fourvenues); si no, sale con el nombre de su ficha.
+ */
+function RrppBreakdown({ rows, reservations, employees }: { rows: FourvenuesRrppNight[]; reservations: Reservation[]; employees: Employee[] }) {
+  const emps = byId(employees);
+  const byFvUser = new Map(employees.filter((e) => e.fourvenues_user_id).map((e) => [e.fourvenues_user_id!, e]));
+  type Row = { key: string; name: string; employee?: Employee; linked: boolean; tickets: number; lists: number | null; reservations: number };
+  const map = new Map<string, Row>();
+  const get = (key: string, init: () => Omit<Row, 'key' | 'tickets' | 'lists' | 'reservations'>) => {
+    let r = map.get(key);
+    if (!r) map.set(key, (r = { key, tickets: 0, lists: null, reservations: 0, ...init() }));
+    return r;
+  };
+
+  for (const x of rows) {
+    const emp = x.fourvenues_user_id ? byFvUser.get(x.fourvenues_user_id) : undefined;
+    const r = get(x.fourvenues_user_id, () => ({
+      name: x.fourvenues_user_id ? x.name || fullName(emp) || 'Usuario de Fourvenues' : 'Sin RRPP',
+      employee: emp,
+      linked: !!emp,
+    }));
+    r.tickets += x.tickets;
+    if (x.lists != null) r.lists = (r.lists ?? 0) + x.lists;
+  }
+  for (const res of reservations.filter((x) => LIVE_RESERVATION.includes(x.status))) {
+    const emp = res.rrpp_id ? emps.get(res.rrpp_id) : undefined;
+    const key = !res.rrpp_id ? '' : emp?.fourvenues_user_id ?? `app:${res.rrpp_id}`;
+    const r = get(key, () => ({
+      name: key === '' ? 'Sin RRPP' : fullName(emp) || res.rrpp_name || 'RRPP',
+      employee: emp,
+      linked: !!emp?.fourvenues_user_id,
+    }));
+    r.reservations++;
+  }
+
+  const listed = [...map.values()].sort((a, b) =>
+    a.key === '' ? 1 : b.key === '' ? -1 : b.tickets + (b.lists ?? 0) + b.reservations - (a.tickets + (a.lists ?? 0) + a.reservations) || a.name.localeCompare(b.name),
+  );
+  const listsKnown = rows.some((x) => x.lists != null);
+  const total = { tickets: sumBy(listed, (r) => r.tickets), lists: sumBy(listed, (r) => r.lists ?? 0), reservations: sumBy(listed, (r) => r.reservations) };
+  const cols = 'grid-cols-[minmax(0,1fr)_44px_44px_40px] sm:grid-cols-[minmax(0,1fr)_90px_90px_96px]';
+
+  return (
+    <Card className="mt-4 lg:mt-5">
+      <CardHeader
+        title="Por RRPP"
+        subtitle={`Entradas y listas de Fourvenues${rows[0] ? ` (sincronizado ${fmtTime(rows[0].synced_at)})` : ''}; reservados de la app`}
+      />
+      {listed.length ? (
+        <div className="pb-2">
+          <div className={cx('grid gap-2 border-b border-line px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3 sm:px-5 sm:text-[12px]', cols)}>
+            <span>RRPP</span>
+            <span className="text-right">
+              <span className="sm:hidden">Entr.</span>
+              <span className="hidden sm:inline">Entradas</span>
+            </span>
+            <span className="text-right">Listas</span>
+            <span className="text-right">
+              <span className="sm:hidden">Res.</span>
+              <span className="hidden sm:inline">Reservados</span>
+            </span>
+          </div>
+          <div className="divide-y divide-line">
+            {listed.map((r) => (
+              <div key={r.key} className={cx('grid items-center gap-2 px-4 py-2.5 sm:px-5', cols)}>
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <Avatar name={r.name} color={r.employee?.color ?? '#8e8e93'} src={r.employee?.photo_url} size={30} className="hidden sm:inline-grid" />
+                  <div className="min-w-0">
+                    <div className={cx('truncate text-[14px] font-medium', r.key === '' && 'text-ink-2')}>{r.name}</div>
+                    {r.key && !r.key.startsWith('app:') && !r.linked && <div className="truncate text-[12px] text-orange">Sin asociar a una ficha</div>}
+                    {r.key.startsWith('app:') && <div className="truncate text-[12px] text-ink-3">De la app (sin usuario de Fourvenues)</div>}
+                  </div>
+                </div>
+                <span className="tabular text-right text-[15px] font-semibold">{fmtNum(r.tickets, 0)}</span>
+                <span className="tabular text-right text-[15px] font-semibold">{r.lists == null ? (listsKnown ? '0' : '—') : fmtNum(r.lists, 0)}</span>
+                <span className="tabular text-right text-[15px] font-semibold">{fmtNum(r.reservations, 0)}</span>
+              </div>
+            ))}
+          </div>
+          <div className={cx('grid gap-2 border-t border-line bg-fill/40 px-4 py-2.5 text-[14px] font-semibold sm:px-5', cols)}>
+            <span>Total</span>
+            <span className="tabular text-right">{fmtNum(total.tickets, 0)}</span>
+            <span className="tabular text-right">{listsKnown ? fmtNum(total.lists, 0) : '—'}</span>
+            <span className="tabular text-right">{fmtNum(total.reservations, 0)}</span>
+          </div>
+        </div>
+      ) : (
+        <p className="px-5 pb-5 text-[14px] text-ink-2">Aún no hay datos por RRPP. Se rellenan en la próxima sincronización con Fourvenues.</p>
+      )}
+    </Card>
   );
 }

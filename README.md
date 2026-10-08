@@ -94,6 +94,7 @@ Para subir el **archivo** de la factura, Claude necesita poder ejecutar comandos
 La función `supabase/functions/fourvenues-sync` trae de Fourvenues (Integrations API) las noches de la última semana y de los próximos dos meses:
 
 - **Noches** — cada evento de Fourvenues crea su noche (tipo *Sesión*). Si ese día ya había una noche creada a mano, se asocia a ella en lugar de duplicarla. En *Noches* se ve, por noche, las **entradas vendidas** (de pago, por cualquier canal), los **QR gratis** (personas apuntadas en las listas de Fourvenues, sin las canceladas) y los **reservados** de la app; en el detalle, también cuántos han entrado ya.
+- **Por RRPP** — al abrir una noche sincronizada se ve, por cada RRPP con el nombre que tiene en Fourvenues, sus **entradas** (de pago), sus **listas** (QR gratis) y sus **reservados** (los de la app; un RRPP de la app cuenta como su usuario de Fourvenues si está asociado en Ajustes). Lo que no lleva RRPP sale como *Sin RRPP*.
 - **Sin ingresos** — la sincronización **no apunta nada en Finanzas**: la venta de entradas la mete el administrador a mano (p. ej. en *Entradas online* o en el cierre de caja).
 - **Comisiones RRPP** — las entradas vendidas con el enlace de cada RRPP rellenan sus *Entradas* de esa noche (cantidad y precio medio), y la comisión se calcula con los % que ya hay configurados. Las personas de lista siguen siendo a mano.
 

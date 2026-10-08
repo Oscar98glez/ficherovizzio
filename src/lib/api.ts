@@ -5,7 +5,7 @@ import { blobToDataUrl } from './image';
 import { kickNotifications } from './push';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
+import type { Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -60,6 +60,7 @@ const ERRORS: [RegExp, string][] = [
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
   [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
+  [/fourvenues_rrpp_nights/i, 'Falta aplicar en Supabase la migración del desglose por RRPP (20261008180000_fourvenues_rrpp_nights.sql).'],
   [/fourvenues|tickets_sold|tickets_entered|external_id/i, 'Falta aplicar en Supabase la migración de Fourvenues (20261008160000_fourvenues.sql).'],
   [/rrpp_bottle_pct|rrpp_ticket_pct|rrpp_list_fee|list_fee|list_quantity/i, 'Falta aplicar en Supabase la migración de comisiones propias de RRPP (20261005180000_rrpp_personal_commissions.sql).'],
   [/rrpp_commission_rates|rrpp_ticket_sales/i, 'Falta aplicar en Supabase la migración de comisiones de RRPP (20261005170000_rrpp_commissions.sql).'],
@@ -297,6 +298,8 @@ export const api = {
   reservations: repo<Reservation>('reservations'),
   commissionRates: repo<CommissionRate>('rrpp_commission_rates'),
   ticketSales: repo<TicketSale>('rrpp_ticket_sales'),
+  /** Desglose por RRPP de cada noche (lo escribe la sincronización con Fourvenues) */
+  fourvenuesRrppNights: repo<FourvenuesRrppNight>('fourvenues_rrpp_nights'),
   messages: repo<Message>('messages'),
   /** Al añadir destinatarios, la base de datos crea el aviso de cada uno y se envía */
   messageRecipients: notifying(repo<MessageRecipient>('message_recipients')),
