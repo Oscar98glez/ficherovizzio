@@ -41,3 +41,8 @@ jobs:
       - name: Publicar el conector de Claude (rapid-responder)
         if: steps.secrets.outputs.ok == 'true'
         run: supabase functions deploy rapid-responder --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api
+
+      # La sesión del usuario de la app se comprueba dentro de la función
+      - name: Publicar las notificaciones al móvil (notify)
+        if: steps.secrets.outputs.ok == 'true'
+        run: supabase functions deploy notify --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api

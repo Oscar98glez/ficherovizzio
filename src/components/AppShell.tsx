@@ -10,6 +10,7 @@ import {
   Inbox,
   LayoutGrid,
   LogOut,
+  MessageSquare,
   PartyPopper,
   Receipt,
   Settings,
@@ -23,6 +24,7 @@ import { useAuth } from '../auth';
 import { api } from '../lib/api';
 import { APP_NAME, IS_DEMO } from '../lib/config';
 import { cx, fullName } from '../lib/utils';
+import { PushPrompt } from './NotificationsCard';
 import { Modal } from './overlay';
 import { Avatar } from './ui';
 
@@ -44,12 +46,15 @@ export function Logo({ size = 32 }: { size?: number }) {
 
 /** Evento para avisar al menú de que han cambiado los turnos del trabajador */
 export const SHIFTS_CHANGED = 'vizzio:shifts-changed';
+/** Evento para avisar al menú de que el trabajador ha leído o respondido un mensaje */
+export const MESSAGES_CHANGED = 'vizzio:messages-changed';
 
 export function AppShell() {
   const { profile, employee, isAdmin, isRrpp, signOut } = useAuth();
   const [pending, setPending] = useState(0);
   const [unanswered, setUnanswered] = useState(0);
   const [shiftsTick, setShiftsTick] = useState(0);
+  const [inbox, setInbox] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -63,8 +68,25 @@ export function AppShell() {
   useEffect(() => {
     const onChange = () => setShiftsTick((t) => t + 1);
     window.addEventListener(SHIFTS_CHANGED, onChange);
-    return () => window.removeEventListener(SHIFTS_CHANGED, onChange);
+    window.addEventListener(MESSAGES_CHANGED, onChange);
+    return () => {
+      window.removeEventListener(SHIFTS_CHANGED, onChange);
+      window.removeEventListener(MESSAGES_CHANGED, onChange);
+    };
   }, []);
+
+  // Mensajes sin leer y tareas sin responder del trabajador
+  useEffect(() => {
+    if (isAdmin || !employee) return;
+    (async () => {
+      const rows = await api.messageRecipients.list({ eq: { employee_id: employee.id }, order: ['created_at', 'desc'], limit: 200 });
+      const open = rows.filter((r) => !r.read_at || !r.response);
+      const tasks = new Set(
+        open.length ? (await api.messages.list({ in: ['id', open.map((r) => r.message_id)] })).filter((m) => m.kind === 'task').map((m) => m.id) : [],
+      );
+      setInbox(open.filter((r) => !r.read_at || (tasks.has(r.message_id) && !r.response)).length);
+    })().catch(() => {});
+  }, [isAdmin, employee?.id, location.pathname, shiftsTick]);
   useEffect(() => {
     if (isAdmin || isRrpp || !employee) return;
     api.shifts
@@ -90,6 +112,7 @@ export function AppShell() {
             { to: '/personal', label: 'Personal', icon: Users },
             { to: '/fichajes', label: 'Fichajes', icon: Clock },
             { to: '/turnos', label: 'Turnos', icon: CalendarDays },
+            { to: '/mensajes', label: 'Mensajes', icon: MessageSquare },
             { to: '/disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
             { to: '/solicitudes', label: 'Solicitudes', icon: Inbox, badge: pending },
           ],
@@ -118,11 +141,13 @@ export function AppShell() {
             { to: '/fichar', label: 'Fichar', icon: Fingerprint },
             ...(isRrpp ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
             { to: '/mis-horas', label: 'Mis horas', icon: Clock },
+            ...(isRrpp ? [{ to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox }] : []),
             // Los RRPP no tienen turnos, disponibilidad ni solicitudes
             ...(isRrpp
               ? []
               : [
                   { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays, badge: unanswered },
+                  { to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox },
                   { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
                   { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
                 ]),
@@ -228,6 +253,7 @@ export function AppShell() {
           </div>
         )}
         <div className="mx-auto max-w-6xl px-4 pb-[calc(env(safe-area-inset-bottom)+96px)] pt-[calc(env(safe-area-inset-top)+20px)] sm:px-6 lg:px-10 lg:pb-12 lg:pt-10">
+          {!isAdmin && employee && <PushPrompt />}
           <Outlet />
         </div>
       </main>

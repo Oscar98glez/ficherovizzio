@@ -1,5 +1,5 @@
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, TIMESHEET_CATEGORY } from './constants';
-import type { Employee, PaymentMethod, Shift, TimeEntry, TxKind } from './types';
+import type { Employee, PaymentMethod, Role, Shift, TimeEntry, TxKind } from './types';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -101,3 +101,7 @@ export function downloadBlob(filename: string, blob: Blob) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+/** Tipo de usuario: el rol de su cuenta; sin cuenta, por su departamento (relaciones públicas → RRPP, cabina → DJ / técnico) */
+export const staffKind = (e: Employee, roles: Map<string, Role>): Role =>
+  (e.user_id && roles.get(e.user_id)) || (e.department === 'relaciones' ? 'rrpp' : e.department === 'cabina' ? 'tech' : 'worker');

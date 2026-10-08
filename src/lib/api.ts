@@ -1,10 +1,11 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoFiles, demoRespondShift, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoFiles, demoMarkMessageRead, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
+import { kickNotifications } from './push';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
+import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, Message, MessageRecipient, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -37,6 +38,8 @@ const ERRORS: [RegExp, string][] = [
   [/SHIFT_CLOSED/i, 'Este turno ya ha empezado o está cancelado: ya no se puede responder.'],
   [/SHIFT_NOT_FOUND/i, 'No se ha encontrado el turno.'],
   [/respond_shift/i, 'Falta aplicar en Supabase la migración 20261008130000_shift_responses.sql.'],
+  [/TASK_NOT_FOUND/i, 'No se ha encontrado la tarea.'],
+  [/public.messages|public.message_recipients|respond_task|mark_message_read/i, 'Falta aplicar en Supabase la migración de mensajes (20261008140000_messages_and_push.sql).'],
   [/email rate limit exceeded|over_email_send_rate_limit/i, 'Ahora mismo no se pueden enviar más emails de confirmación. Espera unos minutos y vuelve a intentarlo, o avisa al administrador.'],
   [/rate limit|too many requests/i, 'Demasiados intentos seguidos. Espera un par de minutos y vuelve a intentarlo.'],
   [/Invalid login credentials/i, 'Email o contraseña incorrectos.'],
@@ -253,6 +256,22 @@ function mapped<T extends { id: string }>(r: Repo<T>, fix: (row: T) => T): Repo<
   };
 }
 
+/** Tras cada cambio, pide al servidor que envíe los avisos pendientes (los crea la base de datos) */
+function notifying<T extends { id: string }>(r: Repo<T>): Repo<T> {
+  const after = async <R,>(p: Promise<R>) => {
+    const out = await p;
+    kickNotifications();
+    return out;
+  };
+  return {
+    ...r,
+    create: (v) => after(r.create(v)),
+    createMany: (v) => after(r.createMany(v)),
+    update: (id, p) => after(r.update(id, p)),
+    remove: (id) => after(r.remove(id)),
+  };
+}
+
 const withCurrentCategory = (t: Transaction) => {
   const category = normalizeCategory(t.category);
   return category === t.category ? t : { ...t, category };
@@ -263,7 +282,7 @@ export const api = {
   employees: repo<Employee>('employees'),
   events: repo<ClubEvent>('events'),
   timeEntries: repo<TimeEntry>('time_entries'),
-  shifts: repo<Shift>('shifts'),
+  shifts: notifying(repo<Shift>('shifts')),
   transactions: mapped(repo<Transaction>('transactions'), withCurrentCategory),
   requests: repo<LeaveRequest>('leave_requests'),
   availability: repo<Availability>('availability'),
@@ -274,6 +293,9 @@ export const api = {
   reservations: repo<Reservation>('reservations'),
   commissionRates: repo<CommissionRate>('rrpp_commission_rates'),
   ticketSales: repo<TicketSale>('rrpp_ticket_sales'),
+  messages: repo<Message>('messages'),
+  /** Al añadir destinatarios, la base de datos crea el aviso de cada uno y se envía */
+  messageRecipients: notifying(repo<MessageRecipient>('message_recipients')),
 
   /** Fichar entrada del usuario conectado (hora del servidor). */
   clockIn: (notes?: string) =>
@@ -291,6 +313,16 @@ export const api = {
   /** El trabajador acepta o rechaza uno de sus turnos */
   respondShift: (shiftId: string, response: ShiftResponse, note?: string): Promise<Shift> =>
     IS_DEMO ? demoRespondShift(shiftId, response, note) : sbRpc<Shift>('respond_shift', { p_shift: shiftId, p_response: response, p_note: note ?? null }),
+
+  /** El trabajador marca como leído un mensaje suyo */
+  markMessageRead: (recipientId: string): Promise<void> =>
+    IS_DEMO ? demoMarkMessageRead(recipientId) : sbRpc<void>('mark_message_read', { p_recipient: recipientId }),
+
+  /** El trabajador acepta o rechaza una tarea suya */
+  respondTask: (recipientId: string, response: ShiftResponse, note?: string): Promise<MessageRecipient> =>
+    IS_DEMO
+      ? demoRespondTask(recipientId, response, note)
+      : sbRpc<MessageRecipient>('respond_task', { p_recipient: recipientId, p_response: response, p_note: note ?? null }),
 
   reservationStaff: (): Promise<StaffOption[]> => (IS_DEMO ? demoReservationStaff() : sbRpc<StaffOption[]>('reservation_staff', {})),
 };
