@@ -8,6 +8,7 @@ import { errorMessage } from '../../lib/api';
 import { IS_DEMO } from '../../lib/config';
 import { DEPARTMENTS } from '../../lib/constants';
 import { fmtDate } from '../../lib/format';
+import { NotificationsCard } from '../../components/NotificationsCard';
 import { PhotoPicker } from '../../components/PhotoPicker';
 import { api } from '../../lib/api';
 import { fullName } from '../../lib/utils';
@@ -94,6 +95,13 @@ export default function Profile() {
         ))}
       </Card>
       <p className="mt-2 px-1 text-[12px] text-ink-3">Si algún dato no es correcto, avisa a tu responsable.</p>
+
+      {!IS_DEMO && employee && (
+        <>
+          <SectionTitle>Avisos</SectionTitle>
+          <NotificationsCard />
+        </>
+      )}
 
       {!IS_DEMO && (
         <>

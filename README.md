@@ -17,11 +17,14 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Conector de Claude** (en Ajustes) — pásale a Claude extractos, tickets o facturas y los registra en Finanzas y Facturas, creando los proveedores que falten. Ver más abajo.
 - **Nóminas** — devengado por empleado según fichajes, pagado y pendiente; registro de pagos.
 - **Solicitudes** — aprobar o rechazar vacaciones, ausencias y cambios de turno.
+- **Mensajes** — avisos y tareas para una persona, un grupo (camareros, DJ / técnicos, RRPP) o todo el equipo; se ve quién los ha leído y quién acepta o rechaza cada tarea.
 
 **Trabajador**
 - **Fichar** entrada / salida con un botón (la hora la pone el servidor, no se puede manipular).
 - **Disponibilidad** semanal: qué días puede trabajar (con horario y nota opcionales).
 - **Mis turnos**: aceptar ("Asistiré") o rechazar ("No puedo", con motivo opcional) cada turno hasta que empieza.
+- **Mensajes**: los avisos y tareas del responsable; las tareas se aceptan o se rechazan (con motivo opcional).
+- **Notificaciones al móvil** (Perfil → Avisos) cuando le asignan, cambian o cancelan un turno y cuando le llega un mensaje o una tarea.
 - Mis horas y lo ganado por semana, mes o año (sin ver su tarifa €/h), mis turnos, mis solicitudes y perfil.
 
 > Una "noche" va de 06:00 a 06:00: una salida a las 05:30 del sábado cuenta para la noche del viernes.
@@ -38,7 +41,7 @@ Sin credenciales de Supabase la app arranca en **modo demo** con datos de ejempl
 
 ## Base de datos (Supabase)
 
-El esquema está en `supabase/migrations/`. El proyecto de Supabase está enlazado con este repositorio mediante la integración de GitHub, así que **cada push a `main` aplica las migraciones nuevas automáticamente**. Para cambios en el esquema, añade un nuevo archivo `supabase/migrations/AAAAMMDDHHMMSS_descripcion.sql` (nunca edites uno ya aplicado).
+El esquema está en `supabase/migrations/`. **Cada push a `main` aplica las migraciones nuevas automáticamente** con la acción de GitHub *Aplicar migraciones de Supabase* (`.github/workflows/apply-migrations.yml`, con los secretos `SUPABASE_ACCESS_TOKEN` y `SUPABASE_PROJECT_REF`). Para cambios en el esquema, añade un nuevo archivo `supabase/migrations/AAAAMMDDHHMMSS_descripcion.sql` (nunca edites uno ya aplicado ni lo ejecutes a mano en el editor SQL).
 
 ### Alta de usuarios
 1. **El primer usuario que se registra es administrador.**
@@ -48,6 +51,15 @@ El esquema está en `supabase/migrations/`. El proyecto de Supabase está enlaza
 
 ### Seguridad
 Todas las tablas usan Row Level Security: el trabajador solo puede leer sus propios fichajes, turnos y solicitudes; las finanzas solo son visibles para administradores. El fichaje se hace mediante las funciones `clock_in()` / `clock_out()` con la hora del servidor.
+
+## Notificaciones al móvil
+
+Avisan al trabajador cuando le asignan, cambian o cancelan un turno futuro y cuando le llega un mensaje o una tarea.
+
+- **Cómo funciona:** la base de datos apunta cada aviso en `notifications` (triggers sobre `shifts` y `message_recipients`). Tras cada cambio, la app del administrador llama a la función `supabase/functions/notify`, que los envía (Web Push estándar, sin servicios externos) a los dispositivos de cada trabajador (`push_subscriptions`). Si alguien tiene varios avisos a la vez, recibe uno con el resumen.
+- **Claves:** la función genera las claves VAPID la primera vez y las guarda en `push_keys` (sólo ella puede leerlas). No hay que configurar nada.
+- **Publicación:** la acción *Publicar funciones de Supabase* despliega `notify` (sin verificación JWT de la pasarela: la sesión se comprueba dentro) al cambiar `supabase/functions/` en `main`.
+- **Activarlas:** cada trabajador, en *Perfil → Avisos → Activar notificaciones* (o en el aviso que sale arriba) y puede enviarse un aviso de prueba. En **iPhone** sólo funcionan con la app añadida a la pantalla de inicio (Safari → Compartir → «Añadir a pantalla de inicio», iOS 16.4 o posterior); en Android, desde Chrome.
 
 ## Conector de Claude (MCP)
 

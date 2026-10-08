@@ -13,6 +13,7 @@ import EventDetail from './pages/admin/EventDetail';
 import Events from './pages/admin/Events';
 import Finance from './pages/admin/Finance';
 import Invoices from './pages/admin/Invoices';
+import Messages from './pages/admin/Messages';
 import Payroll from './pages/admin/Payroll';
 import Requests from './pages/admin/Requests';
 import Schedule from './pages/admin/Schedule';
@@ -24,6 +25,7 @@ import Reservations from './pages/Reservations';
 import Clock from './pages/worker/Clock';
 import MyAvailability from './pages/worker/MyAvailability';
 import MyHours from './pages/worker/MyHours';
+import MyMessages from './pages/worker/MyMessages';
 import MyRequests from './pages/worker/MyRequests';
 import MyShifts from './pages/worker/MyShifts';
 import Profile from './pages/worker/Profile';
@@ -100,6 +102,7 @@ export default function App() {
                 <Route path="personal/:id" element={<EmployeeDetail />} />
                 <Route path="fichajes" element={<TimeEntries />} />
                 <Route path="turnos" element={<Schedule />} />
+                <Route path="mensajes" element={<Messages />} />
                 <Route path="disponibilidad" element={<AvailabilityAdmin />} />
                 <Route path="noches" element={<Events />} />
                 <Route path="noches/:id" element={<EventDetail />} />
@@ -114,6 +117,7 @@ export default function App() {
               </Route>
               <Route path="fichar" element={<Clock />} />
               <Route path="mis-horas" element={<MyHours />} />
+              <Route path="mis-mensajes" element={<MyMessages />} />
               <Route element={<NotRrpp />}>
                 <Route path="mis-turnos" element={<MyShifts />} />
                 <Route path="mi-disponibilidad" element={<MyAvailability />} />

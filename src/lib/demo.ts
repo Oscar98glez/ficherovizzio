@@ -15,6 +15,8 @@ import type {
   Department,
   Employee,
   LeaveRequest,
+  Message,
+  MessageRecipient,
   PaymentMethod,
   Profile,
   Reservation,
@@ -44,11 +46,13 @@ export type TableName =
   | 'rrpp_commission_rates'
   | 'rrpp_ticket_sales'
   | 'suppliers'
-  | 'claude_connectors';
+  | 'claude_connectors'
+  | 'messages'
+  | 'message_recipients';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v18';
+const DB_KEY = 'vizzio.demo.db.v19';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -207,6 +211,8 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
     async remove(id) {
       await wait();
       getDb()[table] = rows().filter((x) => x.id !== id);
+      // Como "on delete cascade": al borrar un mensaje se borran sus destinatarios
+      if (table === 'messages') getDb().message_recipients = (getDb().message_recipients ?? []).filter((x) => x.message_id !== id);
       persist();
     },
   };
@@ -310,6 +316,30 @@ export async function demoClockOut(notes?: string): Promise<TimeEntry> {
   persist();
   await wait();
   return clone(open) as unknown as TimeEntry;
+}
+
+/** Como mark_message_read de Supabase: el trabajador marca como leído un mensaje suyo */
+export async function demoMarkMessageRead(recipientId: string): Promise<void> {
+  const emp = currentEmployee();
+  const r = ((getDb().message_recipients ?? []) as unknown as MessageRecipient[]).find((x) => x.id === recipientId && x.employee_id === emp.id);
+  if (r && !r.read_at) {
+    r.read_at = new Date().toISOString();
+    persist();
+  }
+}
+
+/** Como respond_task de Supabase: el trabajador acepta o rechaza una tarea suya */
+export async function demoRespondTask(recipientId: string, response: ShiftResponse, note?: string): Promise<MessageRecipient> {
+  const emp = currentEmployee();
+  const d = getDb();
+  const r = ((d.message_recipients ?? []) as unknown as MessageRecipient[]).find((x) => x.id === recipientId && x.employee_id === emp.id);
+  const msg = r && ((d.messages ?? []) as unknown as Message[]).find((m) => m.id === r.message_id);
+  if (!r || msg?.kind !== 'task') throw new Error('TASK_NOT_FOUND');
+  const now = new Date().toISOString();
+  Object.assign(r, { response, responded_at: now, response_note: response === 'declined' ? note?.trim() || null : null, read_at: r.read_at ?? now });
+  persist();
+  await wait();
+  return clone(r);
 }
 
 /** Como respond_shift de Supabase: el trabajador acepta o rechaza su turno antes de que empiece */
@@ -711,6 +741,23 @@ function seed(): DB {
     ] as [string, string, string, string | null, string | null][]
   ).map(([name, category, tax_id, contact, phone], i) => ({ id: `sup-${i + 1}`, name, category, tax_id, contact, phone, email: null, notes: null, created_at: stamp }));
 
+  // Mensajes y tareas de ejemplo (Lucía es emp-3; Nacho, emp-9)
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+  const messages: Message[] = [
+    { id: 'msg-1', kind: 'task', title: 'Reponer la cámara de la barra 2', body: 'Antes de abrir, deja la cámara de la barra 2 llena (tónicas, refrescos y hielo).', due_date: isoDate(addDays(businessToday(), 1)), created_by: DEMO_USERS.admin, created_at: hoursAgo(3) },
+    { id: 'msg-2', kind: 'message', title: 'Reunión de equipo el jueves', body: 'El jueves a las 22:30, antes de abrir, reunión de 15 minutos en la barra principal.', due_date: null, created_by: DEMO_USERS.admin, created_at: hoursAgo(26) },
+    { id: 'msg-3', kind: 'task', title: 'Revisar las luces de la cabina', body: 'Una de las barras LED parpadea. Revísala antes del viernes.', due_date: isoDate(addDays(businessToday(), 2)), created_by: DEMO_USERS.admin, created_at: hoursAgo(50) },
+  ];
+  const rec = (id: string, message_id: string, employee_id: string, extra: Partial<MessageRecipient> = {}): MessageRecipient => ({
+    id, message_id, employee_id, read_at: null, response: null, responded_at: null, response_note: null, created_at: stamp, ...extra,
+  });
+  const messageRecipients: MessageRecipient[] = [
+    rec('rcp-1', 'msg-1', 'emp-3'),
+    rec('rcp-2', 'msg-1', 'emp-9', { read_at: hoursAgo(2), response: 'accepted', responded_at: hoursAgo(2) }),
+    ...['emp-2', 'emp-3', 'emp-4', 'emp-5', 'emp-9'].map((e, i) => rec(`rcp-m${i}`, 'msg-2', e, i % 2 ? { read_at: hoursAgo(20) } : {})),
+    rec('rcp-3', 'msg-3', 'emp-9', { read_at: hoursAgo(40), response: 'declined', responded_at: hoursAgo(40), response_note: 'Este finde no estoy, mejor el lunes' }),
+  ];
+
   return {
     profiles,
     employees,
@@ -725,5 +772,7 @@ function seed(): DB {
     rrpp_commission_rates: commissionRates,
     rrpp_ticket_sales: ticketSales,
     suppliers,
+    messages,
+    message_recipients: messageRecipients,
   } as unknown as DB;
 }

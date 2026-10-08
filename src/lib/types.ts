@@ -100,6 +100,32 @@ export interface Shift {
   created_at: string;
 }
 
+export type MessageKind = 'message' | 'task';
+
+/** Mensaje o tarea que el administrador envía a uno o varios trabajadores */
+export interface Message {
+  id: string;
+  kind: MessageKind;
+  title: string;
+  body: string | null;
+  /** Fecha límite (sólo tareas, opcional) */
+  due_date: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+/** Cada trabajador que recibe un mensaje: si lo ha leído y, en las tareas, si la acepta o la rechaza */
+export interface MessageRecipient {
+  id: string;
+  message_id: string;
+  employee_id: string;
+  read_at: string | null;
+  response: ShiftResponse | null;
+  responded_at: string | null;
+  response_note: string | null;
+  created_at: string;
+}
+
 export interface Transaction {
   id: string;
   date: string;

@@ -10,8 +10,8 @@ import { api } from '../../lib/api';
 import { CONTRACTS, DEPARTMENTS } from '../../lib/constants';
 import { makePeriod, periodRange, type PeriodUnit } from '../../lib/dates';
 import { fmtHours, fmtMoney, fmtMoney0 } from '../../lib/format';
-import type { Department, Employee, Role } from '../../lib/types';
-import { cx, downloadCSV, entryCost, entryHours, fullName, groupBy, sumBy } from '../../lib/utils';
+import type { Department, Role } from '../../lib/types';
+import { cx, downloadCSV, entryCost, entryHours, fullName, groupBy, staffKind as kindOf, sumBy } from '../../lib/utils';
 
 type Filter = 'active' | 'inactive' | 'all';
 
@@ -35,9 +35,6 @@ const savedKind = (): Kind => {
   }
 };
 
-/** Tipo de usuario: el rol de su cuenta; sin cuenta, por su departamento (relaciones públicas → RRPP, cabina → DJ / técnico) */
-const kindOf = (e: Employee, roles: Map<string, Role>): Kind =>
-  (e.user_id && roles.get(e.user_id)) || (e.department === 'relaciones' ? 'rrpp' : e.department === 'cabina' ? 'tech' : 'worker');
 
 export default function Employees() {
   const navigate = useNavigate();
