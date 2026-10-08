@@ -347,6 +347,21 @@ export interface TicketSale {
   created_at: string;
 }
 
+/** Desglose por RRPP de una noche sincronizada con Fourvenues */
+export interface FourvenuesRrppNight {
+  id: string;
+  event_id: string;
+  /** Usuario de Fourvenues ('' = sin RRPP) */
+  fourvenues_user_id: string;
+  /** Nombre que tiene en Fourvenues */
+  name: string | null;
+  /** Personas con entrada de pago */
+  tickets: number;
+  /** Personas en sus listas (QR gratis); null si la clave no tiene acceso a las listas */
+  lists: number | null;
+  synced_at: string;
+}
+
 /** Resumen de una sincronización con Fourvenues (supabase/functions/fourvenues-sync) */
 export interface FourvenuesResult {
   from: string;

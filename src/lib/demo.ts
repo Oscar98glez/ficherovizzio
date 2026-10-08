@@ -14,6 +14,7 @@ import type {
   ContractType,
   Department,
   Employee,
+  FourvenuesRrppNight,
   LeaveRequest,
   Message,
   MessageRecipient,
@@ -46,6 +47,7 @@ export type TableName =
   | 'reservations'
   | 'rrpp_commission_rates'
   | 'rrpp_ticket_sales'
+  | 'fourvenues_rrpp_nights'
   | 'suppliers'
   | 'claude_connectors'
   | 'messages'
@@ -54,7 +56,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v21';
+const DB_KEY = 'vizzio.demo.db.v22';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -724,6 +726,25 @@ function seed(): DB {
   const mixerNames = ['Coca-Cola', 'Coca-Cola Zero', 'Tónica', 'Fanta Limón', 'Red Bull', 'Monster'];
   const customers = ['Álex Romero', 'Grupo Sergio M.', 'Cumpleaños Andrea', 'Despedida Pablo', 'Iván Herrera', 'Claudia Ramos', 'Empresa Nexo', 'Mario & friends', 'Rocío Peña', 'Daniel Gil', 'Laura Méndez', 'Tomás Vega'];
   const rrpps = [employees[5], employees[0]]; // Marta (RRPP) y Laura (gerente)
+
+  // Fourvenues: Marta está asociada a su usuario; "Pablo Ruiz" vende allí pero no tiene ficha en la app
+  employees[5].fourvenues_user_id = 'fv-marta';
+  const fvRrpp: [string, string | null][] = [['fv-marta', 'Marta López'], ['fv-pablo', 'Pablo Ruiz'], ['fv-dani', 'Dani Promo'], ['', null]];
+  const fourvenuesRrppNights: FourvenuesRrppNight[] = [];
+  for (const ev of events.filter((e) => e.tickets_paid != null)) {
+    ev.fourvenues_id = `fv-${ev.date}`;
+    // Reparto de las entradas y las listas de la noche entre los RRPP (lo que sobra, sin RRPP)
+    let tLeft = ev.tickets_paid!;
+    let lLeft = ev.tickets_free ?? 0;
+    fvRrpp.forEach(([fvId, name], i) => {
+      const last = i === fvRrpp.length - 1;
+      const t = last ? tLeft : Math.round(tLeft * (0.3 + r() * 0.3));
+      const l = last ? lLeft : Math.round(lLeft * (0.3 + r() * 0.3));
+      tLeft -= t;
+      lLeft -= l;
+      fourvenuesRrppNights.push({ id: uid(), event_id: ev.id, fourvenues_user_id: fvId, name, tickets: t, lists: l, synced_at: stamp });
+    });
+  }
   const reservations: Reservation[] = [];
   for (const ev of events.filter((e) => e.date >= isoDate(addDays(today, -7)) && e.date <= isoDate(addDays(today, 14)))) {
     const isPast = ev.date < isoDate(businessToday());
@@ -828,5 +849,6 @@ function seed(): DB {
     messages,
     message_recipients: messageRecipients,
     message_replies: messageReplies,
+    fourvenues_rrpp_nights: fourvenuesRrppNights,
   } as unknown as DB;
 }
