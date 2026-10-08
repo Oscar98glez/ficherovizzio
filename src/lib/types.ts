@@ -50,6 +50,8 @@ export interface Employee {
   rrpp_ticket_pct?: number | null;
   /** RRPP: € por cada persona que entra por su lista */
   rrpp_list_fee?: number | null;
+  /** RRPP: su usuario de Fourvenues (las entradas que vende con su enlace) */
+  fourvenues_user_id?: string | null;
   created_at: string;
 }
 
@@ -60,6 +62,12 @@ export interface ClubEvent {
   kind: EventKind;
   expected_attendance: number | null;
   notes: string | null;
+  /** Evento de Fourvenues asociado (la noche se sincroniza con él) */
+  fourvenues_id?: string | null;
+  /** Fourvenues: personas con entrada y cuántas han entrado ya */
+  tickets_sold?: number | null;
+  tickets_entered?: number | null;
+  fourvenues_synced_at?: string | null;
   created_at: string;
 }
 
@@ -150,6 +158,8 @@ export interface Transaction {
   event_id: string | null;
   employee_id: string | null;
   period: string | null;
+  /** Movimiento importado (p. ej. "fourvenues:entradas:<evento>"): se actualiza solo */
+  external_id?: string | null;
   created_at: string;
 }
 
@@ -329,5 +339,39 @@ export interface TicketSale {
   /** Personas que entran por su lista */
   list_quantity: number;
   notes: string | null;
+  /** Entradas traídas de Fourvenues (la lista sigue siendo a mano) */
+  fourvenues_synced_at?: string | null;
   created_at: string;
+}
+
+/** Resumen de una sincronización con Fourvenues (supabase/functions/fourvenues-sync) */
+export interface FourvenuesResult {
+  from: string;
+  to: string;
+  events: number;
+  created: number;
+  linked: number;
+  moved: number;
+  tickets: number;
+  revenue: number;
+  rrpp: number;
+  rrppLinked: number;
+  /** RRPP de Fourvenues con ventas que no están asociados a ninguna ficha */
+  unmatched: { id: string; name: string | null; email: string | null; tickets: number; revenue: number }[];
+  warnings: string[];
+}
+
+export interface FourvenuesSync {
+  running_since: string | null;
+  last_run_at: string | null;
+  last_ok_at: string | null;
+  last_error: string | null;
+  last_result: FourvenuesResult | null;
+}
+
+/** Usuario de Fourvenues (para asociar los RRPP a su ficha) */
+export interface FourvenuesUser {
+  id: string;
+  name: string | null;
+  email: string | null;
 }

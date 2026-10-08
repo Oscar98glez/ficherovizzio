@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PartyPopper, Plus, Users } from 'lucide-react';
+import { PartyPopper, Plus, Ticket, Users } from 'lucide-react';
 import { EventForm } from '../../components/finance-forms';
 import { Badge, Button, Card, EmptyState, ErrorBox, Loading, PageHeader, Segmented } from '../../components/ui';
 import { useLoad } from '../../hooks';
@@ -8,6 +8,7 @@ import { api } from '../../lib/api';
 import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
 import { fmtDate, fmtMoney0, fmtNum, fmtWeekday, fmtMoneyExact } from '../../lib/format';
+import { autoSyncFourvenues } from '../../lib/fourvenues';
 import { cx, entryCost, groupBy, sumBy } from '../../lib/utils';
 
 type Tab = 'upcoming' | 'past';
@@ -30,6 +31,11 @@ export default function Events() {
     ]);
     return { events, entries, tx, shifts, employees };
   }, []);
+
+  // Trae de Fourvenues las noches y la venta online (el servidor no lo repite si se hizo hace poco)
+  useEffect(() => {
+    autoSyncFourvenues().then((changed) => changed && reload());
+  }, [reload]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -92,6 +98,11 @@ export default function Events() {
                 <div className="truncate text-[16px] font-semibold">{ev.name}</div>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-ink-2">
                   <Badge tone={EVENT_KINDS[ev.kind].tone}>{EVENT_KINDS[ev.kind].label}</Badge>
+                  {ev.tickets_sold != null && (
+                    <span className="flex items-center gap-1" title="Personas con entrada en Fourvenues">
+                      <Ticket className="h-3.5 w-3.5" /> {fmtNum(ev.tickets_sold, 0)}
+                    </span>
+                  )}
                   {ev.expected_attendance != null && (
                     <span className="flex items-center gap-1">
                       <Users className="h-3.5 w-3.5" /> {fmtNum(ev.expected_attendance, 0)}

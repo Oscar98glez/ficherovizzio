@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Database, LogOut, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { ClaudeConnectorCard } from '../../components/ClaudeConnector';
+import { FourvenuesCard } from '../../components/FourvenuesCard';
 import { NotificationsCard } from '../../components/NotificationsCard';
 import { useFeedback } from '../../components/overlay';
 import { Avatar, Badge, Button, Card, CardHeader, ListRow, PageHeader, SectionTitle, Select } from '../../components/ui';
@@ -87,6 +88,7 @@ export default function Settings() {
 
           <SectionTitle>Integraciones</SectionTitle>
           <ClaudeConnectorCard />
+          <FourvenuesCard />
 
           <Button
             variant="danger-tinted"

@@ -9,6 +9,7 @@ import { api } from '../../lib/api';
 import { EVENT_KINDS, METHODS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, isoDate, parseDate } from '../../lib/dates';
 import { fmtDateFull, fmtHours, fmtMoney, fmtMoney0, fmtNum, fmtTime, fmtMoneyExact, fmtShiftTimes } from '../../lib/format';
+import { isFourvenuesTx } from '../../lib/fourvenues';
 import type { Transaction } from '../../lib/types';
 import { byId, cx, entryCost, entryHours, fullName, groupBy, sumBy, categoryRank, compareByCategory } from '../../lib/utils';
 
@@ -63,6 +64,11 @@ export default function EventDetail() {
           <div className="mb-1 flex items-center gap-2">
             <Badge tone={EVENT_KINDS[ev.kind].tone}>{EVENT_KINDS[ev.kind].label}</Badge>
             {ev.expected_attendance != null && <span className="text-[13px] text-ink-2">Aforo previsto {fmtNum(ev.expected_attendance, 0)}</span>}
+            {ev.tickets_sold != null && (
+              <span className="text-[13px] text-ink-2">
+                Fourvenues: {fmtNum(ev.tickets_sold, 0)} con entrada{ev.tickets_entered ? ` · ${fmtNum(ev.tickets_entered, 0)} dentro` : ''}
+              </span>
+            )}
           </div>
           <h1 className="text-[30px] font-bold tracking-tight md:text-[34px]">{ev.name}</h1>
           <p className="text-[15px] text-ink-2">{fmtDateFull(ev.date)}</p>
@@ -146,7 +152,12 @@ export default function EventDetail() {
                 <ListRow
                   key={t.id}
                   onClick={() => setTxModal({ tx: t })}
-                  title={t.category}
+                  title={
+                    <span className="flex items-center gap-2">
+                      {t.category}
+                      {isFourvenuesTx(t) && <Badge tone="indigo">Fourvenues</Badge>}
+                    </span>
+                  }
                   subtitle={[METHODS[t.method], t.description].filter(Boolean).join(' · ')}
                   trailing={
                     <span className={cx('tabular text-[15px] font-semibold', t.kind === 'income' && 'text-green')}>

@@ -46,3 +46,8 @@ jobs:
       - name: Publicar las notificaciones al móvil (notify)
         if: steps.secrets.outputs.ok == 'true'
         run: supabase functions deploy notify --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api
+
+      # La sesión (de un administrador) se comprueba dentro; la clave de Fourvenues es un secreto de la función
+      - name: Publicar la sincronización con Fourvenues (fourvenues-sync)
+        if: steps.secrets.outputs.ok == 'true'
+        run: supabase functions deploy fourvenues-sync --project-ref "$SUPABASE_PROJECT_REF" --no-verify-jwt --use-api
