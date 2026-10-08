@@ -25,7 +25,10 @@ function usePushState() {
 }
 
 /** Tarjeta del Perfil para activar o desactivar las notificaciones en este dispositivo */
-export function NotificationsCard() {
+export function NotificationsCard({ admin = false }: { admin?: boolean }) {
+  const what = admin
+    ? 'cuando un trabajador responda a un mensaje o una tarea'
+    : 'cuando te asignen o cambien un turno y cuando te llegue un mensaje, una tarea o una respuesta';
   const { toast } = useFeedback();
   const [state, setState] = usePushState();
   const [busy, setBusy] = useState(false);
@@ -63,9 +66,7 @@ export function NotificationsCard() {
       <CardHeader title="Notificaciones" />
       <div className="px-5 pb-5">
         <p className="text-[14px] text-ink-2">
-          {state === 'on'
-            ? 'Activadas en este dispositivo: te avisaremos cuando te asignen o cambien un turno y cuando te llegue un mensaje o una tarea.'
-            : HELP[state] ?? 'Recibe un aviso en el móvil cuando te asignen o cambien un turno y cuando te llegue un mensaje o una tarea.'}
+          {state === 'on' ? `Activadas en este dispositivo: te avisaremos ${what}.` : HELP[state] ?? `Recibe un aviso en el móvil ${what}.`}
         </p>
         {(state === 'on' || state === 'off') && (
           <div className="mt-3 flex flex-wrap gap-2">

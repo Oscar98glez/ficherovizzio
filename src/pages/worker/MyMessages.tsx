@@ -1,23 +1,27 @@
 import { useState } from 'react';
-import { Check, ClipboardList, MessageSquare, X } from 'lucide-react';
+import { Check, ClipboardList, MessageCircle, MessageSquare, X } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { MESSAGES_CHANGED } from '../../components/AppShell';
 import { Modal, useFeedback } from '../../components/overlay';
+import { ReplyThread } from '../../components/ReplyThread';
 import { Badge, Button, Card, EmptyState, ErrorBox, Field, Loading, PageHeader, Segmented, Textarea } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { fmtDate, fmtTime } from '../../lib/format';
-import type { Message, MessageRecipient, ShiftResponse } from '../../lib/types';
-import { byId, cx } from '../../lib/utils';
+import type { Message, MessageRecipient, MessageReply, ShiftResponse } from '../../lib/types';
+import { byId, cx, groupBy } from '../../lib/utils';
 import { NotLinked } from './Clock';
 
-type Item = MessageRecipient & { message: Message };
+type Item = MessageRecipient & { message: Message; replies: MessageReply[] };
+
+/** Respuestas de la administración que aún no ha leído */
+const unreadReplies = (i: Item) => i.replies.filter((r) => r.from_admin && !r.read_at).length;
 
 const when = (iso: string) => `${fmtDate(iso)}, ${fmtTime(iso)}`;
 const dueLabel = (date: string) => fmtDate(date, { weekday: 'long', day: 'numeric', month: 'long' });
 
-/** Pendiente: sin leer o, si es una tarea, sin responder */
-const isPending = (i: Item) => !i.read_at || (i.message.kind === 'task' && !i.response);
+/** Pendiente: sin leer, tarea sin responder o con una respuesta nueva de la administración */
+const isPending = (i: Item) => !i.read_at || (i.message.kind === 'task' && !i.response) || unreadReplies(i) > 0;
 
 export default function MyMessages() {
   const { employee } = useAuth();
@@ -26,14 +30,23 @@ export default function MyMessages() {
   const [busy, setBusy] = useState<string | null>(null);
   const [declining, setDeclining] = useState<Item | null>(null);
   const [reason, setReason] = useState('');
+  const [thread, setThread] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useLoad(async () => {
     if (!employee) return [];
     const rows = await api.messageRecipients.list({ eq: { employee_id: employee.id }, order: ['created_at', 'desc'], limit: 200 });
-    const messages = rows.length ? byId(await api.messages.list({ in: ['id', rows.map((r) => r.message_id)] })) : new Map<string, Message>();
+    const ids = rows.map((r) => r.id);
+    const [messages, replies] = rows.length
+      ? await Promise.all([
+          api.messages.list({ in: ['id', rows.map((r) => r.message_id)] }).then(byId),
+          // Si aún no está la migración de respuestas, los mensajes se ven igual
+          api.messageReplies.list({ in: ['recipient_id', ids] }).catch(() => [] as MessageReply[]),
+        ])
+      : [new Map<string, Message>(), [] as MessageReply[]];
+    const repliesOf = groupBy(replies, (r) => r.recipient_id);
     return rows
       .filter((r) => messages.has(r.message_id))
-      .map((r) => ({ ...r, message: messages.get(r.message_id)! }))
+      .map((r) => ({ ...r, message: messages.get(r.message_id)!, replies: repliesOf[r.id] ?? [] }))
       .sort((a, b) => b.message.created_at.localeCompare(a.message.created_at));
   }, [employee?.id]);
 
@@ -50,6 +63,23 @@ export default function MyMessages() {
     } catch {
       /* se volverá a marcar la próxima vez */
     }
+  }
+
+  /** Abre o cierra la conversación; al abrirla, lo nuevo queda leído */
+  async function toggleThread(i: Item) {
+    if (thread === i.id) return setThread(null);
+    setThread(i.id);
+    if (!i.read_at || unreadReplies(i)) {
+      await Promise.all([i.read_at ? null : api.markMessageRead(i.id), unreadReplies(i) ? api.markRepliesRead(i.id) : null]).catch(() => {});
+      reload();
+      changed();
+    }
+  }
+
+  async function sendReply(i: Item, body: string) {
+    await api.replyMessage(i.id, body);
+    reload();
+    changed();
   }
 
   async function respond(i: Item, response: ShiftResponse, note?: string) {
@@ -154,6 +184,23 @@ export default function MyMessages() {
                     </div>
                   </div>
                 )}
+
+                <div className="mt-3 border-t border-line pt-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleThread(i)}
+                    className="flex items-center gap-1.5 text-[14px] font-medium text-accent"
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    {thread === i.id ? 'Ocultar conversación' : i.replies.length ? `Conversación (${i.replies.length})` : 'Responder'}
+                    {unreadReplies(i) > 0 && thread !== i.id && <Badge tone="red">Nueva respuesta</Badge>}
+                  </button>
+                  {thread === i.id && (
+                    <div className="mt-3">
+                      <ReplyThread replies={i.replies} asAdmin={false} otherName="Administración" onSend={(body) => sendReply(i, body)} />
+                    </div>
+                  )}
+                </div>
               </Card>
             );
           })}

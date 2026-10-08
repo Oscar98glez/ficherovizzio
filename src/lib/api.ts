@@ -1,11 +1,11 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoFiles, demoMarkMessageRead, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoFiles, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
 import { kickNotifications } from './push';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, Message, MessageRecipient, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
+import type { Availability, ClaudeConnector, ClubEvent, Employee, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -39,6 +39,9 @@ const ERRORS: [RegExp, string][] = [
   [/SHIFT_NOT_FOUND/i, 'No se ha encontrado el turno.'],
   [/respond_shift/i, 'Falta aplicar en Supabase la migración 20261008130000_shift_responses.sql.'],
   [/TASK_NOT_FOUND/i, 'No se ha encontrado la tarea.'],
+  [/MESSAGE_NOT_FOUND/i, 'No se ha encontrado el mensaje.'],
+  [/EMPTY_REPLY/i, 'Escribe una respuesta.'],
+  [/public.message_replies|reply_message|mark_replies_read/i, 'Falta aplicar en Supabase la migración de respuestas (20261008150000_message_replies.sql).'],
   [/public.messages|public.message_recipients|respond_task|mark_message_read/i, 'Falta aplicar en Supabase la migración de mensajes (20261008140000_messages_and_push.sql).'],
   [/email rate limit exceeded|over_email_send_rate_limit/i, 'Ahora mismo no se pueden enviar más emails de confirmación. Espera unos minutos y vuelve a intentarlo, o avisa al administrador.'],
   [/rate limit|too many requests/i, 'Demasiados intentos seguidos. Espera un par de minutos y vuelve a intentarlo.'],
@@ -296,6 +299,8 @@ export const api = {
   messages: repo<Message>('messages'),
   /** Al añadir destinatarios, la base de datos crea el aviso de cada uno y se envía */
   messageRecipients: notifying(repo<MessageRecipient>('message_recipients')),
+  /** Conversaciones: se leen aquí; se escriben con replyMessage */
+  messageReplies: repo<MessageReply>('message_replies'),
 
   /** Fichar entrada del usuario conectado (hora del servidor). */
   clockIn: (notes?: string) =>
@@ -323,6 +328,17 @@ export const api = {
     IS_DEMO
       ? demoRespondTask(recipientId, response, note)
       : sbRpc<MessageRecipient>('respond_task', { p_recipient: recipientId, p_response: response, p_note: note ?? null }),
+
+  /** Responde en la conversación de un destinatario (trabajador o administrador) y avisa al otro lado */
+  replyMessage: async (recipientId: string, body: string): Promise<MessageReply> => {
+    const reply = IS_DEMO ? await demoReplyMessage(recipientId, body) : await sbRpc<MessageReply>('reply_message', { p_recipient: recipientId, p_body: body });
+    kickNotifications();
+    return reply;
+  },
+
+  /** Marca como leídas las respuestas del otro lado en una conversación */
+  markRepliesRead: (recipientId: string): Promise<void> =>
+    IS_DEMO ? demoMarkRepliesRead(recipientId) : sbRpc<void>('mark_replies_read', { p_recipient: recipientId }),
 
   reservationStaff: (): Promise<StaffOption[]> => (IS_DEMO ? demoReservationStaff() : sbRpc<StaffOption[]>('reservation_staff', {})),
 };

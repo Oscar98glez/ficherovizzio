@@ -126,6 +126,19 @@ export interface MessageRecipient {
   created_at: string;
 }
 
+/** Respuesta dentro de la conversación de un destinatario con la administración */
+export interface MessageReply {
+  id: string;
+  recipient_id: string;
+  author_id: string | null;
+  /** true: la escribe la administración; false: el trabajador */
+  from_admin: boolean;
+  body: string;
+  created_at: string;
+  /** Cuándo la leyó el otro lado */
+  read_at: string | null;
+}
+
 export interface Transaction {
   id: string;
   date: string;

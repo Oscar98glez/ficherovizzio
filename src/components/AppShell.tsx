@@ -55,6 +55,7 @@ export function AppShell() {
   const [unanswered, setUnanswered] = useState(0);
   const [shiftsTick, setShiftsTick] = useState(0);
   const [inbox, setInbox] = useState(0);
+  const [staffReplies, setStaffReplies] = useState(0);
   const [moreOpen, setMoreOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -75,18 +76,33 @@ export function AppShell() {
     };
   }, []);
 
-  // Mensajes sin leer y tareas sin responder del trabajador
+  // Mensajes sin leer, tareas sin responder y conversaciones con respuestas nuevas de la administración
   useEffect(() => {
     if (isAdmin || !employee) return;
     (async () => {
       const rows = await api.messageRecipients.list({ eq: { employee_id: employee.id }, order: ['created_at', 'desc'], limit: 200 });
       const open = rows.filter((r) => !r.read_at || !r.response);
-      const tasks = new Set(
-        open.length ? (await api.messages.list({ in: ['id', open.map((r) => r.message_id)] })).filter((m) => m.kind === 'task').map((m) => m.id) : [],
-      );
-      setInbox(open.filter((r) => !r.read_at || (tasks.has(r.message_id) && !r.response)).length);
+      const [tasks, replies] = await Promise.all([
+        open.length
+          ? api.messages.list({ in: ['id', open.map((r) => r.message_id)] }).then((ms) => new Set(ms.filter((m) => m.kind === 'task').map((m) => m.id)))
+          : new Set<string>(),
+        rows.length
+          ? api.messageReplies.list({ in: ['recipient_id', rows.map((r) => r.id)], eq: { from_admin: true, read_at: null } }).catch(() => [])
+          : [],
+      ]);
+      const withReply = new Set(replies.map((r) => r.recipient_id));
+      setInbox(rows.filter((r) => !r.read_at || (tasks.has(r.message_id) && !r.response) || withReply.has(r.id)).length);
     })().catch(() => {});
   }, [isAdmin, employee?.id, location.pathname, shiftsTick]);
+
+  // Administración: respuestas de los trabajadores sin leer
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.messageReplies
+      .list({ eq: { from_admin: false, read_at: null } })
+      .then((r) => setStaffReplies(r.length))
+      .catch(() => {});
+  }, [isAdmin, location.pathname, shiftsTick]);
   useEffect(() => {
     if (isAdmin || isRrpp || !employee) return;
     api.shifts
@@ -112,7 +128,7 @@ export function AppShell() {
             { to: '/personal', label: 'Personal', icon: Users },
             { to: '/fichajes', label: 'Fichajes', icon: Clock },
             { to: '/turnos', label: 'Turnos', icon: CalendarDays },
-            { to: '/mensajes', label: 'Mensajes', icon: MessageSquare },
+            { to: '/mensajes', label: 'Mensajes', icon: MessageSquare, badge: staffReplies },
             { to: '/disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
             { to: '/solicitudes', label: 'Solicitudes', icon: Inbox, badge: pending },
           ],
@@ -163,7 +179,7 @@ export function AppShell() {
         all.find((i) => i.to === '/personal')!,
         all.find((i) => i.to === '/fichajes')!,
         all.find((i) => i.to === '/finanzas')!,
-        { to: '#more', label: 'Más', icon: Ellipsis, badge: pending },
+        { to: '#more', label: 'Más', icon: Ellipsis, badge: pending + staffReplies },
       ]
     : all.length > 5
       ? [...all.slice(0, 4), { to: '#more', label: 'Más', icon: Ellipsis }]

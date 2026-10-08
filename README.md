@@ -17,13 +17,13 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Conector de Claude** (en Ajustes) — pásale a Claude extractos, tickets o facturas y los registra en Finanzas y Facturas, creando los proveedores que falten. Ver más abajo.
 - **Nóminas** — devengado por empleado según fichajes, pagado y pendiente; registro de pagos.
 - **Solicitudes** — aprobar o rechazar vacaciones, ausencias y cambios de turno.
-- **Mensajes** — avisos y tareas para una persona, un grupo (camareros, DJ / técnicos, RRPP) o todo el equipo; se ve quién los ha leído y quién acepta o rechaza cada tarea.
+- **Mensajes** — avisos y tareas para una persona, un grupo (camareros, DJ / técnicos, RRPP) o todo el equipo; se ve quién los ha leído y quién acepta o rechaza cada tarea, y se contesta a sus respuestas (conversación privada con cada persona).
 
 **Trabajador**
 - **Fichar** entrada / salida con un botón (la hora la pone el servidor, no se puede manipular).
 - **Disponibilidad** semanal: qué días puede trabajar (con horario y nota opcionales).
 - **Mis turnos**: aceptar ("Asistiré") o rechazar ("No puedo", con motivo opcional) cada turno hasta que empieza.
-- **Mensajes**: los avisos y tareas del responsable; las tareas se aceptan o se rechazan (con motivo opcional).
+- **Mensajes**: los avisos y tareas del responsable; las tareas se aceptan o se rechazan (con motivo opcional) y puede responder a cualquiera de ellos.
 - **Notificaciones al móvil** (Perfil → Avisos) cuando le asignan, cambian o cancelan un turno y cuando le llega un mensaje o una tarea.
 - Mis horas y lo ganado por semana, mes o año (sin ver su tarifa €/h), mis turnos, mis solicitudes y perfil.
 
@@ -54,7 +54,7 @@ Todas las tablas usan Row Level Security: el trabajador solo puede leer sus prop
 
 ## Notificaciones al móvil
 
-Avisan al trabajador cuando le asignan, cambian o cancelan un turno futuro y cuando le llega un mensaje o una tarea.
+Avisan al trabajador cuando le asignan, cambian o cancelan un turno futuro y cuando le llega un mensaje, una tarea o una respuesta; y a los administradores cuando un trabajador responde (se activan en *Ajustes*).
 
 - **Cómo funciona:** la base de datos apunta cada aviso en `notifications` (triggers sobre `shifts` y `message_recipients`). Tras cada cambio, la app del administrador llama a la función `supabase/functions/notify`, que los envía (Web Push estándar, sin servicios externos) a los dispositivos de cada trabajador (`push_subscriptions`). Si alguien tiene varios avisos a la vez, recibe uno con el resumen.
 - **Claves:** la función genera las claves VAPID la primera vez y las guarda en `push_keys` (sólo ella puede leerlas). No hay que configurar nada.

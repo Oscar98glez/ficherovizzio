@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, CheckCheck, ClipboardList, HelpCircle, MessageSquare, Plus, Send, Trash2, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Check, CheckCheck, ChevronDown, ClipboardList, HelpCircle, MessageCircle, MessageSquare, Plus, Send, Trash2, X } from 'lucide-react';
+import { MESSAGES_CHANGED } from '../../components/AppShell';
 import { Modal, useFeedback } from '../../components/overlay';
+import { ReplyThread } from '../../components/ReplyThread';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorBox, Field, Input, Loading, PageHeader, Segmented, Textarea } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { fmtDate, fmtTime } from '../../lib/format';
-import type { Employee, Message, MessageKind, MessageRecipient, Role } from '../../lib/types';
+import type { Employee, Message, MessageKind, MessageRecipient, MessageReply, Role } from '../../lib/types';
 import { byId, cx, fullName, groupBy, staffKind } from '../../lib/utils';
 
 const KIND_LABEL: Record<MessageKind, string> = { message: 'Mensaje', task: 'Tarea' };
@@ -22,7 +25,13 @@ type Staff = Employee & { kind: Role };
 export default function Messages() {
   const [filter, setFilter] = useState<'all' | MessageKind>('all');
   const [composing, setComposing] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // ?m=<id>: abre ese mensaje (lo usan las notificaciones de respuestas)
+  const [params, setParams] = useSearchParams();
+  const [openId, setOpenIdState] = useState<string | null>(() => params.get('m'));
+  const setOpenId = (id: string | null) => {
+    setOpenIdState(id);
+    if (!id && params.has('m')) setParams({}, { replace: true });
+  };
 
   const { data, loading, error, reload } = useLoad(async () => {
     const [employees, profiles, messages] = await Promise.all([
@@ -31,10 +40,20 @@ export default function Messages() {
       api.messages.list({ order: ['created_at', 'desc'], limit: 200 }),
     ]);
     const recipients = messages.length ? await api.messageRecipients.list({ in: ['message_id', messages.map((m) => m.id)] }) : [];
+    // Si aún no está la migración de respuestas, el resto funciona igual
+    const replies = recipients.length
+      ? await api.messageReplies.list({ in: ['recipient_id', recipients.map((r) => r.id)] }).catch(() => [] as MessageReply[])
+      : [];
     const roles = new Map(profiles.map((p) => [p.id, p.role]));
     const staff: Staff[] = employees.map((e) => ({ ...e, kind: staffKind(e, roles) })).filter((e) => e.kind !== 'admin');
-    return { staff, messages, recipients };
+    return { staff, messages, recipients, replies };
   }, []);
+
+  // Al abrir desde una notificación con la página ya cargada
+  useEffect(() => {
+    const m = params.get('m');
+    if (m) setOpenIdState(m);
+  }, [params]);
 
   if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorBox message={error} onRetry={reload} />;
@@ -42,6 +61,7 @@ export default function Messages() {
 
   const emps = byId(data.staff);
   const byMessage = groupBy(data.recipients, (r) => r.message_id);
+  const repliesOf = groupBy(data.replies, (r) => r.recipient_id);
   const list = data.messages.filter((m) => filter === 'all' || m.kind === filter);
   const open = openId ? data.messages.find((m) => m.id === openId) : null;
 
@@ -72,7 +92,7 @@ export default function Messages() {
       {list.length ? (
         <div className="space-y-3">
           {list.map((m) => (
-            <MessageCard key={m.id} message={m} recipients={byMessage[m.id] ?? []} onOpen={() => setOpenId(m.id)} />
+            <MessageCard key={m.id} message={m} recipients={byMessage[m.id] ?? []} repliesOf={repliesOf} onOpen={() => setOpenId(m.id)} />
           ))}
         </div>
       ) : (
@@ -96,7 +116,9 @@ export default function Messages() {
       <DetailModal
         message={open ?? null}
         recipients={open ? byMessage[open.id] ?? [] : []}
+        repliesOf={repliesOf}
         emps={emps}
+        onChanged={reload}
         onClose={() => setOpenId(null)}
         onDeleted={() => {
           setOpenId(null);
@@ -115,8 +137,23 @@ function stats(message: Message, recipients: MessageRecipient[]) {
   return { total: recipients.length, read, accepted, declined, pending: message.kind === 'task' ? recipients.length - accepted - declined : 0 };
 }
 
-function MessageCard({ message: m, recipients, onOpen }: { message: Message; recipients: MessageRecipient[]; onOpen: () => void }) {
+/** Respuestas de los trabajadores que la administración aún no ha leído */
+const unreadFromStaff = (replies: MessageReply[] = []) => replies.filter((r) => !r.from_admin && !r.read_at).length;
+
+function MessageCard({
+  message: m,
+  recipients,
+  repliesOf,
+  onOpen,
+}: {
+  message: Message;
+  recipients: MessageRecipient[];
+  repliesOf: Record<string, MessageReply[]>;
+  onOpen: () => void;
+}) {
   const s = stats(m, recipients);
+  const replies = recipients.reduce((n, r) => n + (repliesOf[r.id]?.length ?? 0), 0);
+  const unread = recipients.reduce((n, r) => n + unreadFromStaff(repliesOf[r.id]), 0);
   return (
     <Card>
       <button onClick={onOpen} className="w-full p-4 text-left transition hover:bg-fill/40 sm:px-5">
@@ -137,6 +174,12 @@ function MessageCard({ message: m, recipients, onOpen }: { message: Message; rec
           <span className="inline-flex items-center gap-1">
             <CheckCheck className="h-3.5 w-3.5" /> Leído {s.read}/{s.total}
           </span>
+          {replies > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <MessageCircle className="h-3.5 w-3.5" /> {replies} {replies === 1 ? 'respuesta' : 'respuestas'}
+            </span>
+          )}
+          {unread > 0 && <Badge tone="red">{unread === 1 ? '1 nueva' : `${unread} nuevas`}</Badge>}
           {m.kind === 'task' && (
             <>
               <span className="inline-flex items-center gap-1 text-green">
@@ -162,21 +205,44 @@ function MessageCard({ message: m, recipients, onOpen }: { message: Message; rec
 function DetailModal({
   message: m,
   recipients,
+  repliesOf,
   emps,
   onClose,
   onDeleted,
+  onChanged,
 }: {
   message: Message | null;
   recipients: MessageRecipient[];
+  repliesOf: Record<string, MessageReply[]>;
   emps: Map<string, Staff>;
   onClose: () => void;
   onDeleted: () => void;
+  onChanged: () => void;
 }) {
   const { confirm, toast } = useFeedback();
+  const [thread, setThread] = useState<string | null>(null);
+  // Si sólo hay una conversación con respuestas nuevas, se abre directamente
+  useEffect(() => {
+    const unread = recipients.filter((r) => unreadFromStaff(repliesOf[r.id]) > 0);
+    setThread(unread.length === 1 ? unread[0].id : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [m?.id]);
+  useEffect(() => {
+    if (thread && unreadFromStaff(repliesOf[thread]) > 0)
+      api
+        .markRepliesRead(thread)
+        .then(() => {
+          onChanged();
+          window.dispatchEvent(new Event(MESSAGES_CHANGED));
+        })
+        .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread]);
   if (!m) return null;
   const s = stats(m, recipients);
   // Primero los que han rechazado, luego sin responder / sin leer, y al final los que han aceptado o leído
-  const rank = (r: MessageRecipient) => (r.response === 'declined' ? 0 : m.kind === 'task' ? (r.response ? 2 : 1) : r.read_at ? 2 : 1);
+  const rank = (r: MessageRecipient) =>
+    unreadFromStaff(repliesOf[r.id]) ? -1 : r.response === 'declined' ? 0 : m.kind === 'task' ? (r.response ? 2 : 1) : r.read_at ? 2 : 1;
   const rows = [...recipients].sort((a, b) => rank(a) - rank(b) || fullName(emps.get(a.employee_id)).localeCompare(fullName(emps.get(b.employee_id))));
 
   async function remove() {
@@ -248,11 +314,24 @@ function DetailModal({
         <div className="divide-y divide-line overflow-hidden rounded-xl bg-fill/40">
           {rows.map((r) => {
             const e = emps.get(r.employee_id);
+            const replies = repliesOf[r.id] ?? [];
+            const unread = unreadFromStaff(replies);
+            const opened = thread === r.id;
             return (
-              <div key={r.id} className="flex items-start gap-3 px-3 py-2.5">
+              <div key={r.id}>
+              <button type="button" onClick={() => setThread(opened ? null : r.id)} className="flex w-full items-start gap-3 px-3 py-2.5 text-left hover:bg-fill/60">
                 <Avatar name={fullName(e)} color={e?.color} src={e?.photo_url} size={32} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium">{fullName(e) || 'Empleado eliminado'}</div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate text-[14px] font-medium">{fullName(e) || 'Empleado eliminado'}</span>
+                    {replies.length > 0 && (
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[12px] text-ink-2">
+                        <MessageCircle className="h-3 w-3" /> {replies.length}
+                      </span>
+                    )}
+                    {unread > 0 && <Badge tone="red">{unread === 1 ? 'Nueva' : `${unread} nuevas`}</Badge>}
+                    <ChevronDown className={cx('ml-auto h-4 w-4 shrink-0 text-ink-3 transition', opened && 'rotate-180')} />
+                  </div>
                   {r.response_note && <div className="text-[13px] text-ink-2">«{r.response_note}»</div>}
                   {e && !e.user_id && <div className="text-[12px] text-orange">Sin cuenta en la app: no puede verlo</div>}
                 </div>
@@ -269,6 +348,22 @@ function DetailModal({
                   )}
                   {(r.responded_at || r.read_at) && <div className="text-ink-3">{when((r.responded_at ?? r.read_at)!)}</div>}
                 </div>
+              </button>
+              {opened && (
+                <div className="bg-surface/40 px-3 pb-3 pt-1 dark:bg-elevated/40">
+                  {!replies.length && <p className="mb-2 text-[13px] text-ink-3">Aún no hay respuestas. Puedes escribirle tú.</p>}
+                  <ReplyThread
+                    replies={replies}
+                    asAdmin
+                    otherName={e?.first_name ?? 'Trabajador'}
+                    placeholder={`Responder a ${e?.first_name ?? 'esta persona'}…`}
+                    onSend={async (body) => {
+                      await api.replyMessage(r.id, body);
+                      onChanged();
+                    }}
+                  />
+                </div>
+              )}
               </div>
             );
           })}
