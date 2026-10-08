@@ -21,7 +21,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 **Trabajador**
 - **Fichar** entrada / salida con un botón (la hora la pone el servidor, no se puede manipular).
 - **Disponibilidad** semanal: qué días puede trabajar (con horario y nota opcionales).
-- Mis horas e importe estimado, mis turnos, mis solicitudes y perfil.
+- Mis horas y lo ganado por semana, mes o año (sin ver su tarifa €/h), mis turnos, mis solicitudes y perfil.
 
 > Una "noche" va de 06:00 a 06:00: una salida a las 05:30 del sábado cuenta para la noche del viernes.
 
