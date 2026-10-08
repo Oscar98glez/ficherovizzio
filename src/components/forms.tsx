@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Trash2 } from 'lucide-react';
+import { Check, HelpCircle, Trash2, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { CONTRACTS, DEPARTMENTS, departmentOfPosition, EMPLOYEE_COLORS, POSITION_GROUPS, POSITIONS, SHIFT_STATUS } from '../lib/constants';
 
 const OTHER_POSITION = '__otro__';
 import { businessDate, businessToday, fromLocalInput, isoDate, nightStart, toLocalInput, toTimeInput } from '../lib/dates';
-import { fmtHours, fmtMoney, fmtTime } from '../lib/format';
+import { fmtDate, fmtHours, fmtMoney, fmtTime } from '../lib/format';
 import type { Availability, ClubEvent, ContractType, Department, Employee, Shift, ShiftStatus, TimeEntry } from '../lib/types';
 import { availabilityLabel, hhmm } from '../lib/availability';
 import { cx, entryHours, fullName, parseAmount } from '../lib/utils';
@@ -541,6 +541,32 @@ export function ShiftForm({
             ? `Salida registrada a las ${fmtTime(shift.end_at)} (se toma del fichaje de salida).`
             : 'La hora de salida se rellena sola cuando el empleado fiche la salida.'}
         </p>
+
+        {shift && shift.status !== 'cancelled' && (
+          <div
+            className={cx(
+              'rounded-xl px-3.5 py-2.5 text-[14px]',
+              shift.response === 'accepted' ? 'bg-green/10' : shift.response === 'declined' ? 'bg-red/10' : 'bg-fill/60',
+            )}
+          >
+            <div
+              className={cx(
+                'flex items-center gap-1.5 font-semibold',
+                shift.response === 'accepted' ? 'text-green' : shift.response === 'declined' ? 'text-red' : 'text-ink-2',
+              )}
+            >
+              {shift.response === 'accepted' ? <Check className="h-4 w-4" /> : shift.response === 'declined' ? <X className="h-4 w-4" /> : <HelpCircle className="h-4 w-4" />}
+              {shift.response === 'accepted' ? 'Ha confirmado que viene' : shift.response === 'declined' ? 'Ha dicho que no puede' : 'Aún no ha respondido'}
+              {shift.responded_at && (
+                <span className="font-normal text-ink-2">
+                  · {fmtDate(shift.responded_at)}, {fmtTime(shift.responded_at)}
+                </span>
+              )}
+            </div>
+            {shift.response_note && <div className="mt-1 text-ink-2">«{shift.response_note}»</div>}
+            {shift.response && <div className="mt-1 text-[12px] text-ink-3">Si cambias la hora o la persona, tendrá que volver a responder.</div>}
+          </div>
+        )}
 
         <Field label="Estado">
           <Segmented

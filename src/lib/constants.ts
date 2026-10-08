@@ -8,6 +8,7 @@ import type {
   ReservationOrigin,
   ReservationStatus,
   Role,
+  ShiftResponse,
   ShiftStatus,
 } from './types';
 
@@ -140,6 +141,11 @@ export const SHIFT_STATUS: Record<ShiftStatus, { label: string; tone: Tone }> = 
   planned: { label: 'Planificado', tone: 'gray' },
   confirmed: { label: 'Confirmado', tone: 'green' },
   cancelled: { label: 'Cancelado', tone: 'red' },
+};
+
+export const SHIFT_RESPONSE: Record<ShiftResponse, { label: string; tone: Tone }> = {
+  accepted: { label: 'Aceptado', tone: 'green' },
+  declined: { label: 'Rechazado', tone: 'red' },
 };
 
 export const EMPLOYEE_COLORS = [

@@ -9,7 +9,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Personal** — fichas de empleado con puesto, departamento, contrato y coste por hora. Horas y coste por persona de la semana, el mes o el año (camareros y DJ / técnicos). Gestión del rol (admin / trabajador).
 - **Fichajes** — entradas y salidas agrupadas por noche, fichajes manuales, cierre de fichajes abiertos, exportación a CSV.
 - **Disponibilidad** — tabla semanal con los días que puede trabajar cada persona; desde cada casilla se asigna el turno.
-- **Turnos** — planificación semanal, asignación de varias personas de una vez, coste previsto y "copiar semana anterior".
+- **Turnos** — planificación semanal, asignación de varias personas de una vez, coste previsto y "copiar semana anterior". Se ve quién ha aceptado (✓), rechazado (✗) o no ha respondido cada turno.
 - **Noches** — sesiones y eventos con su rentabilidad (ingresos − gastos − personal).
 - **Finanzas** — movimientos, cierre de caja por noche (efectivo / tarjeta por concepto), gráficos y desglose por categoría.
 - **Facturas** — archivo de facturas recibidas y emitidas (PDF o foto) con importe, IVA, estado de pago y vencimiento; se guardan en un almacenamiento privado de Supabase.
@@ -21,6 +21,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 **Trabajador**
 - **Fichar** entrada / salida con un botón (la hora la pone el servidor, no se puede manipular).
 - **Disponibilidad** semanal: qué días puede trabajar (con horario y nota opcionales).
+- **Mis turnos**: aceptar ("Asistiré") o rechazar ("No puedo", con motivo opcional) cada turno hasta que empieza.
 - Mis horas y lo ganado por semana, mes o año (sin ver su tarifa €/h), mis turnos, mis solicitudes y perfil.
 
 > Una "noche" va de 06:00 a 06:00: una salida a las 05:30 del sábado cuenta para la noche del viernes.

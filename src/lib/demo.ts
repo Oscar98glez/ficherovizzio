@@ -20,6 +20,7 @@ import type {
   Reservation,
   ReservationStatus,
   Shift,
+  ShiftResponse,
   Supplier,
   TicketSale,
   TimeEntry,
@@ -190,6 +191,13 @@ export function demoRepo<T extends { id: string }>(table: TableName): Repo<T> {
       const r = rows().find((x) => x.id === id);
       if (!r) throw new Error('Registro no encontrado');
       if (table === 'reservations') reservationRules({ ...(r as unknown as Reservation), ...(patch as Partial<Reservation>) }, false);
+      // Como el trigger de Supabase: si cambia la hora o la persona del turno, la respuesta deja de valer
+      if (table === 'shifts') {
+        const p = patch as Partial<Shift>;
+        const sh = r as unknown as Shift;
+        if ((p.start_at && p.start_at !== sh.start_at) || (p.employee_id && p.employee_id !== sh.employee_id))
+          Object.assign(r, { response: null, responded_at: null, response_note: null });
+      }
       Object.assign(r, patch);
       if (table === 'reservations') Object.assign(r, reservationRules(r as unknown as Reservation, false));
       if (table === 'time_entries') syncShiftEnd(r as unknown as TimeEntry);
@@ -302,6 +310,22 @@ export async function demoClockOut(notes?: string): Promise<TimeEntry> {
   persist();
   await wait();
   return clone(open) as unknown as TimeEntry;
+}
+
+/** Como respond_shift de Supabase: el trabajador acepta o rechaza su turno antes de que empiece */
+export async function demoRespondShift(shiftId: string, response: ShiftResponse, note?: string): Promise<Shift> {
+  const emp = currentEmployee();
+  const sh = (getDb().shifts as unknown as Shift[]).find((x) => x.id === shiftId && x.employee_id === emp.id);
+  if (!sh) throw new Error('SHIFT_NOT_FOUND');
+  if (sh.status === 'cancelled' || Date.parse(sh.start_at) <= Date.now()) throw new Error('SHIFT_CLOSED');
+  Object.assign(sh, {
+    response,
+    responded_at: new Date().toISOString(),
+    response_note: response === 'declined' ? note?.trim() || null : null,
+  });
+  persist();
+  await wait();
+  return clone(sh) as unknown as Shift;
 }
 
 // ---------- Datos de ejemplo ----------

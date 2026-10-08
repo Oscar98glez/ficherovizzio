@@ -15,6 +15,8 @@ export type EventKind = 'sesion' | 'evento_privado' | 'concierto' | 'especial';
 export type TxKind = 'income' | 'expense';
 export type PaymentMethod = 'efectivo' | 'tarjeta' | 'transferencia' | 'bizum' | 'otro';
 export type ShiftStatus = 'planned' | 'confirmed' | 'cancelled';
+/** Respuesta del trabajador al turno */
+export type ShiftResponse = 'accepted' | 'declined';
 export type RequestKind = 'vacaciones' | 'ausencia' | 'cambio_turno' | 'baja' | 'otro';
 export type RequestStatus = 'pending' | 'approved' | 'rejected';
 
@@ -90,6 +92,11 @@ export interface Shift {
   position: string | null;
   status: ShiftStatus;
   notes: string | null;
+  /** Lo acepta (asistirá) o lo rechaza; null mientras no responda */
+  response?: ShiftResponse | null;
+  responded_at?: string | null;
+  /** Motivo del rechazo (opcional) */
+  response_note?: string | null;
   created_at: string;
 }
 

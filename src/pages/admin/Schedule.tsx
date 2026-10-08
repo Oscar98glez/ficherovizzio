@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, Plus } from 'lucide-react';
+import { Check, Copy, HelpCircle, Plus, X } from 'lucide-react';
 import { ShiftForm } from '../../components/forms';
 import { useFeedback } from '../../components/overlay';
 import { PeriodPicker } from '../../components/PeriodPicker';
@@ -10,6 +10,23 @@ import { businessDate, businessToday, daysBetween, isoDate, makePeriod, periodRa
 import { fmtWeekday, fmtShiftTimes } from '../../lib/format';
 import type { Shift } from '../../lib/types';
 import { byId, cx, fullName, groupBy } from '../../lib/utils';
+
+/** Respuesta del trabajador: aceptado ✓, rechazado ✗ o sin responder ? */
+function ResponseIcon({ shift }: { shift: Shift }) {
+  if (shift.response === 'accepted')
+    return <Check className="h-3.5 w-3.5 shrink-0 text-green" strokeWidth={3} aria-label="Aceptado" />;
+  if (shift.response === 'declined')
+    return (
+      <span title={shift.response_note ? `Rechazado: ${shift.response_note}` : 'Rechazado'}>
+        <X className="h-3.5 w-3.5 shrink-0 text-red" strokeWidth={3} aria-label="Rechazado" />
+      </span>
+    );
+  return (
+    <span title="Sin responder">
+      <HelpCircle className="h-3.5 w-3.5 shrink-0 text-ink-3" aria-label="Sin responder" />
+    </span>
+  );
+}
 
 export default function Schedule() {
   const { toast, confirm } = useFeedback();
@@ -38,6 +55,8 @@ export default function Schedule() {
   const active = data.shifts.filter((s) => s.status !== 'cancelled');
   const people = new Set(active.map((s) => s.employee_id)).size;
   const closed = active.filter((s) => s.end_at).length;
+  const accepted = active.filter((s) => s.response === 'accepted').length;
+  const declined = active.filter((s) => s.response === 'declined').length;
   const today = isoDate(businessToday());
 
   async function copyPrevious() {
@@ -97,9 +116,14 @@ export default function Schedule() {
         <PeriodPicker period={period} onChange={setPeriod} units={['week']} />
       </div>
 
-      <div className="mb-5 grid grid-cols-3 gap-3 lg:gap-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <StatCard label="Turnos" value={active.length} />
         <StatCard label="Personas" value={people} />
+        <StatCard
+          label="Aceptados"
+          value={`${accepted} / ${active.length}`}
+          sub={declined ? <span className="text-red">{declined} rechazado{declined > 1 ? 's' : ''}</span> : undefined}
+        />
         <StatCard label="Salidas fichadas" value={`${closed} / ${active.length}`} />
       </div>
 
@@ -146,8 +170,11 @@ export default function Schedule() {
                       )}
                     >
                       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: emp?.color }} />
-                      <div className={cx('truncate text-[13px] font-medium', s.status === 'cancelled' && 'line-through')}>
-                        {fullName(emp)}
+                      <div className="flex items-center gap-1">
+                        <span className={cx('min-w-0 flex-1 truncate text-[13px] font-medium', s.status === 'cancelled' && 'line-through')}>
+                          {fullName(emp)}
+                        </span>
+                        {s.status !== 'cancelled' && <ResponseIcon shift={s} />}
                       </div>
                       <div className="tabular flex items-center justify-between gap-1 text-[11px] text-ink-2">
                         <span>
