@@ -6,7 +6,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 
 **Administrador**
 - **Resumen** — ingresos, gastos, coste de personal y resultado del mes; quién está fichado ahora mismo en tiempo real; próximas noches y solicitudes pendientes.
-- **Personal** — fichas de empleado con puesto, departamento, contrato y coste por hora. Horas y coste del mes por persona. Gestión del rol (admin / trabajador).
+- **Personal** — fichas de empleado con puesto, departamento, contrato y coste por hora. Horas y coste por persona de la semana, el mes o el año (camareros y DJ / técnicos). Gestión del rol (admin / trabajador).
 - **Fichajes** — entradas y salidas agrupadas por noche, fichajes manuales, cierre de fichajes abiertos, exportación a CSV.
 - **Disponibilidad** — tabla semanal con los días que puede trabajar cada persona; desde cada casilla se asigna el turno.
 - **Turnos** — planificación semanal, asignación de varias personas de una vez, coste previsto y "copiar semana anterior".

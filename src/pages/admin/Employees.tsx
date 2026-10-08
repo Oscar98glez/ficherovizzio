@@ -2,17 +2,20 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Download, Plus, Users } from 'lucide-react';
 import { EmployeeForm } from '../../components/forms';
+import { PeriodPicker } from '../../components/PeriodPicker';
 import { RrppPanel } from '../../components/rrpp-commissions';
 import { Avatar, Badge, Button, Card, EmptyState, ErrorBox, LiveDot, Loading, PageHeader, SearchInput, Segmented, Select } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { CONTRACTS, DEPARTMENTS } from '../../lib/constants';
-import { makePeriod, periodRange } from '../../lib/dates';
+import { makePeriod, periodRange, type PeriodUnit } from '../../lib/dates';
 import { fmtHours, fmtMoney, fmtMoney0 } from '../../lib/format';
 import type { Department, Employee, Role } from '../../lib/types';
 import { cx, downloadCSV, entryCost, entryHours, fullName, groupBy, sumBy } from '../../lib/utils';
 
 type Filter = 'active' | 'inactive' | 'all';
+
+const UNIT_COL: Record<PeriodUnit, string> = { week: 'semana', month: 'mes', year: 'año' };
 type Kind = Role;
 
 const KINDS: { value: Kind; label: string }[] = [
@@ -51,10 +54,10 @@ export default function Employees() {
     }
   };
   const [creating, setCreating] = useState(false);
-  const month = useMemo(() => makePeriod('month'), []);
+  const [period, setPeriod] = useState(() => makePeriod('month'));
 
   const { data, loading, error, reload } = useLoad(async () => {
-    const { start, end } = periodRange(month);
+    const { start, end } = periodRange(period);
     const [employees, entries, profiles] = await Promise.all([
       api.employees.list({ order: ['first_name', 'asc'] }),
       api.timeEntries.list({ gte: ['clock_in', start], lt: ['clock_in', end] }),
@@ -62,7 +65,7 @@ export default function Employees() {
     ]);
     const roles = new Map(profiles.map((p) => [p.id, p.role]));
     return { employees: employees.map((e) => ({ ...e, kind: kindOf(e, roles) })), entries };
-  }, [month]);
+  }, [period]);
 
   const rows = useMemo(() => {
     if (!data) return [];
@@ -86,13 +89,15 @@ export default function Employees() {
   const activeCount = data.employees.filter((e) => e.active).length;
   const counts = Object.fromEntries(KINDS.map((k) => [k.value, data.employees.filter((e) => e.kind === k.value && e.active).length])) as Record<Kind, number>;
   const isRrpp = kind === 'rrpp';
-  const cols = 'md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_90px_100px_110px_24px]';
+  const cols = 'md:grid-cols-[minmax(0,2.2fr)_minmax(0,1.4fr)_90px_110px_110px_24px]';
   const totalCost = sumBy(data.entries, (x) => entryCost(x));
+  const unitCol = UNIT_COL[period.unit];
+  const periodText = period.unit === 'week' ? `la semana ${period.label}` : period.label.toLowerCase();
 
   const exportCsv = () =>
-    downloadCSV(`personal-${KINDS.find((k) => k.value === kind)!.label.toLowerCase()}-${month.from.slice(0, 7)}.csv`, [
+    downloadCSV(`personal-${KINDS.find((k) => k.value === kind)!.label.toLowerCase()}-${period.unit === 'year' ? period.from.slice(0, 4) : period.unit === 'month' ? period.from.slice(0, 7) : period.from}.csv`, [
       [
-        'Nombre', 'Email', 'Teléfono', 'Puesto', 'Departamento', 'Contrato', '€/hora', `Horas ${month.label}`, `Coste ${month.label}`,
+        'Nombre', 'Email', 'Teléfono', 'Puesto', 'Departamento', 'Contrato', '€/hora', `Horas ${period.label}`, `Coste ${period.label}`,
         'Activo',
       ],
       ...rows.map(({ e, hours, cost }) => [
@@ -113,7 +118,7 @@ export default function Employees() {
     <>
       <PageHeader
         title="Personal"
-        subtitle={`${activeCount} personas activas · ${fmtMoney0(totalCost)} en ${month.label.toLowerCase()}`}
+        subtitle={`${activeCount} personas activas · ${fmtMoney0(totalCost)} en ${periodText}`}
         actions={
           <>
             <Button variant="secondary" icon={<Download />} onClick={exportCsv} className="hidden sm:inline-flex">
@@ -133,6 +138,12 @@ export default function Employees() {
           options={KINDS.map((k) => ({ value: k.value, label: `${k.label} · ${counts[k.value]}` }))}
         />
       </div>
+
+      {!isRrpp && (
+        <div className="mb-4">
+          <PeriodPicker period={period} onChange={setPeriod} />
+        </div>
+      )}
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
         <SearchInput value={q} onChange={setQ} placeholder="Buscar por nombre, puesto o email" className="sm:w-80" />
@@ -167,8 +178,8 @@ export default function Employees() {
               <span>Nombre</span>
               <span>Departamento</span>
               <span className="text-right">€/hora</span>
-              <span className="text-right">Horas mes</span>
-              <span className="text-right">Coste mes</span>
+              <span className="text-right">Horas {unitCol}</span>
+              <span className="text-right">Coste {unitCol}</span>
               <span />
             </div>
             <div className="divide-y divide-line">
@@ -204,6 +215,20 @@ export default function Employees() {
                   <ChevronRight className="h-4 w-4 text-ink-3" />
                 </button>
               ))}
+            </div>
+            <div className={cx('grid grid-cols-[minmax(0,1fr)_auto_16px] items-center gap-3 border-t border-line bg-fill/40 px-4 py-3 md:gap-4 md:px-5', cols)}>
+              <div className="text-[14px] font-semibold">
+                Total {unitCol}
+                <span className="font-normal text-ink-2"> · {period.label}</span>
+              </div>
+              <div className="hidden md:block" />
+              <div className="hidden md:block" />
+              <div className="tabular hidden text-right text-[14px] font-semibold text-ink-2 md:block">{fmtHours(sumBy(rows, (r) => r.hours))}</div>
+              <div className="tabular text-right text-[15px] font-semibold md:text-[14px]">
+                {fmtMoney0(sumBy(rows, (r) => r.cost))}
+                <div className="text-[12px] font-normal text-ink-2 md:hidden">{fmtHours(sumBy(rows, (r) => r.hours))}</div>
+              </div>
+              <span />
             </div>
           </>
         ) : (
