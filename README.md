@@ -50,6 +50,9 @@ El esquema está en `supabase/migrations/`. **Cada push a `main` aplica las migr
 3. El empleado se registra en `/registro` con ese mismo email y queda vinculado a su ficha automáticamente.
 4. Cualquier otra persona puede registrarse también: se le crea una ficha de **Camarero/a** con tarifa 0 €/h (en Personal aparece como "falta tarifa" para que el administrador la complete).
 
+### Enlaces de los correos (cambiar la contraseña, confirmar la cuenta)
+Llevan a la *Site URL* de Supabase. La acción *Configurar enlaces de los correos de Supabase* (`.github/workflows/supabase-auth-urls.yml`) la pone en `https://ficherovizzio.vercel.app` y añade la app a las *Redirect URLs*. Si la app cambia de dirección, crea la variable del repositorio `APP_URL` con la nueva y lanza la acción a mano marcando "aplicar".
+
 ### Seguridad
 Todas las tablas usan Row Level Security: el trabajador solo puede leer sus propios fichajes, turnos y solicitudes; las finanzas solo son visibles para administradores. El fichaje se hace mediante las funciones `clock_in()` / `clock_out()` con la hora del servidor.
 
