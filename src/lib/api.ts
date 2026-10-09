@@ -361,6 +361,13 @@ export const api = {
 
   myEmployee,
   myTimeEntries,
+
+  /** Vincula la cuenta con la ficha sin cuenta que tenga su mismo email; devuelve si hay ficha */
+  linkMyEmployee: async (): Promise<boolean> => {
+    if (IS_DEMO) return false;
+    const { data, error } = await sb().rpc('link_my_employee');
+    return !error && !!data;
+  },
   setMyPhoto,
 
   /** RRPP que se pueden elegir en una reserva (sólo id y nombre) */
