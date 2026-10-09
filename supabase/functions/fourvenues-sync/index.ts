@@ -964,6 +964,47 @@ async function inspect() {
   };
 }
 
+/**
+ * Reservas alrededor de una noche: a qué evento y fecha pertenece cada una y de qué RRPP (sólo sus
+ * iniciales). Sin datos de clientes: sirve para ver por qué un reservado sale en otra noche o en ninguna.
+ */
+async function bookingsAudit(night: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(night)) return { error: 'Fecha no válida (AAAA-MM-DD)' };
+  const events = ((await fv<FvEvent[]>('/events/', { start: addDays(night, -3), end: addDays(night, 4) })) ?? []).filter((e) => e?._id);
+  const evInfo = new Map(events.map((e) => [e._id, { nombre: e.name ?? '', noche: eventNight(e) }]));
+  const users = new Map((await allUsers().catch(() => [] as FvUser[])).map((u) => [u._id, u]));
+  const initials = (id: string) => {
+    const n = id ? (users.has(id) ? fullName(users.get(id)!) : null) : null;
+    return n ? n.split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').join('.') : id ? `código …${id.slice(-6)}` : 'sin RRPP';
+  };
+  const out: Record<string, unknown>[] = [];
+  const seen = new Set<string>();
+  for (const e of events.filter((x) => evInfo.get(x._id)?.noche === night)) {
+    const raw = await eventItems<FvBooking>('/bookings/', e._id, { start_date: `${addDays(night, -1)}T00:00:00.000Z`, end_date: `${addDays(night, 2)}T00:00:00.000Z` }, 100);
+    for (const b of raw) {
+      if (seen.has(b._id)) continue;
+      seen.add(b._id);
+      const x = b as FvBooking & { date?: string; local_date?: string; hour?: string; event_name?: string };
+      out.push({
+        pedidaParaEvento: e.name,
+        eventoDeLaReserva: b.event_id ? evInfo.get(b.event_id) ?? { desconocido: `…${b.event_id.slice(-6)}`, nombre: x.event_name ?? null } : null,
+        esDeEsteEvento: b.event_id === e._id,
+        date: x.date ?? null,
+        local_date: x.local_date ?? null,
+        hour: x.hour ?? null,
+        estado: [...statuses(b), b.state ?? ''].filter(Boolean).join(','),
+        zona: b.zone_name ?? null,
+        rrpp: initials(refId(b.referral_id)),
+      });
+    }
+  }
+  return {
+    noche: night,
+    eventosFourvenues: events.map((e) => ({ nombre: e.name, noche: eventNight(e), id: `…${e._id.slice(-6)}` })),
+    reservas: out,
+  };
+}
+
 // ---------------------------------------------------------------------
 //  Servidor
 // ---------------------------------------------------------------------
@@ -1061,7 +1102,7 @@ async function handler(req: Request, db: SupabaseClient | null) {
       return json({ users: users.map((u) => ({ id: u._id, name: fullName(u), email: u.email ?? null })) });
     }
     if (body.action === 'sync') return await sync(db, body.force === true, body.from);
-    if (body.action === 'inspect') return json(await inspect());
+    if (body.action === 'inspect') return json((body as { date?: string }).date ? await bookingsAudit(String((body as { date?: string }).date)) : await inspect());
     return json({ error: 'Acción desconocida' }, 400);
   } catch (e) {
     console.error(e);

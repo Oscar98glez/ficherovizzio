@@ -15,6 +15,10 @@ on:
         description: 'Sincronizar desde esta fecha (AAAA-MM-DD; vacío = la última semana)'
         type: string
         default: ''
+      noche:
+        description: 'Revisar las reservas de esta noche (AAAA-MM-DD): evento, fecha y RRPP de cada una, sin datos de clientes'
+        type: string
+        default: ''
 
 jobs:
   diagnostico:
@@ -24,6 +28,7 @@ jobs:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SINCRONIZAR: ${{ inputs.sincronizar }}
       DESDE: ${{ inputs.desde }}
+      NOCHE: ${{ inputs.noche }}
     steps:
       - name: Clave de servicio
         run: |
@@ -46,7 +51,7 @@ jobs:
         run: |
           curl -sS -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/fourvenues-sync" \
             -H "Authorization: Bearer $SERVICE_KEY" -H "apikey: $SERVICE_KEY" -H "Content-Type: application/json" \
-            -d '{"action":"inspect"}' | python3 -m json.tool
+            -d "$(python3 -c 'import json, os; n = os.environ.get("NOCHE", "").strip(); print(json.dumps({"action": "inspect", **({"date": n} if n else {})}))')" | python3 -m json.tool
 
       - name: Sincronizar
         if: env.SINCRONIZAR == 'true'
