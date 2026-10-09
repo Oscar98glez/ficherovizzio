@@ -69,7 +69,7 @@ Avisan al trabajador cuando le asignan, cambian o cancelan un turno futuro y cua
 
 La función `supabase/functions/rapid-responder` es un servidor MCP: Claude la usa como conector para registrar ingresos y gastos en **Finanzas**, subir facturas (PDF o foto) a **Facturas** y crear o actualizar **proveedores**.
 
-**Herramientas:** `ver_categorias`, `registrar_movimientos` (hasta 500 por llamada; omite duplicados), `listar_movimientos`, `eliminar_movimientos`, `buscar_proveedores`, `crear_proveedor`, `actualizar_proveedor`, `preparar_subida_factura`, `registrar_factura`, `listar_facturas`, `eliminar_factura`, `listar_personal`, `ver_fichajes_noche` y `corregir_fichajes`.
+**Herramientas:** `ver_categorias`, `registrar_movimientos` (hasta 500 por llamada; omite duplicados), `listar_movimientos`, `eliminar_movimientos`, `buscar_proveedores`, `crear_proveedor`, `actualizar_proveedor`, `preparar_subida_factura`, `registrar_factura`, `listar_facturas`, `eliminar_factura`, `listar_personal`, `ver_fichajes_noche`, `corregir_fichajes` y `ver_reservados_noche` (sólo lectura: reservados de la app y reservas de Fourvenues de una noche, para cotejarlos).
 
 ### Instalación (una vez)
 1. Aplica las migraciones `20261006130000_suppliers.sql` y `20261006140000_claude_connector.sql` (se aplican solas al hacer push a `main`).
