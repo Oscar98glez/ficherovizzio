@@ -110,6 +110,8 @@ Todo lo importado lleva el id de Fourvenues: sincronizar varias veces no duplica
 4. En la app: *Ajustes → Fourvenues → Sincronizar ahora*. Para traer noches más antiguas (hasta 180 días): *Traer noches anteriores*.
 5. *Asociar RRPP*: cada usuario de Fourvenues que vende entradas se asocia a su ficha. Si el email de Fourvenues coincide con el de su ficha, se asocia solo. Mientras un RRPP no esté asociado, sus ventas no cuentan en sus comisiones (Ajustes avisa).
 
+Nombres de los RRPP: salen tal y como están en Fourvenues, tengan o no ficha en la app. La sincronización los busca en los usuarios de Fourvenues (todas las páginas), en los datos de cada venta y, si falta alguno, pidiéndolo por su código; si Fourvenues no lo da, sale *RRPP* con su código y se avisa. La acción de GitHub *Diagnóstico de Fourvenues* (a mano) muestra qué campos da Fourvenues (sin datos personales) y vuelve a sincronizar.
+
 Después se sincroniza sola al abrir *Noches* (como mucho cada 10 minutos). La clave necesita acceso a los eventos, las entradas, las listas, las reservas y los usuarios de Fourvenues (si las listas o las reservas fallan, la sincronización sigue con el resto, esas columnas salen como "—" y se avisa).
 
 ## Despliegue

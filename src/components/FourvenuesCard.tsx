@@ -217,7 +217,7 @@ function RrppMappingModal({ open, onClose, pending }: { open: boolean; onClose: 
                 key={user.id}
                 title={
                   <span className="flex items-center gap-2">
-                    {user.name ?? 'Sin nombre'}
+                    {user.name ?? `RRPP ${user.id.slice(-6)} (sin nombre en Fourvenues)`}
                     {sales && !employee && <Badge tone="orange">Sin asociar</Badge>}
                   </span>
                 }

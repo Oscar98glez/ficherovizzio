@@ -26,6 +26,7 @@
 //  Peticiones (POST, con la sesión de un administrador de la app):
 //    { "action": "status" }                        → si hay clave, entorno y última sincronización
 //    { "action": "users" }                         → usuarios de Fourvenues (para asociar los RRPP)
+//    { "action": "inspect" }                       → forma de los datos (campos y tipos, sin valores)
 //    { "action": "sync", "force"?, "from"? }       → sincroniza; sin "force" no repite si se hizo
 //                                                    hace menos de 10 minutos. "from" (AAAA-MM-DD)
 //                                                    trae noches más antiguas.
@@ -104,8 +105,8 @@ export interface FvTicket {
   /** Gastos de gestión */
   total_fees?: number;
   refunded?: number;
-  /** RRPP que la ha vendido (usuario de Fourvenues) */
-  referral_id?: string | null;
+  /** RRPP que la ha vendido (usuario de Fourvenues): su id o, a veces, el usuario entero */
+  referral_id?: Referral;
 }
 
 /** Inscripción en una lista de Fourvenues (QR gratis); sólo los campos que se usan */
@@ -119,7 +120,7 @@ export interface FvListEntry {
   /** Personas que han entrado */
   enter?: number;
   /** RRPP de la lista (usuario de Fourvenues), como en las entradas */
-  referral_id?: string | null;
+  referral_id?: Referral;
 }
 
 /** Reserva de mesa de Fourvenues; sólo los campos que se usan */
@@ -128,7 +129,7 @@ export interface FvBooking {
   event_id?: string;
   status?: string | string[];
   /** RRPP de la reserva (usuario de Fourvenues) */
-  referral_id?: string | null;
+  referral_id?: Referral;
 }
 
 export interface FvUser {
@@ -136,6 +137,60 @@ export interface FvUser {
   name?: string;
   last_name?: string;
   email?: string;
+}
+
+/** El RRPP de una venta: normalmente su id; por si acaso, también el usuario con sus datos */
+export type Referral = string | { _id?: string; id?: string; name?: string; last_name?: string } | null;
+
+/** Id del RRPP de una venta ('' = sin RRPP) */
+export function refId(r: unknown): string {
+  if (typeof r === 'string') return r.trim();
+  if (r && typeof r === 'object') {
+    const o = r as { _id?: unknown; id?: unknown };
+    const id = o._id ?? o.id;
+    return typeof id === 'string' ? id.trim() : '';
+  }
+  return '';
+}
+
+const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+
+/** Nombre de una persona en un objeto de Fourvenues (name + last_name, full_name...) */
+export function personName(o: unknown): string | null {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return null;
+  const p = o as Record<string, unknown>;
+  const full = [str(p.name) ?? str(p.first_name), str(p.last_name) ?? str(p.surname)].filter(Boolean).join(' ');
+  return full || str(p.full_name) || str(p.fullname) || str(p.display_name) || str(p.username) || null;
+}
+
+/** Campos en los que alguna versión de la API podría traer el RRPP con su nombre */
+const REFERRAL_OBJECTS = ['referral_id', 'referral', 'referral_user', 'referrer', 'rrpp', 'promoter', 'public_relation', 'public_relations'];
+const REFERRAL_NAMES = ['referral_name', 'referral_full_name', 'referrer_name', 'rrpp_name', 'promoter_name'];
+
+/** Nombre del RRPP si viene dentro de la propia venta (entrada, lista o reserva) */
+export function embeddedReferralName(item: Record<string, unknown>): string | null {
+  for (const k of REFERRAL_NAMES) if (str(item[k])) return str(item[k]);
+  const ref = refId(item.referral_id);
+  for (const k of REFERRAL_OBJECTS) {
+    const v = item[k];
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+    const id = refId(v);
+    if (ref && id && id !== ref) continue;
+    const name = personName(v);
+    if (name) return name;
+  }
+  return null;
+}
+
+/** Apunta el nombre de cada RRPP que venga dentro de las ventas */
+export function collectReferralNames(items: unknown[], names: Map<string, string>) {
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const ref = refId((item as { referral_id?: unknown }).referral_id);
+    if (!ref || names.has(ref)) continue;
+    const name = embeddedReferralName(item as Record<string, unknown>);
+    if (name) names.set(ref, name);
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -200,17 +255,18 @@ export function summarize(tickets: FvTicket[]): TicketSummary {
     out.entered += Math.min(p, Math.max(0, Math.round(num(t.enter))));
     if (t.sale_type !== 'invitation' && num(t.total_paid ?? t.price) > 0) {
       out.paid += p;
-      const ref = t.referral_id ?? '';
+      const ref = refId(t.referral_id);
       out.paidByReferral.set(ref, (out.paidByReferral.get(ref) ?? 0) + p);
     }
     if (NOT_ONLINE_SALES.has(t.sale_type ?? '') || net <= 0) continue;
     out.sold += p;
     out.revenue += net;
-    if (t.referral_id) {
-      const r = out.byReferral.get(t.referral_id) ?? { people: 0, revenue: 0 };
+    const ref = refId(t.referral_id);
+    if (ref) {
+      const r = out.byReferral.get(ref) ?? { people: 0, revenue: 0 };
       r.people += p;
       r.revenue += net;
-      out.byReferral.set(t.referral_id, r);
+      out.byReferral.set(ref, r);
     }
   }
   out.revenue = round2(out.revenue);
@@ -227,7 +283,7 @@ export function summarizeLists(entries: FvListEntry[]) {
     const p = people(e);
     out.people += p;
     out.entered += Math.min(p, Math.max(0, Math.round(num(e.enter))));
-    const ref = e.referral_id ?? '';
+    const ref = refId(e.referral_id);
     out.byReferral.set(ref, (out.byReferral.get(ref) ?? 0) + p);
   }
   return out;
@@ -242,7 +298,7 @@ export function summarizeBookings(bookings: FvBooking[]) {
   for (const b of bookings) {
     if (statuses(b).some((st) => DEAD_BOOKING.test(st))) continue;
     out.count++;
-    const ref = b.referral_id ?? '';
+    const ref = refId(b.referral_id);
     out.byReferral.set(ref, (out.byReferral.get(ref) ?? 0) + 1);
   }
   return out;
@@ -309,6 +365,38 @@ async function fv<T>(path: string, params: Record<string, string> = {}): Promise
     }
     if (!res.ok || (body as { success?: boolean } | null)?.success === false) throw new FvError(res.status, explain(res.status, path, body));
     return (body as { data?: T } | null)?.data as T;
+  }
+}
+
+/** Todos los usuarios de Fourvenues (de 500 en 500, por si la API los da por páginas) */
+async function allUsers(): Promise<FvUser[]> {
+  const byId = new Map<string, FvUser>();
+  let previousFirst: string | undefined;
+  for (let offset = 0; offset < 20_000; offset += TICKETS_PAGE) {
+    let page: FvUser[];
+    try {
+      page = (await fv<FvUser[]>('/users/', { limit: String(TICKETS_PAGE), offset: String(offset) })) ?? [];
+    } catch (e) {
+      // Si no admite páginas, se piden todos de una vez
+      if (offset === 0 && e instanceof FvError && [400, 422].includes(e.status)) return (await fv<FvUser[]>('/users/')) ?? [];
+      throw e;
+    }
+    if (!page.length || page[0]?._id === previousFirst) break;
+    previousFirst = page[0]?._id;
+    for (const u of page) if (u?._id) byId.set(u._id, u);
+    if (page.length < TICKETS_PAGE) break;
+  }
+  return [...byId.values()];
+}
+
+/** Un usuario de Fourvenues por su id (null si no existe o no se puede ver) */
+async function userById(id: string): Promise<FvUser | null> {
+  try {
+    const u = await fv<FvUser | FvUser[]>(`/users/${encodeURIComponent(id)}`);
+    return (Array.isArray(u) ? u[0] : u) ?? null;
+  } catch (e) {
+    if (e instanceof FvError) return null;
+    throw e;
   }
 }
 
@@ -392,6 +480,8 @@ export interface SyncResult {
   rrppLinked: number;
   /** RRPP de Fourvenues con ventas que no están asociados a ninguna ficha */
   unmatched: { id: string; name: string | null; email: string | null; tickets: number; revenue: number }[];
+  /** RRPP con ventas de los que Fourvenues no ha dado el nombre */
+  unnamed: number;
   warnings: string[];
 }
 
@@ -404,7 +494,7 @@ const fullName = (u: FvUser) => [u.name, u.last_name].filter(Boolean).join(' ').
 
 export async function runSync(db: SupabaseClient, from: string, to: string): Promise<SyncResult> {
   const now = new Date().toISOString();
-  const result: SyncResult = { from, to, events: 0, created: 0, linked: 0, moved: 0, paid: 0, free: 0, bookings: 0, tickets: 0, revenue: 0, rrpp: 0, rrppLinked: 0, unmatched: [], warnings: [] };
+  const result: SyncResult = { from, to, events: 0, created: 0, linked: 0, moved: 0, paid: 0, free: 0, bookings: 0, tickets: 0, revenue: 0, rrpp: 0, rrppLinked: 0, unmatched: [], unnamed: 0, warnings: [] };
 
   // ---------- Noches ----------
   // Se pide un día más por cada lado por si Fourvenues filtra por la fecha "de calendario"
@@ -468,8 +558,12 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
   let bookingsUnavailable = false;
   /** Desglose por RRPP de cada noche: entradas de pago, personas en listas y reservados */
   const breakdowns: { eventId: string; tickets: Map<string, number>; lists: Map<string, number> | null; bookings: Map<string, number> | null }[] = [];
+  /** Nombre de cada RRPP que venga dentro de las propias ventas */
+  const embeddedNames = new Map<string, string>();
   for (const { fvId, local } of synced) {
-    const s = summarize(await eventTickets(fvId));
+    const tickets = await eventTickets(fvId);
+    collectReferralNames(tickets, embeddedNames);
+    const s = summarize(tickets);
     result.paid += s.paid;
     result.tickets += s.sold;
     result.revenue = round2(result.revenue + s.revenue);
@@ -478,7 +572,9 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     let lists: ReturnType<typeof summarizeLists> | null = null;
     if (!listsUnavailable) {
       try {
-        lists = summarizeLists(await eventLists(fvId));
+        const entries = await eventLists(fvId);
+        collectReferralNames(entries, embeddedNames);
+        lists = summarizeLists(entries);
         result.free += lists.people;
       } catch (e) {
         if (!(e instanceof FvError)) throw e;
@@ -489,7 +585,9 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     let bookings: ReturnType<typeof summarizeBookings> | null = null;
     if (!bookingsUnavailable) {
       try {
-        bookings = summarizeBookings(await eventBookings(fvId));
+        const items = await eventBookings(fvId);
+        collectReferralNames(items, embeddedNames);
+        bookings = summarizeBookings(items);
         result.bookings += bookings.count;
       } catch (e) {
         if (!(e instanceof FvError)) throw e;
@@ -540,15 +638,29 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
   // Usuarios de Fourvenues: para el nombre de cada RRPP en el desglose y para asociarlos a su ficha
   let users = new Map<string, FvUser>();
   const missing = [...referrals.keys()].filter((id) => !byFvUser.has(id));
-  const anyReferral = breakdowns.some((b) => [...b.tickets.keys(), ...(b.lists?.keys() ?? []), ...(b.bookings?.keys() ?? [])].some(Boolean));
-  if (missing.length || anyReferral) {
+  const allRefs = new Set(breakdowns.flatMap((b) => [...b.tickets.keys(), ...(b.lists?.keys() ?? []), ...(b.bookings?.keys() ?? [])]).filter(Boolean));
+  if (missing.length || allRefs.size) {
     try {
-      users = new Map(((await fv<FvUser[]>('/users/')) ?? []).map((u) => [u._id, u]));
+      users = new Map((await allUsers()).map((u) => [u._id, u]));
     } catch (e) {
       if (!(e instanceof FvError)) throw e;
-      result.warnings.push(`${e.message} Asocia los RRPP a mano en Ajustes; en el desglose de cada noche saldrán sin nombre.`);
+      result.warnings.push(`${e.message} Los RRPP saldrán con el nombre que venga en sus ventas, si viene.`);
     }
   }
+  // Los que no están en la lista de usuarios ni traen el nombre en sus ventas se piden uno a uno
+  for (const id of [...allRefs].filter((id) => !users.has(id) && !embeddedNames.has(id)).slice(0, 40)) {
+    const u = await userById(id);
+    if (u) users.set(id, { ...u, _id: id });
+  }
+  /** Nombre del RRPP tal y como está en Fourvenues */
+  const rrppName = (id: string) => (id ? (users.has(id) ? fullName(users.get(id)!) : null) ?? embeddedNames.get(id) ?? null : null);
+  const unnamed = [...allRefs].filter((id) => !rrppName(id));
+  result.unnamed = unnamed.length;
+  if (unnamed.length)
+    result.warnings.push(
+      `Fourvenues no ha dado el nombre de ${unnamed.length} RRPP (${users.size} usuarios recibidos). Salen con su código de Fourvenues; avisa para revisarlo.`,
+    );
+
   if (missing.length) {
     // Se asocian solos los RRPP cuyo email de Fourvenues coincide con el de su ficha
     for (const id of missing) {
@@ -563,7 +675,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
   }
   result.unmatched = [...referrals]
     .filter(([id]) => !byFvUser.has(id))
-    .map(([id, v]) => ({ id, name: users.has(id) ? fullName(users.get(id)!) : null, email: users.get(id)?.email ?? null, tickets: v.people, revenue: v.revenue }))
+    .map(([id, v]) => ({ id, name: rrppName(id), email: users.get(id)?.email ?? null, tickets: v.people, revenue: v.revenue }))
     .sort((a, b) => b.revenue - a.revenue);
 
   // Desglose por RRPP de cada noche: se rehace entero
@@ -576,7 +688,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
         [...refs].map((ref) => ({
           event_id: b.eventId,
           fourvenues_user_id: ref,
-          name: ref && users.has(ref) ? fullName(users.get(ref)!) : null,
+          name: rrppName(ref),
           tickets: b.tickets.get(ref) ?? 0,
           lists: b.lists ? b.lists.get(ref) ?? 0 : null,
           bookings: b.bookings ? b.bookings.get(ref) ?? 0 : null,
@@ -626,8 +738,86 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
 }
 
 // ---------------------------------------------------------------------
+//  Diagnóstico: forma de los datos de Fourvenues, sin datos personales
+// ---------------------------------------------------------------------
+
+/** Estructura de un objeto: sólo los nombres de los campos y su tipo (nunca los valores) */
+export function shape(v: unknown, depth = 0): unknown {
+  if (v === null) return 'null';
+  if (Array.isArray(v)) return v.length ? [shape(v[0], depth + 1)] : [];
+  if (typeof v === 'object') {
+    if (depth >= 3) return 'object';
+    return Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, shape(x, depth + 1)]));
+  }
+  return typeof v;
+}
+
+/** Junta la forma de varios objetos (campos que aparecen en unos sí y en otros no) */
+const shapes = (items: unknown[]) => {
+  const out: Record<string, Set<string>> = {};
+  for (const it of items.slice(0, 200)) {
+    if (!it || typeof it !== 'object') continue;
+    for (const [k, v] of Object.entries(it as Record<string, unknown>)) (out[k] ??= new Set()).add(JSON.stringify(shape(v, 1)));
+  }
+  return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v].map((x) => JSON.parse(x))]));
+};
+
+async function inspect() {
+  const today = madridDate(Date.now() - NIGHT_OFFSET_MS);
+  const events = ((await fv<FvEvent[]>('/events/', { start: addDays(today, -21), end: addDays(today, 1) })) ?? []).filter((e) => e?._id);
+  const out: Record<string, unknown> = { events: events.length };
+  // La noche pasada con más entradas
+  let best: { id: string; tickets: FvTicket[] } | null = null;
+  for (const e of events.slice(-8)) {
+    const tickets = await eventTickets(e._id);
+    if (!best || tickets.length > best.tickets.length) best = { id: e._id, tickets };
+  }
+  if (!best) return out;
+  const grab = async <T,>(f: () => Promise<T[]>) => {
+    try {
+      return { items: await f() };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  };
+  const lists = await grab(() => eventLists(best!.id));
+  const bookings = await grab(() => eventBookings(best!.id));
+  const users = await grab(() => allUsers());
+  const userIds = new Set((users.items ?? []).map((u) => u._id));
+  const refs = (items: unknown[] | undefined) => {
+    const ids = new Set((items ?? []).map((x) => refId((x as { referral_id?: unknown })?.referral_id)).filter(Boolean));
+    return { referrals: ids.size, inUsers: [...ids].filter((id) => userIds.has(id)).length, idLengths: [...new Set([...ids].map((id) => id.length))] };
+  };
+  const names = new Map<string, string>();
+  collectReferralNames([...best.tickets, ...(lists.items ?? []), ...(bookings.items ?? [])], names);
+  const sampleRef = [...new Set(best.tickets.map((t) => refId(t.referral_id)).filter((id) => id && !userIds.has(id)))][0];
+  return {
+    ...out,
+    tickets: { count: best.tickets.length, fields: shapes(best.tickets), ...refs(best.tickets) },
+    lists: lists.items ? { count: lists.items.length, fields: shapes(lists.items), ...refs(lists.items) } : lists,
+    bookings: bookings.items ? { count: bookings.items.length, fields: shapes(bookings.items), ...refs(bookings.items) } : bookings,
+    users: users.items ? { count: users.items.length, fields: shapes(users.items), idLengths: [...new Set(users.items.map((u) => u._id?.length))] } : users,
+    embeddedNames: names.size,
+    // ¿Se puede pedir un RRPP que no está en la lista de usuarios por su id?
+    userById: sampleRef ? (await userById(sampleRef)) ? 'ok' : 'no encontrado' : 'sin RRPP que probar',
+  };
+}
+
+// ---------------------------------------------------------------------
 //  Servidor
 // ---------------------------------------------------------------------
+
+/** Claves de servicio de este proyecto (para llamadas desde GitHub Actions) */
+function serviceKeys(): string[] {
+  const keys: string[] = [];
+  try {
+    keys.push(...Object.values(JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, string>));
+  } catch {
+    /* sin claves nuevas */
+  }
+  for (const k of [Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'), Deno.env.get('VIZZIO_SERVICE_KEY')]) if (k) keys.push(k);
+  return keys.filter(Boolean);
+}
 
 /** Clave de servicio: la secreta nueva de Supabase (SUPABASE_SECRET_KEYS) o la antigua */
 function serviceKey(): string | undefined {
@@ -693,21 +883,24 @@ async function handler(req: Request, db: SupabaseClient | null) {
   if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405);
   if (!db) return json({ error: 'Falta la configuración de Supabase en la función' }, 500);
 
-  // Sólo administradores con sesión en la app
+  // Sólo administradores con sesión en la app (o la clave de servicio, desde GitHub Actions)
   const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  const { data: auth } = token ? await db.auth.getUser(token) : { data: { user: null } };
-  if (!auth?.user) return json({ error: 'Inicia sesión en la app' }, 401);
-  const { data: profile } = await db.from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
-  if (profile?.role !== 'admin') return json({ error: 'Sólo los administradores pueden usar la integración con Fourvenues' }, 403);
+  if (!token || !serviceKeys().includes(token)) {
+    const { data: auth } = token ? await db.auth.getUser(token) : { data: { user: null } };
+    if (!auth?.user) return json({ error: 'Inicia sesión en la app' }, 401);
+    const { data: profile } = await db.from('profiles').select('role').eq('id', auth.user.id).maybeSingle();
+    if (profile?.role !== 'admin') return json({ error: 'Sólo los administradores pueden usar la integración con Fourvenues' }, 403);
+  }
 
   const body = (await req.json().catch(() => ({}))) as { action?: string; force?: boolean; from?: string };
   try {
     if (body.action === 'status') return json({ configured: !!authHeaders(), env: envName(), sync: await syncRow(db).catch(() => null) });
     if (body.action === 'users') {
-      const users = (await fv<FvUser[]>('/users/')) ?? [];
+      const users = await allUsers();
       return json({ users: users.map((u) => ({ id: u._id, name: fullName(u), email: u.email ?? null })) });
     }
     if (body.action === 'sync') return await sync(db, body.force === true, body.from);
+    if (body.action === 'inspect') return json(await inspect());
     return json({ error: 'Acción desconocida' }, 400);
   } catch (e) {
     console.error(e);
