@@ -394,6 +394,8 @@ export interface RrppNightDetail {
   tickets: { rate: string; price: number; people: number; entered: number; amount: number }[];
   lists: { rate: string; people: number; entered: number }[] | null;
   bookings: { kind: 'cortesia' | 'pagado'; zone: string; count: number; people: number; amount: number }[] | null;
+  /** Cada reserva de Fourvenues (cliente, zona, personas y precio), para cotejarla con Reservados */
+  bookingItems?: { name: string | null; phone: string | null; zone: string; people: number; price: number; courtesy: boolean }[];
 }
 
 /** Resumen de una sincronización con Fourvenues (supabase/functions/fourvenues-sync) */
