@@ -15,6 +15,8 @@ export interface CheckedBooking {
   /** Algunas botellas de cortesía, pero no todas */
   partialCourtesy: boolean;
   amount: number;
+  /** Reserva que sólo está en el apartado Reservados (no en Fourvenues) */
+  appOnly?: boolean;
 }
 
 const normName = (s: string | null | undefined) =>
@@ -73,4 +75,54 @@ export function checkBookings(items: BookingItem[], reservations: Reservation[])
       amount: courtesy ? 0 : appAmount(reservation),
     };
   });
+}
+
+/** Desde esta noche (lunes de la semana del cambio), en Noches cuentan también los reservados de la app */
+export const APP_RESERVATIONS_FROM = '2026-10-05';
+
+/** Reservas de la app que cuentan: sin las canceladas ni las de clientes que no vinieron */
+export const liveReservation = (r: Reservation) => r.status !== 'cancelled' && r.status !== 'no_show';
+
+export interface NightReservados {
+  /** Reservas de Fourvenues de cada fila del desglose (por su id), cotejadas con Reservados */
+  checkedByRow: Map<string, CheckedBooking[]>;
+  /** Reservas de la app que no están en Fourvenues */
+  appOnly: Reservation[];
+  /** Reservados de la noche: los de Fourvenues más los que sólo están en la app */
+  total: number;
+}
+
+/**
+ * Reservados de una noche: las reservas de Fourvenues (de todas las filas del desglose por RRPP),
+ * cotejadas con el apartado Reservados, y las reservas de la app que no están en Fourvenues.
+ * Antes de APP_RESERVATIONS_FROM sólo cuentan las de Fourvenues.
+ */
+export function nightReservados(
+  date: string,
+  rows: { id: string; bookings?: number | null; detail?: RrppNightDetail | null }[],
+  reservations: Reservation[],
+): NightReservados {
+  const own = reservations.filter((r) => r.date === date);
+  const flat = rows.flatMap((r) => (r.detail?.bookingItems ?? []).map((item) => ({ row: r.id, item })));
+  const checked = checkBookings(flat.map((f) => f.item), own);
+  const checkedByRow = new Map<string, CheckedBooking[]>();
+  checked.forEach((c, i) => checkedByRow.set(flat[i].row, [...(checkedByRow.get(flat[i].row) ?? []), c]));
+  const matched = new Set(checked.map((c) => c.reservation?.id).filter(Boolean));
+  const appOnly = date >= APP_RESERVATIONS_FROM ? own.filter((r) => liveReservation(r) && !matched.has(r.id)) : [];
+  const fromFourvenues = rows.reduce((n, r) => n + (r.bookings ?? 0), 0);
+  return { checkedByRow, appOnly, total: fromFourvenues + appOnly.length };
+}
+
+/** Una reserva que sólo está en la app, con la misma forma que las cotejadas */
+export function appOnlyBooking(r: Reservation, zone: string | null): CheckedBooking {
+  const courtesy = isAppCourtesy(r);
+  const amount = courtesy ? 0 : appAmount(r);
+  return {
+    item: { name: r.customer_name, phone: r.customer_phone, zone: zone ?? 'Reservado', people: r.guests, price: amount, courtesy },
+    reservation: r,
+    courtesy,
+    partialCourtesy: !courtesy && !!r.bottles?.some((b) => b.courtesy),
+    amount,
+    appOnly: true,
+  };
 }
