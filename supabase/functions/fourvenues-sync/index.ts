@@ -515,11 +515,14 @@ async function eventLists(eventId: string): Promise<FvListEntry[]> {
 
 /**
  * Todas las reservas de mesa de un evento. Fourvenues exige un rango de fechas (start_date y
- * end_date en ISO 8601) y no admite páginas de 500: se pide la noche con un día de margen, de 100 en 100.
+ * end_date en ISO 8601) y no admite páginas de 500: se pide la noche con un día de margen, de 100 en
+ * 100, y se quedan sólo las de este evento (las de las noches de al lado vienen también).
  */
 async function eventBookings(eventId: string, night: string): Promise<FvBooking[]> {
   const iso = (d: string) => `${d}T00:00:00.000Z`;
-  return eventItems<FvBooking>('/bookings/', eventId, { start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) }, 100);
+  const items = await eventItems<FvBooking>('/bookings/', eventId, { start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) }, 100);
+  // Fourvenues devuelve todas las reservas de esas fechas aunque se le pida un evento: sólo las de este
+  return items.filter((b) => b.event_id === eventId);
 }
 
 /**
