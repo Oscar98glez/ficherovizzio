@@ -781,29 +781,6 @@ const shapes = (items: unknown[]) => {
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v].map((x) => JSON.parse(x))]));
 };
 
-/** Prueba una ruta de la API: estado, cuántos datos y si aparece el id buscado (sin valores) */
-async function probe(path: string, params: Record<string, string>, id: string) {
-  const headers = authHeaders();
-  if (!headers) return { status: 0 };
-  const url = new URL(baseUrl() + path);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await fetch(url, { headers: { ...headers, Accept: 'application/json' } });
-  const text = await res.text();
-  await sleep(REQUEST_GAP_MS);
-  let data: unknown = null;
-  try {
-    data = (JSON.parse(text) as { data?: unknown })?.data ?? null;
-  } catch {
-    /* no es JSON */
-  }
-  return {
-    status: res.status,
-    count: Array.isArray(data) ? data.length : data ? 1 : 0,
-    containsId: text.includes(id),
-    fields: Array.isArray(data) ? shapes(data) : data && typeof data === 'object' ? shape(data, 1) : null,
-  };
-}
-
 async function inspect() {
   const today = madridDate(Date.now() - NIGHT_OFFSET_MS);
   const events = ((await fv<FvEvent[]>('/events/', { start: addDays(today, -21), end: addDays(today, 1) })) ?? []).filter((e) => e?._id);
@@ -845,37 +822,46 @@ async function inspect() {
   };
   // Un RRPP de las entradas sin nombre: ¿alguna ruta de la API lo conoce?
   const unknown = [...new Set(allTickets.map((t) => refId(t.referral_id)).filter((id) => id && !userMap.has(id) && !names.has(id)))];
-  const sample = unknown[0];
-  const probes: Record<string, unknown> = {};
-  if (sample) {
-    const tries: [string, string, Record<string, string>][] = [
-      ['users/:id', `/users/${sample}`, {}],
-      ['users?_id', '/users/', { _id: sample }],
-      ['users?user_id', '/users/', { user_id: sample }],
-      ['users?referral_id', '/users/', { referral_id: sample }],
-      ['referrals', '/referrals/', {}],
-      ['referrals/:id', `/referrals/${sample}`, {}],
-      ['rrpps', '/rrpps/', {}],
-      ['public-relations', '/public-relations/', {}],
-      ['promoters', '/promoters/', {}],
-      ['collaborators', '/collaborators/', {}],
-      ['teams', '/teams/', {}],
-      ['channels', '/channels/', {}],
-      ['channels/:id', `/channels/${sample}`, {}],
-    ];
-    for (const [label, path, params] of tries) probes[label] = await probe(path, params, sample).catch((e) => ({ error: String(e) }));
-    // ¿Es el canal de venta de la entrada?
-    probes.sameAsChannel = allTickets.filter((t) => refId(t.referral_id) === sample).some((t) => (t as { channel_id?: string }).channel_id === sample);
+  // Reservas: qué parámetros acepta Fourvenues (estado y mensaje de cada prueba)
+  const night = eventNight(best.e) ?? today;
+  const iso = (d: string) => `${d}T00:00:00.000Z`;
+  const bookingTries: Record<string, Record<string, string>> = {
+    'event+iso': { event_id: best.e._id, start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) },
+    'iso sin evento': { start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) },
+    'event+fecha': { event_id: best.e._id, start_date: addDays(night, -1), end_date: addDays(night, 2) },
+    'event+iso sin fin': { event_id: best.e._id, start_date: iso(addDays(night, -1)) },
+    'event+iso+limit': { event_id: best.e._id, start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)), limit: '100', offset: '0' },
+  };
+  const bookingProbes: Record<string, unknown> = {};
+  for (const [label, params] of Object.entries(bookingTries)) {
+    try {
+      const items = (await fv<FvBooking[]>('/bookings/', params)) ?? [];
+      bookingProbes[label] = { ok: true, count: items.length, fields: shapes(items), ...refs(items) };
+    } catch (e) {
+      bookingProbes[label] = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  // ¿Salen los RRPP sin nombre en las listas de noches más antiguas (hasta 120 días)?
+  const older = ((await fv<FvEvent[]>('/events/', { start: addDays(today, -120), end: addDays(today, -21) })) ?? []).filter((e) => e?._id);
+  const olderNames = new Map<string, string>();
+  for (const e of older) {
+    try {
+      collectReferralNames(await eventLists(e._id), olderNames);
+    } catch {
+      break;
+    }
   }
   return {
     ...out,
+    bookingProbes,
+    olderNights: older.length,
+    unnamedFoundInOlderLists: unknown.filter((id) => olderNames.has(id)).length,
     nights: recent.length,
     tickets: { count: allTickets.length, ...refs(allTickets) },
     lists: { count: allLists.length, ...refs(allLists) },
     bookings: bookings.items ? { count: bookings.items.length, fields: shapes(bookings.items), ...refs(bookings.items) } : bookings,
     users: users.items ? { count: users.items.length, withName: users.items.filter((u) => fullName(u)).length } : users,
     ticketReferralsWithoutName: unknown.length,
-    probes,
   };
 }
 
