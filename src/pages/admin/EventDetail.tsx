@@ -3,19 +3,23 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Pencil, RefreshCw } from 'lucide-react';
 import { EventForm } from '../../components/finance-forms';
 import { Modal, useFeedback } from '../../components/overlay';
+import { tableLabel } from '../../components/reservation-forms';
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, Field, Input, Loading, StatCard } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { IS_DEMO } from '../../lib/config';
-import { EVENT_KINDS } from '../../lib/constants';
+import { EVENT_KINDS, RESERVATION_ORIGINS } from '../../lib/constants';
 import { addDays, businessToday, isoDate } from '../../lib/dates';
 import { fmtDate, fmtDateFull, fmtMoney, fmtNum, fmtTime } from '../../lib/format';
+import { APP_RESERVATIONS_FROM, appOnlyBooking, nightReservados, type CheckedBooking, type NightReservados } from '../../lib/booking-match';
 import { syncFourvenues } from '../../lib/fourvenues';
-import { checkBookings, type CheckedBooking } from '../../lib/booking-match';
-import type { Employee, FourvenuesRrppNight, Reservation } from '../../lib/types';
+import type { Employee, FourvenuesRrppNight, Reservation, VipTable } from '../../lib/types';
 import { cx, fullName, sumBy } from '../../lib/utils';
 
-/** La noche: sólo lo que viene de Fourvenues (entradas, listas y reservados, en total y por RRPP) */
+/**
+ * La noche: lo que viene de Fourvenues (entradas, listas y reservados, en total y por RRPP) y, desde
+ * esta semana, también los reservados del apartado Reservados que no están en Fourvenues.
+ */
 export default function EventDetail() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -26,13 +30,14 @@ export default function EventDetail() {
   const { data, loading, error, reload } = useLoad(async () => {
     const event = await api.events.get(id);
     if (!event) return null;
-    const [rrppNights, employees, reservations] = await Promise.all([
+    const [rrppNights, employees, reservations, tables] = await Promise.all([
       event.fourvenues_id ? api.fourvenuesRrppNights.list({ eq: { event_id: id } }).catch(() => [] as FourvenuesRrppNight[]) : ([] as FourvenuesRrppNight[]),
       api.employees.list(),
       // Para cotejar los reservados de Fourvenues con los del apartado Reservados (cortesía o pagados)
       api.reservations.list({ eq: { date: event.date } }).catch(() => [] as Reservation[]),
+      api.vipTables.list().catch(() => [] as VipTable[]),
     ]);
-    return { event, rrppNights, employees, reservations };
+    return { event, rrppNights, employees, reservations, tables };
   }, [id]);
 
   async function sync() {
@@ -59,6 +64,9 @@ export default function EventDetail() {
 
   const { event: ev } = data;
   const synced = !!ev.fourvenues_id;
+  // Desde esta semana, los reservados de la noche son los de Fourvenues más los que sólo están en la app
+  const withApp = ev.date >= APP_RESERVATIONS_FROM;
+  const reservados = nightReservados(ev.date, data.rrppNights, data.reservations);
 
   return (
     <>
@@ -96,10 +104,20 @@ export default function EventDetail() {
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
             <StatCard label="Entradas vendidas" value={num(ev.tickets_paid ?? ev.tickets_sold)} sub="De pago, por cualquier canal" />
             <StatCard label="QR gratis" value={num(ev.tickets_free)} sub={ev.tickets_free == null ? 'Sin acceso a las listas' : 'Personas en las listas'} />
-            <StatCard label="Reservados" value={num(ev.bookings)} sub={ev.bookings == null ? 'Sin acceso a las reservas' : 'Reservas de mesa'} />
+            <StatCard
+              label="Reservados"
+              value={num(withApp ? reservados.total : ev.bookings)}
+              sub={withApp ? 'Fourvenues y apartado Reservados' : ev.bookings == null ? 'Sin acceso a las reservas' : 'Reservas de mesa'}
+            />
             <StatCard label="Dentro" value={num(ev.tickets_entered)} sub="Personas que han entrado" />
           </div>
-          <RrppBreakdown rows={data.rrppNights} employees={data.employees} reservations={data.reservations} onChanged={reload} />
+          <RrppBreakdown
+            rows={data.rrppNights}
+            employees={data.employees}
+            reservados={reservados}
+            tables={data.tables}
+            onChanged={reload}
+          />
         </>
       ) : (
         <Card>
@@ -126,31 +144,75 @@ const shortId = (id: string) => id.slice(-6);
 function RrppBreakdown({
   rows,
   employees,
-  reservations,
+  reservados,
+  tables,
   onChanged,
 }: {
   rows: FourvenuesRrppNight[];
   employees: Employee[];
-  reservations: Reservation[];
+  reservados: NightReservados;
+  tables: VipTable[];
   onChanged: () => void;
 }) {
   const [naming, setNaming] = useState<string | null>(null);
   const [open, setOpen] = useState<(typeof listed)[number] | null>(null);
   const byFvUser = new Map(employees.filter((e) => e.fourvenues_user_id).map((e) => [e.fourvenues_user_id!, e]));
-  const listed = rows
+  const tableById = new Map(tables.map((t) => [t.id, tableLabel(t)]));
+
+  // Reservas que sólo están en la app: van con su RRPP (si su ficha está asociada a Fourvenues, en su
+  // fila); si no tiene fila, se le añade una con el nombre de la app (o "Otros" / "Empresa")
+  const extra = new Map<string, CheckedBooking[]>();
+  const appRows = new Map<string, FourvenuesRrppNight & { appRow: true; appEmployee?: Employee }>();
+  for (const r of reservados.appOnly) {
+    const emp = r.rrpp_id ? employees.find((e) => e.id === r.rrpp_id) : undefined;
+    const target = emp?.fourvenues_user_id
+      ? rows.find((x) => x.fourvenues_user_id === emp.fourvenues_user_id)
+      : !r.rrpp_id && !r.rrpp_origin
+        ? rows.find((x) => !x.fourvenues_user_id)
+        : undefined;
+    const key = target?.id ?? `app:${r.rrpp_id ?? r.rrpp_origin ?? 'sin'}`;
+    if (!target && !appRows.has(key))
+      appRows.set(key, {
+        id: key,
+        event_id: '',
+        fourvenues_user_id: emp?.fourvenues_user_id ?? '',
+        name: r.rrpp_name ?? (emp ? fullName(emp) : r.rrpp_origin ? RESERVATION_ORIGINS[r.rrpp_origin] : 'Sin RRPP'),
+        tickets: 0,
+        lists: null,
+        bookings: 0,
+        detail: null,
+        synced_at: '',
+        appRow: true,
+        appEmployee: emp,
+      });
+    extra.set(key, [...(extra.get(key) ?? []), appOnlyBooking(r, r.table_id ? tableById.get(r.table_id) ?? null : null)]);
+  }
+
+  const listed = [...rows, ...appRows.values()]
     .map((x) => {
-      const employee = x.fourvenues_user_id ? byFvUser.get(x.fourvenues_user_id) : undefined;
+      const appRow = 'appRow' in x;
+      const employee = appRow ? (x as { appEmployee?: Employee }).appEmployee : x.fourvenues_user_id ? byFvUser.get(x.fourvenues_user_id) : undefined;
+      const fromApp = extra.get(x.id) ?? [];
+      const bookings = x.bookings == null && !fromApp.length ? null : (x.bookings ?? 0) + fromApp.length;
       return {
         ...x,
+        appRow,
         employee,
+        bookings,
+        // Reservas de Fourvenues cotejadas con Reservados y las que sólo están en la app (null: sin detalle)
+        checked: x.detail?.bookingItems || fromApp.length ? [...(reservados.checkedByRow.get(x.id) ?? []), ...fromApp] : null,
         // El nombre tal y como está en Fourvenues; si Fourvenues no lo da, el de su ficha o su código
-        label: !x.fourvenues_user_id ? 'Sin RRPP' : x.name || (employee ? fullName(employee) : `RRPP ${shortId(x.fourvenues_user_id)}`),
-        total: x.tickets + (x.lists ?? 0) + (x.bookings ?? 0),
+        label: appRow
+          ? x.name ?? 'Sin RRPP'
+          : !x.fourvenues_user_id
+            ? 'Sin RRPP'
+            : x.name || (employee ? fullName(employee) : `RRPP ${shortId(x.fourvenues_user_id)}`),
+        total: x.tickets + (x.lists ?? 0) + (bookings ?? 0),
       };
     })
     .sort((a, b) => (!a.fourvenues_user_id ? 1 : !b.fourvenues_user_id ? -1 : b.total - a.total || a.label.localeCompare(b.label)));
   const listsKnown = rows.some((x) => x.lists != null);
-  const bookingsKnown = rows.some((x) => x.bookings != null);
+  const bookingsKnown = listed.some((x) => x.bookings != null);
   const cols = 'grid-cols-[minmax(0,1fr)_44px_44px_40px] sm:grid-cols-[minmax(0,1fr)_90px_90px_96px]';
   const cell = (v: number | null | undefined, known: boolean) => (v == null ? (known ? '0' : '—') : fmtNum(v, 0));
 
@@ -185,7 +247,8 @@ function RrppBreakdown({
                   <Avatar name={r.label} color={r.employee?.color ?? '#8e8e93'} src={r.employee?.photo_url} size={30} className="hidden sm:inline-grid" />
                   <div className="min-w-0">
                     <div className={cx('truncate text-[14px] font-medium', !r.fourvenues_user_id && 'text-ink-2')}>{r.label}</div>
-                    {r.fourvenues_user_id && !r.name && (
+                    {r.appRow && <div className="truncate text-[12px] text-ink-2">Sólo reservados de la app</div>}
+                    {!r.appRow && r.fourvenues_user_id && !r.name && (
                       <button
                         type="button"
                         onClick={(e) => (e.stopPropagation(), setNaming(r.fourvenues_user_id))}
@@ -218,7 +281,7 @@ function RrppBreakdown({
         </p>
       )}
       <RrppNameModal fourvenuesUserId={naming} onClose={() => setNaming(null)} onSaved={onChanged} />
-      <RrppDetailModal row={open} reservations={reservations} onClose={() => setOpen(null)} />
+      <RrppDetailModal row={open} onClose={() => setOpen(null)} />
     </Card>
   );
 }
@@ -226,18 +289,16 @@ function RrppBreakdown({
 /** Lo que ha vendido un RRPP esa noche: entradas por tipo y precio, reservados (cortesía o pagados) y listas */
 function RrppDetailModal({
   row,
-  reservations,
   onClose,
 }: {
-  row: (FourvenuesRrppNight & { label: string }) | null;
-  reservations: Reservation[];
+  row: (FourvenuesRrppNight & { label: string; appRow: boolean; checked: CheckedBooking[] | null }) | null;
   onClose: () => void;
 }) {
   const d = row?.detail;
   const courtesy = d?.bookings?.filter((b) => b.kind === 'cortesia') ?? [];
   const paid = d?.bookings?.filter((b) => b.kind === 'pagado') ?? [];
-  // Cada reserva cotejada con Reservados: si está en la app, manda la app (cortesía o pagada)
-  const checked = d?.bookingItems ? checkBookings(d.bookingItems, reservations) : null;
+  // Cada reserva cotejada con Reservados (si está en la app, manda la app) y las que sólo están en la app
+  const checked = row?.checked ?? null;
   return (
     <Modal open={!!row} onClose={onClose} title={row?.label ?? ''}>
       {row && (
@@ -247,23 +308,25 @@ function RrppDetailModal({
             <MiniStat label="Listas" value={row.lists} />
             <MiniStat label="Reservados" value={row.bookings} />
           </div>
-          {!d ? (
+          {!d && !checked ? (
             <p className="rounded-xl bg-fill/60 px-4 py-3 text-[14px] text-ink-2">
               Aún no hay desglose de esta noche. Pulsa «Sincronizar con Fourvenues» y vuelve a abrirlo.
             </p>
           ) : (
             <>
-              <DetailSection title="Entradas" empty="Sin entradas de pago" total={d.tickets.length > 1 ? `${fmtNum(sumBy(d.tickets, (t) => t.people), 0)} · ${fmtMoney(sumBy(d.tickets, (t) => t.amount))}` : undefined}>
-                {d.tickets.map((t) => (
-                  <DetailRow
-                    key={`${t.rate}-${t.price}`}
-                    title={t.rate}
-                    sub={`${fmtMoney(t.price)} cada una${t.entered ? ` · ${fmtNum(t.entered, 0)} dentro` : ''}`}
-                    value={fmtNum(t.people, 0)}
-                    extra={fmtMoney(t.amount)}
-                  />
-                ))}
-              </DetailSection>
+              {d && (
+                <DetailSection title="Entradas" empty="Sin entradas de pago" total={d.tickets.length > 1 ? `${fmtNum(sumBy(d.tickets, (t) => t.people), 0)} · ${fmtMoney(sumBy(d.tickets, (t) => t.amount))}` : undefined}>
+                  {d.tickets.map((t) => (
+                    <DetailRow
+                      key={`${t.rate}-${t.price}`}
+                      title={t.rate}
+                      sub={`${fmtMoney(t.price)} cada una${t.entered ? ` · ${fmtNum(t.entered, 0)} dentro` : ''}`}
+                      value={fmtNum(t.people, 0)}
+                      extra={fmtMoney(t.amount)}
+                    />
+                  ))}
+                </DetailSection>
+              )}
               {checked ? (
                 <DetailSection title="Reservados" empty="Sin reservados" total={checked.length ? `${fmtMoney(sumBy(checked, (c) => c.amount))}` : undefined}>
                   {[
@@ -282,12 +345,18 @@ function RrppDetailModal({
                             sub={[
                               c.item.zone,
                               c.item.people ? `${fmtNum(c.item.people, 0)} pers.` : null,
-                              c.reservation ? (c.partialCourtesy ? 'en Reservados, con botellas de cortesía' : 'según Reservados') : 'no está en Reservados',
+                              c.appOnly
+                                ? 'sólo en Reservados'
+                                : c.reservation
+                                  ? c.partialCourtesy
+                                    ? 'en Reservados, con botellas de cortesía'
+                                    : 'según Reservados'
+                                  : 'no está en Reservados',
                             ]
                               .filter(Boolean)
                               .join(' · ')}
                             value={c.courtesy ? 'Cortesía' : fmtMoney(c.amount)}
-                            extra={c.reservation && Math.abs(c.amount - c.item.price) > 0.005 ? `En Fourvenues: ${fmtMoney(c.item.price)}` : undefined}
+                            extra={!c.appOnly && c.reservation && Math.abs(c.amount - c.item.price) > 0.005 ? `En Fourvenues: ${fmtMoney(c.item.price)}` : undefined}
                           />
                         ))}
                       </div>
@@ -295,7 +364,7 @@ function RrppDetailModal({
                   )}
                 </DetailSection>
               ) : (
-                d.bookings && (
+                d?.bookings && (
                   <DetailSection title="Reservados" empty="Sin reservados">
                     {[
                       ['Pagados', paid],
@@ -321,7 +390,7 @@ function RrppDetailModal({
                   </DetailSection>
                 )
               )}
-              {d.lists && (
+              {d?.lists && (
                 <DetailSection title="Listas (QR gratis)" empty="Sin personas en listas">
                   {d.lists.map((l) => (
                     <DetailRow key={l.rate} title={l.rate} sub={l.entered ? `${fmtNum(l.entered, 0)} dentro` : undefined} value={fmtNum(l.people, 0)} extra="personas" />

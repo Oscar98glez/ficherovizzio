@@ -8,7 +8,9 @@ import { api } from '../../lib/api';
 import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate } from '../../lib/dates';
 import { fmtDate, fmtNum, fmtWeekday } from '../../lib/format';
+import { APP_RESERVATIONS_FROM, nightReservados } from '../../lib/booking-match';
 import { autoSyncFourvenues } from '../../lib/fourvenues';
+import type { ClubEvent, FourvenuesRrppNight, Reservation } from '../../lib/types';
 import { groupBy } from '../../lib/utils';
 
 type Tab = 'upcoming' | 'past';
@@ -22,11 +24,17 @@ export default function Events() {
   const { data, loading, error, reload } = useLoad(async () => {
     const from = isoDate(addDays(businessToday(), -90));
     const to = isoDate(addDays(businessToday(), 120));
-    const [events, shifts] = await Promise.all([
+    const [events, shifts, reservations] = await Promise.all([
       api.events.list({ gte: ['date', from], lt: ['date', to], order: ['date', 'asc'] }),
       api.shifts.list({ gte: ['start_at', businessStart(today)], lt: ['start_at', businessStart(to)] }),
+      // Desde esta semana, los reservados del apartado Reservados cuentan también en cada noche
+      api.reservations.list({ gte: ['date', APP_RESERVATIONS_FROM], lt: ['date', to] }).catch(() => [] as Reservation[]),
     ]);
-    return { events, shifts };
+    const recent = events.filter((e) => e.date >= APP_RESERVATIONS_FROM && e.fourvenues_id).map((e) => e.id);
+    const rrppNights = recent.length
+      ? await api.fourvenuesRrppNights.list({ in: ['event_id', recent] }).catch(() => [] as FourvenuesRrppNight[])
+      : [];
+    return { events, shifts, reservations, rrppNights };
   }, []);
 
   // Trae de Fourvenues las noches y la venta online (el servidor no lo repite si se hizo hace poco)
@@ -37,10 +45,14 @@ export default function Events() {
   const rows = useMemo(() => {
     if (!data) return [];
     const shiftsByDate = groupBy(data.shifts.filter((s) => s.status !== 'cancelled'), (s) => businessDate(s.start_at));
+    const nightsByEvent = groupBy(data.rrppNights, (n) => n.event_id);
+    /** Reservados: desde esta semana, los de Fourvenues más los que sólo están en la app */
+    const reservados = (ev: ClubEvent) =>
+      ev.date < APP_RESERVATIONS_FROM ? ev.bookings : nightReservados(ev.date, nightsByEvent[ev.id] ?? [], data.reservations).total;
     return data.events
       .filter((e) => (tab === 'upcoming' ? e.date >= today : e.date < today))
       .sort((a, b) => (tab === 'upcoming' ? a.date.localeCompare(b.date) : b.date.localeCompare(a.date)))
-      .map((ev) => ({ ev, staffCount: shiftsByDate[ev.date]?.length ?? 0 }));
+      .map((ev) => ({ ev, staffCount: shiftsByDate[ev.date]?.length ?? 0, reservados: reservados(ev) }));
   }, [data, tab, today]);
 
   if (loading && !data) return <Loading />;
@@ -50,7 +62,7 @@ export default function Events() {
     <>
       <PageHeader
         title="Noches"
-        subtitle="Entradas vendidas, QR gratis y reservados de Fourvenues"
+        subtitle="Entradas vendidas y QR gratis de Fourvenues; reservados de Fourvenues y del apartado Reservados"
         actions={
           <Button icon={<Plus />} onClick={() => setCreating(true)}>
             Nueva noche
@@ -70,7 +82,7 @@ export default function Events() {
 
       {rows.length ? (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {rows.map(({ ev, staffCount }) => (
+          {rows.map(({ ev, staffCount, reservados }) => (
             <Card
               key={ev.id}
               role="button"
@@ -96,7 +108,7 @@ export default function Events() {
                 <div className="tabular mt-2 grid grid-cols-3 gap-1.5 text-center">
                   <Stat icon={<Ticket />} value={ev.tickets_paid ?? ev.tickets_sold} label="vendidas" />
                   <Stat icon={<QrCode />} value={ev.tickets_free} label="QR gratis" title="Personas apuntadas en las listas de Fourvenues" />
-                  <Stat icon={<Sofa />} value={ev.bookings} label={ev.bookings === 1 ? 'reservado' : 'reservados'} title="Reservas de mesa en Fourvenues" />
+                  <Stat icon={<Sofa />} value={reservados} label={reservados === 1 ? 'reservado' : 'reservados'} title="Reservas de mesa de Fourvenues y del apartado Reservados" />
                 </div>
               </div>
             </Card>
