@@ -134,6 +134,8 @@ export interface FvBooking {
 
 export interface FvUser {
   _id: string;
+  /** El nombre va dentro de "profile" (por si acaso, también se mira arriba) */
+  profile?: { name?: string; last_name?: string } | null;
   name?: string;
   last_name?: string;
   email?: string;
@@ -410,9 +412,26 @@ async function eventLists(eventId: string): Promise<FvListEntry[]> {
   return eventItemsWithFallback<FvListEntry>('/lists/', eventId);
 }
 
-/** Todas las reservas de mesa de un evento */
-async function eventBookings(eventId: string): Promise<FvBooking[]> {
-  return eventItemsWithFallback<FvBooking>('/bookings/', eventId);
+/**
+ * Todas las reservas de mesa de un evento. Fourvenues exige un rango de fechas (start_date):
+ * se pide la noche con un día de margen por cada lado, probando los formatos de fecha habituales.
+ */
+async function eventBookings(eventId: string, night: string): Promise<FvBooking[]> {
+  const from = addDays(night, -1);
+  const to = addDays(night, 2);
+  const unix = (d: string) => String(Math.floor(Date.parse(`${d}T00:00:00Z`) / 1000));
+  const ranges = [
+    { start_date: from, end_date: to },
+    { start_date: `${from}T00:00:00.000Z`, end_date: `${to}T00:00:00.000Z` },
+    { start_date: unix(from), end_date: unix(to) },
+  ];
+  for (let i = 0; ; i++) {
+    try {
+      return await eventItems<FvBooking>('/bookings/', eventId, ranges[i]);
+    } catch (e) {
+      if (!(e instanceof FvError) || ![400, 422].includes(e.status) || i === ranges.length - 1) throw e;
+    }
+  }
 }
 
 /**
@@ -490,7 +509,7 @@ const check = <T,>(r: { data: T; error: { message: string } | null }, what: stri
   return r.data;
 };
 
-const fullName = (u: FvUser) => [u.name, u.last_name].filter(Boolean).join(' ').trim() || null;
+const fullName = (u: FvUser) => personName(u.profile) ?? personName(u);
 
 export async function runSync(db: SupabaseClient, from: string, to: string): Promise<SyncResult> {
   const now = new Date().toISOString();
@@ -585,7 +604,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     let bookings: ReturnType<typeof summarizeBookings> | null = null;
     if (!bookingsUnavailable) {
       try {
-        const items = await eventBookings(fvId);
+        const items = await eventBookings(fvId, local.date);
         collectReferralNames(items, embeddedNames);
         bookings = summarizeBookings(items);
         result.bookings += bookings.count;
@@ -762,17 +781,33 @@ const shapes = (items: unknown[]) => {
   return Object.fromEntries(Object.entries(out).map(([k, v]) => [k, [...v].map((x) => JSON.parse(x))]));
 };
 
+/** Prueba una ruta de la API: estado, cuántos datos y si aparece el id buscado (sin valores) */
+async function probe(path: string, params: Record<string, string>, id: string) {
+  const headers = authHeaders();
+  if (!headers) return { status: 0 };
+  const url = new URL(baseUrl() + path);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  const res = await fetch(url, { headers: { ...headers, Accept: 'application/json' } });
+  const text = await res.text();
+  await sleep(REQUEST_GAP_MS);
+  let data: unknown = null;
+  try {
+    data = (JSON.parse(text) as { data?: unknown })?.data ?? null;
+  } catch {
+    /* no es JSON */
+  }
+  return {
+    status: res.status,
+    count: Array.isArray(data) ? data.length : data ? 1 : 0,
+    containsId: text.includes(id),
+    fields: Array.isArray(data) ? shapes(data) : data && typeof data === 'object' ? shape(data, 1) : null,
+  };
+}
+
 async function inspect() {
   const today = madridDate(Date.now() - NIGHT_OFFSET_MS);
   const events = ((await fv<FvEvent[]>('/events/', { start: addDays(today, -21), end: addDays(today, 1) })) ?? []).filter((e) => e?._id);
   const out: Record<string, unknown> = { events: events.length };
-  // La noche pasada con más entradas
-  let best: { id: string; tickets: FvTicket[] } | null = null;
-  for (const e of events.slice(-8)) {
-    const tickets = await eventTickets(e._id);
-    if (!best || tickets.length > best.tickets.length) best = { id: e._id, tickets };
-  }
-  if (!best) return out;
   const grab = async <T,>(f: () => Promise<T[]>) => {
     try {
       return { items: await f() };
@@ -780,26 +815,67 @@ async function inspect() {
       return { error: e instanceof Error ? e.message : String(e) };
     }
   };
-  const lists = await grab(() => eventLists(best!.id));
-  const bookings = await grab(() => eventBookings(best!.id));
+  // Las últimas noches: entradas y listas de cada una
+  const recent = events.slice(-8);
+  const allTickets: FvTicket[] = [];
+  const allLists: FvListEntry[] = [];
+  let best: { e: FvEvent; tickets: FvTicket[] } | null = null;
+  for (const e of recent) {
+    const tickets = await eventTickets(e._id);
+    allTickets.push(...tickets);
+    const lists = await grab(() => eventLists(e._id));
+    allLists.push(...(lists.items ?? []));
+    if (!best || tickets.length > best.tickets.length) best = { e, tickets };
+  }
+  if (!best) return out;
+  const bookings = await grab(() => eventBookings(best!.e._id, eventNight(best!.e) ?? today));
   const users = await grab(() => allUsers());
-  const userIds = new Set((users.items ?? []).map((u) => u._id));
-  const refs = (items: unknown[] | undefined) => {
-    const ids = new Set((items ?? []).map((x) => refId((x as { referral_id?: unknown })?.referral_id)).filter(Boolean));
-    return { referrals: ids.size, inUsers: [...ids].filter((id) => userIds.has(id)).length, idLengths: [...new Set([...ids].map((id) => id.length))] };
-  };
+  const userMap = new Map((users.items ?? []).map((u) => [u._id, u]));
   const names = new Map<string, string>();
-  collectReferralNames([...best.tickets, ...(lists.items ?? []), ...(bookings.items ?? [])], names);
-  const sampleRef = [...new Set(best.tickets.map((t) => refId(t.referral_id)).filter((id) => id && !userIds.has(id)))][0];
+  collectReferralNames([...allTickets, ...allLists, ...(bookings.items ?? [])], names);
+  const refs = (items: unknown[] | undefined) => {
+    const ids = [...new Set((items ?? []).map((x) => refId((x as { referral_id?: unknown })?.referral_id)).filter(Boolean))];
+    return {
+      referrals: ids.length,
+      inUsers: ids.filter((id) => userMap.has(id)).length,
+      withUserName: ids.filter((id) => userMap.has(id) && fullName(userMap.get(id)!)).length,
+      withSaleName: ids.filter((id) => names.has(id)).length,
+      named: ids.filter((id) => (userMap.has(id) && fullName(userMap.get(id)!)) || names.has(id)).length,
+    };
+  };
+  // Un RRPP de las entradas sin nombre: ¿alguna ruta de la API lo conoce?
+  const unknown = [...new Set(allTickets.map((t) => refId(t.referral_id)).filter((id) => id && !userMap.has(id) && !names.has(id)))];
+  const sample = unknown[0];
+  const probes: Record<string, unknown> = {};
+  if (sample) {
+    const tries: [string, string, Record<string, string>][] = [
+      ['users/:id', `/users/${sample}`, {}],
+      ['users?_id', '/users/', { _id: sample }],
+      ['users?user_id', '/users/', { user_id: sample }],
+      ['users?referral_id', '/users/', { referral_id: sample }],
+      ['referrals', '/referrals/', {}],
+      ['referrals/:id', `/referrals/${sample}`, {}],
+      ['rrpps', '/rrpps/', {}],
+      ['public-relations', '/public-relations/', {}],
+      ['promoters', '/promoters/', {}],
+      ['collaborators', '/collaborators/', {}],
+      ['teams', '/teams/', {}],
+      ['channels', '/channels/', {}],
+      ['channels/:id', `/channels/${sample}`, {}],
+    ];
+    for (const [label, path, params] of tries) probes[label] = await probe(path, params, sample).catch((e) => ({ error: String(e) }));
+    // ¿Es el canal de venta de la entrada?
+    probes.sameAsChannel = allTickets.filter((t) => refId(t.referral_id) === sample).some((t) => (t as { channel_id?: string }).channel_id === sample);
+  }
   return {
     ...out,
-    tickets: { count: best.tickets.length, fields: shapes(best.tickets), ...refs(best.tickets) },
-    lists: lists.items ? { count: lists.items.length, fields: shapes(lists.items), ...refs(lists.items) } : lists,
+    nights: recent.length,
+    tickets: { count: allTickets.length, ...refs(allTickets) },
+    lists: { count: allLists.length, ...refs(allLists) },
     bookings: bookings.items ? { count: bookings.items.length, fields: shapes(bookings.items), ...refs(bookings.items) } : bookings,
-    users: users.items ? { count: users.items.length, fields: shapes(users.items), idLengths: [...new Set(users.items.map((u) => u._id?.length))] } : users,
-    embeddedNames: names.size,
-    // ¿Se puede pedir un RRPP que no está en la lista de usuarios por su id?
-    userById: sampleRef ? (await userById(sampleRef)) ? 'ok' : 'no encontrado' : 'sin RRPP que probar',
+    users: users.items ? { count: users.items.length, withName: users.items.filter((u) => fullName(u)).length } : users,
+    ticketReferralsWithoutName: unknown.length,
+    probes,
   };
 }
 
