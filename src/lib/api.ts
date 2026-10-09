@@ -1,6 +1,6 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoFiles, demoGetVenue, demoSaveVenue, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoFiles, demoGetVenue, demoSaveVenue, demoSetRrppName, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
 import { kickNotifications } from './push';
 import { fmtDistance, type Position } from './geo';
@@ -73,6 +73,7 @@ const ERRORS: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
   [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
+  [/fourvenues_rrpp_names/i, 'Falta aplicar en Supabase la migración de nombres de RRPP (20261009130000_fourvenues_rrpp_names.sql).'],
   [/fourvenues_rrpp_nights/i, 'Falta aplicar en Supabase la migración del desglose por RRPP (20261008180000_fourvenues_rrpp_nights.sql).'],
   [/fourvenues|tickets_sold|tickets_entered|external_id/i, 'Falta aplicar en Supabase la migración de Fourvenues (20261008160000_fourvenues.sql).'],
   [/rrpp_bottle_pct|rrpp_ticket_pct|rrpp_list_fee|list_fee|list_quantity/i, 'Falta aplicar en Supabase la migración de comisiones propias de RRPP (20261005180000_rrpp_personal_commissions.sql).'],
@@ -332,6 +333,15 @@ export const api = {
   /** Fichar salida del usuario conectado (hora del servidor), con su ubicación si la hay. */
   clockOut: (pos?: Position | null, notes?: string) =>
     IS_DEMO ? demoClockOut(pos, notes) : sbRpc<TimeEntry>('clock_out', { p_notes: notes ?? null, ...locationArgs(pos) }),
+
+  /** Pone a mano el nombre de un RRPP de Fourvenues (el desglose de sus noches se actualiza solo) */
+  setFourvenuesRrppName: async (fourvenuesUserId: string, name: string): Promise<void> => {
+    if (IS_DEMO) return demoSetRrppName(fourvenuesUserId, name);
+    const { error } = await sb()
+      .from('fourvenues_rrpp_names')
+      .upsert({ fourvenues_user_id: fourvenuesUserId, name, manual: true, updated_at: new Date().toISOString() } as never);
+    if (error) throw fail(error);
+  },
 
   /** Ubicación del local (sólo administradores); null si no está puesta */
   getVenue: async (): Promise<VenueLocation | null> => {

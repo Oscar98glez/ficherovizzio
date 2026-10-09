@@ -128,6 +128,8 @@ export interface FvBooking {
   _id: string;
   event_id?: string;
   status?: string | string[];
+  /** Estado de la reserva (además de status) */
+  state?: string;
   /** RRPP de la reserva (usuario de Fourvenues) */
   referral_id?: Referral;
 }
@@ -298,7 +300,7 @@ const DEAD_BOOKING = /cancel|reject|expire|refund|delete/i;
 export function summarizeBookings(bookings: FvBooking[]) {
   const out = { count: 0, byReferral: new Map<string, number>() };
   for (const b of bookings) {
-    if (statuses(b).some((st) => DEAD_BOOKING.test(st))) continue;
+    if ([...statuses(b), b.state ?? ''].some((st) => DEAD_BOOKING.test(st))) continue;
     out.count++;
     const ref = refId(b.referral_id);
     out.byReferral.set(ref, (out.byReferral.get(ref) ?? 0) + 1);
@@ -413,25 +415,12 @@ async function eventLists(eventId: string): Promise<FvListEntry[]> {
 }
 
 /**
- * Todas las reservas de mesa de un evento. Fourvenues exige un rango de fechas (start_date):
- * se pide la noche con un día de margen por cada lado, probando los formatos de fecha habituales.
+ * Todas las reservas de mesa de un evento. Fourvenues exige un rango de fechas (start_date y
+ * end_date en ISO 8601) y no admite páginas de 500: se pide la noche con un día de margen, de 100 en 100.
  */
 async function eventBookings(eventId: string, night: string): Promise<FvBooking[]> {
-  const from = addDays(night, -1);
-  const to = addDays(night, 2);
-  const unix = (d: string) => String(Math.floor(Date.parse(`${d}T00:00:00Z`) / 1000));
-  const ranges = [
-    { start_date: from, end_date: to },
-    { start_date: `${from}T00:00:00.000Z`, end_date: `${to}T00:00:00.000Z` },
-    { start_date: unix(from), end_date: unix(to) },
-  ];
-  for (let i = 0; ; i++) {
-    try {
-      return await eventItems<FvBooking>('/bookings/', eventId, ranges[i]);
-    } catch (e) {
-      if (!(e instanceof FvError) || ![400, 422].includes(e.status) || i === ranges.length - 1) throw e;
-    }
-  }
+  const iso = (d: string) => `${d}T00:00:00.000Z`;
+  return eventItems<FvBooking>('/bookings/', eventId, { start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) }, 100);
 }
 
 /**
@@ -448,16 +437,16 @@ async function eventItemsWithFallback<T extends { _id: string }>(path: string, e
 }
 
 /** Todo lo de un evento en un recurso paginado (entradas, listas o reservas), de 500 en 500 */
-async function eventItems<T extends { _id: string }>(path: string, eventId: string, extra: Record<string, string> = {}): Promise<T[]> {
+async function eventItems<T extends { _id: string }>(path: string, eventId: string, extra: Record<string, string> = {}, pageSize = TICKETS_PAGE): Promise<T[]> {
   const byId = new Map<string, T>();
   let previousFirst: string | undefined;
-  for (let offset = 0; offset < 100_000; offset += TICKETS_PAGE) {
-    const page = (await fv<T[]>(path, { ...extra, event_id: eventId, limit: String(TICKETS_PAGE), offset: String(offset) })) ?? [];
+  for (let offset = 0; offset < 100_000; offset += pageSize) {
+    const page = (await fv<T[]>(path, { ...extra, event_id: eventId, limit: String(pageSize), offset: String(offset) })) ?? [];
     // Si la API ignorase el desplazamiento, devolvería la misma página: se para
     if (!page.length || page[0]._id === previousFirst) break;
     previousFirst = page[0]._id;
     for (const t of page) byId.set(t._id, t);
-    if (page.length < TICKETS_PAGE) break;
+    if (page.length < pageSize) break;
   }
   return [...byId.values()];
 }
@@ -671,13 +660,27 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     const u = await userById(id);
     if (u) users.set(id, { ...u, _id: id });
   }
-  /** Nombre del RRPP tal y como está en Fourvenues */
-  const rrppName = (id: string) => (id ? (users.has(id) ? fullName(users.get(id)!) : null) ?? embeddedNames.get(id) ?? null : null);
+  // Nombres guardados: los vistos en otras sincronizaciones y los puestos a mano
+  const stored = new Map<string, { name: string; manual: boolean }>();
+  const storedRows = await db.from('fourvenues_rrpp_names').select('fourvenues_user_id, name, manual');
+  if (!storedRows.error) for (const r of storedRows.data ?? []) stored.set(r.fourvenues_user_id, { name: r.name, manual: r.manual });
+  /** Nombre que da Fourvenues ahora mismo */
+  const fvName = (id: string) => (users.has(id) ? fullName(users.get(id)!) : null) ?? embeddedNames.get(id) ?? null;
+  /** Nombre del RRPP: el de Fourvenues; si no lo da, el guardado */
+  const rrppName = (id: string) => (id ? fvName(id) ?? stored.get(id)?.name ?? null : null);
+  // Se guardan los nombres nuevos o cambiados de Fourvenues (también los de usuarios sin ventas ahora)
+  if (!storedRows.error) {
+    const fresh = [...new Set([...allRefs, ...missing])]
+      .map((id) => ({ id, name: fvName(id) }))
+      .filter((x): x is { id: string; name: string } => !!x.name && (stored.get(x.id)?.name !== x.name || !!stored.get(x.id)?.manual))
+      .map((x) => ({ fourvenues_user_id: x.id, name: x.name, manual: false, updated_at: now }));
+    if (fresh.length) check(await db.from('fourvenues_rrpp_names').upsert(fresh, { onConflict: 'fourvenues_user_id' }), 'Nombres de RRPP');
+  }
   const unnamed = [...allRefs].filter((id) => !rrppName(id));
   result.unnamed = unnamed.length;
   if (unnamed.length)
     result.warnings.push(
-      `Fourvenues no ha dado el nombre de ${unnamed.length} RRPP (${users.size} usuarios recibidos). Salen con su código de Fourvenues; avisa para revisarlo.`,
+      `Fourvenues no da el nombre de ${unnamed.length} RRPP (no están entre sus usuarios). Salen con su código: ponles el nombre desde la noche (botón «Poner nombre»).`,
     );
 
   if (missing.length) {
@@ -822,40 +825,8 @@ async function inspect() {
   };
   // Un RRPP de las entradas sin nombre: ¿alguna ruta de la API lo conoce?
   const unknown = [...new Set(allTickets.map((t) => refId(t.referral_id)).filter((id) => id && !userMap.has(id) && !names.has(id)))];
-  // Reservas: qué parámetros acepta Fourvenues (estado y mensaje de cada prueba)
-  const night = eventNight(best.e) ?? today;
-  const iso = (d: string) => `${d}T00:00:00.000Z`;
-  const bookingTries: Record<string, Record<string, string>> = {
-    'event+iso': { event_id: best.e._id, start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) },
-    'iso sin evento': { start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) },
-    'event+fecha': { event_id: best.e._id, start_date: addDays(night, -1), end_date: addDays(night, 2) },
-    'event+iso sin fin': { event_id: best.e._id, start_date: iso(addDays(night, -1)) },
-    'event+iso+limit': { event_id: best.e._id, start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)), limit: '100', offset: '0' },
-  };
-  const bookingProbes: Record<string, unknown> = {};
-  for (const [label, params] of Object.entries(bookingTries)) {
-    try {
-      const items = (await fv<FvBooking[]>('/bookings/', params)) ?? [];
-      bookingProbes[label] = { ok: true, count: items.length, fields: shapes(items), ...refs(items) };
-    } catch (e) {
-      bookingProbes[label] = { error: e instanceof Error ? e.message : String(e) };
-    }
-  }
-  // ¿Salen los RRPP sin nombre en las listas de noches más antiguas (hasta 120 días)?
-  const older = ((await fv<FvEvent[]>('/events/', { start: addDays(today, -120), end: addDays(today, -21) })) ?? []).filter((e) => e?._id);
-  const olderNames = new Map<string, string>();
-  for (const e of older) {
-    try {
-      collectReferralNames(await eventLists(e._id), olderNames);
-    } catch {
-      break;
-    }
-  }
   return {
     ...out,
-    bookingProbes,
-    olderNights: older.length,
-    unnamedFoundInOlderLists: unknown.filter((id) => olderNames.has(id)).length,
     nights: recent.length,
     tickets: { count: allTickets.length, ...refs(allTickets) },
     lists: { count: allLists.length, ...refs(allLists) },

@@ -59,7 +59,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v24';
+const DB_KEY = 'vizzio.demo.db.v25';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -303,6 +303,13 @@ function checkLocation(pos?: Position | null) {
 }
 
 const demoVenue = () => ((getDb().venue_location ?? [])[0] as unknown as VenueLocation | undefined) ?? null;
+
+/** Como fourvenues_rrpp_names de Supabase: nombre puesto a mano, que pasa al desglose de sus noches */
+export async function demoSetRrppName(fourvenuesUserId: string, name: string): Promise<void> {
+  for (const r of getDb().fourvenues_rrpp_nights ?? []) if (r.fourvenues_user_id === fourvenuesUserId) r.name = name;
+  persist();
+  await wait();
+}
 
 export async function demoGetVenue(): Promise<VenueLocation | null> {
   await wait();
@@ -794,7 +801,8 @@ function seed(): DB {
 
   // Fourvenues: Marta está asociada a su usuario; "Pablo Ruiz" vende allí pero no tiene ficha en la app
   employees[5].fourvenues_user_id = 'fv-marta';
-  const fvRrpp: [string, string | null][] = [['fv-marta', 'Marta López'], ['fv-pablo', 'Pablo Ruiz'], ['fv-dani', 'Dani Promo'], ['', null]];
+  // El último con código es de los que Fourvenues no da el nombre (se pone a mano desde la noche)
+  const fvRrpp: [string, string | null][] = [['fv-marta', 'Marta López'], ['fv-pablo', 'Pablo Ruiz'], ['fv-dani', 'Dani Promo'], ['5f3a9c0e7b21d4a68e0c1f2b9d7a4e63', null], ['', null]];
   const fourvenuesRrppNights: FourvenuesRrppNight[] = [];
   for (const ev of events.filter((e) => e.tickets_paid != null)) {
     ev.fourvenues_id = `fv-${ev.date}`;
