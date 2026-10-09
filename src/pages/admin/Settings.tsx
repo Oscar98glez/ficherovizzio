@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Database, LogOut, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { ClaudeConnectorCard } from '../../components/ClaudeConnector';
+import { VenueLocationCard } from '../../components/clock-location';
 import { FourvenuesCard } from '../../components/FourvenuesCard';
 import { NotificationsCard } from '../../components/NotificationsCard';
 import { useFeedback } from '../../components/overlay';
@@ -85,6 +86,9 @@ export default function Settings() {
               </Button>
             )}
           </Card>
+
+          <SectionTitle>Fichajes</SectionTitle>
+          <VenueLocationCard />
 
           <SectionTitle>Integraciones</SectionTitle>
           <ClaudeConnectorCard />

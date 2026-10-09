@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarCheck, CalendarDays, ChevronRight, Fingerprint, LogIn, LogOut, UserX } from 'lucide-react';
+import { CalendarCheck, CalendarDays, ChevronRight, Fingerprint, LogIn, LogOut, MapPin, UserX } from 'lucide-react';
 import { useAuth } from '../../auth';
 import { useFeedback } from '../../components/overlay';
 import { Card, CardHeader, EmptyState, ErrorBox, ListRow, Loading, StatCard } from '../../components/ui';
@@ -8,6 +8,7 @@ import { useLoad, useNow } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange } from '../../lib/dates';
 import { fmtDate, fmtDateFull, fmtDateLong, fmtDuration, fmtDurationShort, fmtHours, fmtTime } from '../../lib/format';
+import { getPosition, PositionError, type Position } from '../../lib/geo';
 import { cx, entryHours, sumBy } from '../../lib/utils';
 import type { TimeEntry } from '../../lib/types';
 
@@ -38,7 +39,7 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
   const { toast, confirm } = useFeedback();
   const { isRrpp } = useAuth();
   const now = useNow(1000);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<false | 'locating' | 'saving'>(false);
   const week = useMemo(() => makePeriod('week'), []);
   const month = useMemo(() => makePeriod('month'), []);
 
@@ -82,14 +83,24 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
       const ok = await confirm({ title: '¿Fichar salida?', message: `Llevas ${fmtDurationShort(elapsed)} trabajando.`, confirmLabel: 'Fichar salida' });
       if (!ok) return;
     }
-    setBusy(true);
+    // La ubicación se guarda con el fichaje; si el local la exige y no se puede obtener, el servidor no deja fichar la entrada
+    setBusy('locating');
+    let pos: Position | null = null;
+    let geoError: PositionError | null = null;
     try {
-      const entry = open ? await api.clockOut() : await api.clockIn();
+      pos = await getPosition();
+    } catch (e) {
+      if (e instanceof PositionError) geoError = e;
+    }
+    setBusy('saving');
+    try {
+      const entry = open ? await api.clockOut(pos) : await api.clockIn(pos);
       toast.success(open ? `Salida registrada a las ${fmtTime(entry.clock_out!)}` : `Entrada registrada a las ${fmtTime(entry.clock_in)}`);
       if ('vibrate' in navigator) navigator.vibrate?.(30);
       reload();
     } catch (e) {
-      toast.error(errorMessage(e));
+      const msg = errorMessage(e);
+      toast.error(geoError && msg === errorMessage('LOCATION_REQUIRED') ? geoError.message : msg);
     } finally {
       setBusy(false);
     }
@@ -128,7 +139,7 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
             {open && <span className="absolute inset-0 animate-pulse-ring rounded-full bg-red/40" />}
             <button
               onClick={toggle}
-              disabled={busy || (!open && !active)}
+              disabled={!!busy || (!open && !active)}
               className={cx(
                 'relative grid h-44 w-44 place-items-center rounded-full text-white shadow-[0_18px_40px_-10px_rgba(0,0,0,0.35)] transition-all duration-200 active:scale-95 disabled:opacity-50',
                 open ? 'bg-gradient-to-b from-[#ff5e57] to-[#e0241b]' : 'bg-gradient-to-b from-[#34d15c] to-[#1fa23f]',
@@ -136,11 +147,17 @@ function ClockInner({ employeeId, firstName, active }: { employeeId: string; fir
             >
               <span className="flex flex-col items-center gap-2">
                 {open ? <LogOut className="h-10 w-10" strokeWidth={1.8} /> : <Fingerprint className="h-11 w-11" strokeWidth={1.6} />}
-                <span className="text-[17px] font-semibold">{busy ? 'Un momento…' : open ? 'Fichar salida' : 'Fichar entrada'}</span>
+                <span className="text-[17px] font-semibold">
+                  {busy === 'locating' ? 'Ubicándote…' : busy ? 'Un momento…' : open ? 'Fichar salida' : 'Fichar entrada'}
+                </span>
               </span>
             </button>
           </div>
           {!active && <p className="mt-4 text-[13px] text-red">Tu ficha está inactiva. Contacta con tu responsable.</p>}
+          <p className="mx-auto mt-5 flex max-w-xs items-start justify-center gap-1.5 text-[12px] leading-snug text-ink-3">
+            <MapPin className="mt-px h-3.5 w-3.5 shrink-0" />
+            Al fichar se guarda tu ubicación para comprobar que estás en el local.
+          </p>
         </div>
       </Card>
 

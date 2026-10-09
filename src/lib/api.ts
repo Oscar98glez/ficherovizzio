@@ -1,11 +1,12 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoFiles, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoFiles, demoGetVenue, demoSaveVenue, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
 import { kickNotifications } from './push';
+import { fmtDistance, type Position } from './geo';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VipTable, CommissionRate } from './types';
+import type { Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -29,11 +30,18 @@ export interface Repo<T extends { id: string }> {
 
 // ---------- Mensajes de error legibles ----------
 
-const ERRORS: [RegExp, string][] = [
+const ERRORS: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/EMAIL_NOT_AUTHORIZED/i, 'Este email no está autorizado. Pide al administrador que te dé de alta primero.'],
   [/Database error saving new user/i, 'No se ha podido crear la cuenta. Inténtalo de nuevo o avisa al administrador.'],
   [/ALREADY_CLOCKED_IN|time_entries_one_open/i, 'Ya hay un fichaje abierto para este empleado.'],
   [/NOT_CLOCKED_IN/i, 'No tienes ningún fichaje abierto.'],
+  [/LOCATION_REQUIRED/i, 'Para fichar la entrada hace falta tu ubicación. Activa la ubicación del móvil y da permiso a la app.'],
+  [
+    /OUTSIDE_VENUE(?::(\d+))?/i,
+    (m) => `Estás ${m[1] ? `a ${fmtDistance(Number(m[1]))} del local` : 'fuera del local'}: la entrada sólo se puede fichar desde el trabajo.`,
+  ],
+  [/BAD_LOCATION/i, 'La ubicación del móvil no es válida. Vuelve a intentarlo.'],
+  [/public.venue_location|clock_in_lat|clock_in\(p_accuracy|clock_out\(p_accuracy/i, 'Falta aplicar en Supabase la migración de ubicación de fichajes (20261009120000_clock_location.sql).'],
   [/NO_EMPLOYEE/i, 'Tu usuario no está vinculado a ninguna ficha de empleado activa.'],
   [/SHIFT_CLOSED/i, 'Este turno ya ha empezado o está cancelado: ya no se puede responder.'],
   [/SHIFT_NOT_FOUND/i, 'No se ha encontrado el turno.'],
@@ -80,10 +88,16 @@ const ERRORS: [RegExp, string][] = [
 
 export function errorMessage(e: unknown): string {
   const raw = e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String(e.message) : String(e);
-  return ERRORS.find(([re]) => re.test(raw))?.[1] ?? raw;
+  for (const [re, msg] of ERRORS) {
+    const m = raw.match(re);
+    if (m) return typeof msg === 'string' ? msg : msg(m);
+  }
+  return raw;
 }
 
 const fail = (e: { message: string }) => new Error(errorMessage(e));
+
+const locationArgs = (pos?: Position | null) => ({ p_lat: pos?.lat ?? null, p_lng: pos?.lng ?? null, p_accuracy: pos?.accuracy ?? null });
 
 // ---------- Implementación Supabase ----------
 
@@ -311,13 +325,29 @@ export const api = {
   /** Conversaciones: se leen aquí; se escriben con replyMessage */
   messageReplies: repo<MessageReply>('message_replies'),
 
-  /** Fichar entrada del usuario conectado (hora del servidor). */
-  clockIn: (notes?: string) =>
-    IS_DEMO ? demoClockIn(notes) : sbRpc<TimeEntry>('clock_in', { p_notes: notes ?? null }),
+  /** Fichar entrada del usuario conectado (hora del servidor), con su ubicación si la hay. */
+  clockIn: (pos?: Position | null, notes?: string) =>
+    IS_DEMO ? demoClockIn(pos, notes) : sbRpc<TimeEntry>('clock_in', { p_notes: notes ?? null, ...locationArgs(pos) }),
 
-  /** Fichar salida del usuario conectado (hora del servidor). */
-  clockOut: (notes?: string) =>
-    IS_DEMO ? demoClockOut(notes) : sbRpc<TimeEntry>('clock_out', { p_notes: notes ?? null }),
+  /** Fichar salida del usuario conectado (hora del servidor), con su ubicación si la hay. */
+  clockOut: (pos?: Position | null, notes?: string) =>
+    IS_DEMO ? demoClockOut(pos, notes) : sbRpc<TimeEntry>('clock_out', { p_notes: notes ?? null, ...locationArgs(pos) }),
+
+  /** Ubicación del local (sólo administradores); null si no está puesta */
+  getVenue: async (): Promise<VenueLocation | null> => {
+    if (IS_DEMO) return demoGetVenue();
+    const { data, error } = await sb().from('venue_location').select('*').maybeSingle();
+    if (error) throw fail(error);
+    return data as VenueLocation | null;
+  },
+
+  saveVenue: async (v: VenueLocation | null): Promise<void> => {
+    if (IS_DEMO) return demoSaveVenue(v);
+    const { error } = v
+      ? await sb().from('venue_location').upsert({ id: true, ...v, updated_at: new Date().toISOString() } as never)
+      : await sb().from('venue_location').delete().eq('id', true);
+    if (error) throw fail(error);
+  },
 
   myEmployee,
   myTimeEntries,

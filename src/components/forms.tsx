@@ -9,6 +9,7 @@ import { fmtDate, fmtHours, fmtMoney, fmtTime } from '../lib/format';
 import type { Availability, ClubEvent, ContractType, Department, Employee, Shift, ShiftStatus, TimeEntry } from '../lib/types';
 import { availabilityLabel, hhmm } from '../lib/availability';
 import { cx, entryHours, fullName, parseAmount } from '../lib/utils';
+import { EntryLocations } from './clock-location';
 import { Modal, useFeedback } from './overlay';
 import { PhotoPicker } from './PhotoPicker';
 import { Avatar, Button, Field, Input, Segmented, Select, Switch, Textarea } from './ui';
@@ -413,6 +414,7 @@ export function EntryForm({
         <Field label="Notas">
           <Input value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="Opcional" />
         </Field>
+        {entry && <EntryLocations entry={entry} />}
         {preview && (
           <div className="flex items-center justify-between rounded-xl bg-fill/60 px-4 py-3 text-[14px]">
             <span className="text-ink-2">{f.clock_out ? 'Total' : 'Hasta ahora'}</span>

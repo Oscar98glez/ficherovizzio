@@ -5,6 +5,7 @@
 import type { Query, Repo } from './api';
 import { CLUB_TABLES } from './club-map';
 import { PAYROLL_CATEGORY } from './constants';
+import { distanceM, isOutside, type Position } from './geo';
 import { menuPrice } from './menu';
 import { addDays, addMonths, businessDate, businessToday, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
 import type {
@@ -29,6 +30,7 @@ import type {
   TicketSale,
   TimeEntry,
   Transaction,
+  VenueLocation,
   VipTable,
 } from './types';
 import { entryCost, sumBy, uid } from './utils';
@@ -52,11 +54,12 @@ export type TableName =
   | 'claude_connectors'
   | 'messages'
   | 'message_recipients'
-  | 'message_replies';
+  | 'message_replies'
+  | 'venue_location';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v23';
+const DB_KEY = 'vizzio.demo.db.v24';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -291,10 +294,34 @@ function currentEmployee(): Employee {
   return emp;
 }
 
-export async function demoClockIn(notes?: string): Promise<TimeEntry> {
+/** Como check_clock_location de Supabase: distancia al local y si está fuera */
+function checkLocation(pos?: Position | null) {
+  const venue = demoVenue();
+  if (!venue || !pos) return { distance: null, outside: null, enforce: !!venue?.enforce };
+  const distance = Math.round(distanceM(venue.lat, venue.lng, pos.lat, pos.lng));
+  return { distance, outside: isOutside(distance, pos.accuracy, venue.radius_m), enforce: venue.enforce };
+}
+
+const demoVenue = () => ((getDb().venue_location ?? [])[0] as unknown as VenueLocation | undefined) ?? null;
+
+export async function demoGetVenue(): Promise<VenueLocation | null> {
+  await wait();
+  return clone(demoVenue());
+}
+
+export async function demoSaveVenue(v: VenueLocation | null): Promise<void> {
+  getDb().venue_location = v ? [{ ...v, id: 'venue', updated_at: new Date().toISOString() }] : [];
+  persist();
+  await wait();
+}
+
+export async function demoClockIn(pos?: Position | null, notes?: string): Promise<TimeEntry> {
   const emp = currentEmployee();
   const d = getDb();
   if (d.time_entries.some((t) => t.employee_id === emp.id && !t.clock_out)) throw new Error('ALREADY_CLOCKED_IN');
+  const loc = checkLocation(pos);
+  if (loc.enforce && !pos) throw new Error('LOCATION_REQUIRED');
+  if (loc.enforce && loc.outside) throw new Error(`OUTSIDE_VENUE:${loc.distance}`);
   const event = d.events.find((e) => e.date === businessDate(Date.now()));
   const entry: TimeEntry = {
     id: uid(),
@@ -307,6 +334,11 @@ export async function demoClockIn(notes?: string): Promise<TimeEntry> {
     source: 'app',
     notes: notes ?? null,
     created_at: new Date().toISOString(),
+    clock_in_lat: pos?.lat ?? null,
+    clock_in_lng: pos?.lng ?? null,
+    clock_in_accuracy: pos?.accuracy ?? null,
+    clock_in_distance: loc.distance,
+    clock_in_outside: loc.outside,
   };
   d.time_entries.push(entry as unknown as Record<string, unknown>);
   persist();
@@ -314,11 +346,19 @@ export async function demoClockIn(notes?: string): Promise<TimeEntry> {
   return clone(entry);
 }
 
-export async function demoClockOut(notes?: string): Promise<TimeEntry> {
+export async function demoClockOut(pos?: Position | null, notes?: string): Promise<TimeEntry> {
   const emp = currentEmployee();
   const open = getDb().time_entries.find((t) => t.employee_id === emp.id && !t.clock_out);
   if (!open) throw new Error('NOT_CLOCKED_IN');
+  const loc = checkLocation(pos);
   open.clock_out = new Date().toISOString();
+  Object.assign(open, {
+    clock_out_lat: pos?.lat ?? null,
+    clock_out_lng: pos?.lng ?? null,
+    clock_out_accuracy: pos?.accuracy ?? null,
+    clock_out_distance: loc.distance,
+    clock_out_outside: loc.outside,
+  });
   syncShiftEnd(open as unknown as TimeEntry);
   if (notes) open.notes = notes;
   persist();
@@ -674,6 +714,31 @@ function seed(): DB {
     });
   });
 
+  // Ubicación de los fichajes desde la app: casi todos en el local, alguno fuera
+  const venue: VenueLocation = { lat: 40.42005, lng: -3.70578, radius_m: 150, enforce: false };
+  const rl = rng(4242);
+  const near = (outside: boolean): Position => {
+    const dist = outside ? 1500 + rl() * 4000 : rl() * 70;
+    const angle = rl() * 2 * Math.PI;
+    return {
+      lat: venue.lat + (dist * Math.cos(angle)) / 111_320,
+      lng: venue.lng + (dist * Math.sin(angle)) / (111_320 * Math.cos((venue.lat * Math.PI) / 180)),
+      accuracy: Math.round(8 + rl() * 40),
+    };
+  };
+  const located = (pos: Position) => {
+    const distance = Math.round(distanceM(venue.lat, venue.lng, pos.lat, pos.lng));
+    return { lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, distance, outside: isOutside(distance, pos.accuracy, venue.radius_m) };
+  };
+  for (const e of entries) {
+    if (e.source !== 'app') continue;
+    const i = located(near(e.employee_id === 'emp-7' && !e.clock_out));
+    Object.assign(e, { clock_in_lat: i.lat, clock_in_lng: i.lng, clock_in_accuracy: i.accuracy, clock_in_distance: i.distance, clock_in_outside: i.outside });
+    if (!e.clock_out) continue;
+    const o = located(near(rl() < 0.05));
+    Object.assign(e, { clock_out_lat: o.lat, clock_out_lng: o.lng, clock_out_accuracy: o.accuracy, clock_out_distance: o.distance, clock_out_outside: o.outside });
+  }
+
   // Disponibilidad de esta semana y la siguiente (Lucía deja la próxima sin rellenar para probarlo)
   const availability: Availability[] = [];
   const weekStart = startOfWeek(today);
@@ -854,5 +919,6 @@ function seed(): DB {
     message_recipients: messageRecipients,
     message_replies: messageReplies,
     fourvenues_rrpp_nights: fourvenuesRrppNights,
+    venue_location: [{ id: 'venue', ...venue, updated_at: stamp }],
   } as unknown as DB;
 }

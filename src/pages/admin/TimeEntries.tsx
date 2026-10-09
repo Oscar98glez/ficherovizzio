@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Clock, Download, Plus, Square } from 'lucide-react';
+import { LocationTag } from '../../components/clock-location';
 import { EntryForm } from '../../components/forms';
 import { useFeedback } from '../../components/overlay';
 import { PeriodPicker } from '../../components/PeriodPicker';
@@ -57,7 +58,7 @@ export default function TimeEntries() {
 
   const exportCsv = () =>
     downloadCSV(`fichajes-${period.from}.csv`, [
-      ['Noche', 'Empleado', 'Puesto', 'Entrada', 'Salida', 'Pausa (min)', 'Horas', '€/hora', 'Coste', 'Origen', 'Notas'],
+      ['Noche', 'Empleado', 'Puesto', 'Entrada', 'Salida', 'Pausa (min)', 'Horas', '€/hora', 'Coste', 'Origen', 'Notas', 'Entrada: m al local', 'Entrada fuera', 'Salida: m al local', 'Salida fuera'],
       ...[...filtered].reverse().map((e) => {
         const emp = emps.get(e.employee_id);
         return [
@@ -72,6 +73,10 @@ export default function TimeEntries() {
           Math.round(entryCost(e) * 100) / 100,
           e.source === 'app' ? 'App' : 'Manual',
           e.notes,
+          e.clock_in_distance ?? '',
+          e.clock_in_outside == null ? '' : e.clock_in_outside ? 'Sí' : 'No',
+          e.clock_out_distance ?? '',
+          e.clock_out_outside == null ? '' : e.clock_out_outside ? 'Sí' : 'No',
         ];
       }),
     ]);
@@ -109,6 +114,7 @@ export default function TimeEntries() {
                   <div className="leading-tight">
                     <div className="text-[14px] font-medium">{emp?.first_name}</div>
                     <div className="tabular text-[12px] text-ink-2">{fmtDuration(now - Date.parse(e.clock_in))}</div>
+                    {e.clock_in_outside && <div className="text-[11px] font-medium text-red">Fuera del local</div>}
                   </div>
                   <IconButton label="Fichar salida" onClick={() => closeEntry(e)} className="ml-1 bg-red/10 text-red hover:bg-red/20 hover:text-red">
                     <Square className="!h-3.5 !w-3.5" fill="currentColor" />
@@ -169,6 +175,7 @@ export default function TimeEntries() {
                               </span>
                               {emp?.position}
                             </div>
+                            <LocationTag entry={e} className="max-w-full" />
                           </div>
                         </div>
                         <div className="tabular hidden text-[14px] md:block">
