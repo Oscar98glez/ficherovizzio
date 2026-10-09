@@ -53,10 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const profile = await api.profiles.get(userId);
       // El trabajador recibe su ficha sin la tarifa €/h; el administrador, la ficha completa
-      const employee =
+      let employee =
         profile?.role === 'admin'
           ? (await api.employees.list({ eq: { user_id: userId } }))[0] ?? null
           : await api.myEmployee(userId);
+      // Sin ficha vinculada: se vincula sola con la ficha sin cuenta que tenga su mismo email
+      if (!employee && profile?.role !== 'admin' && (await api.linkMyEmployee())) employee = await api.myEmployee(userId);
       setState({ loading: false, userId, email: email ?? profile?.email ?? null, profile, employee, error: null });
     } catch (e) {
       setState({ ...EMPTY, userId, email, error: errorMessage(e) });
