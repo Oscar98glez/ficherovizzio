@@ -385,7 +385,15 @@ export interface FourvenuesRrppNight {
   lists: number | null;
   /** Sus reservados en Fourvenues; null si la clave no tiene acceso a las reservas */
   bookings?: number | null;
+  /** Desglose: entradas por tipo y precio, listas y reservados (cortesía o pagados) */
+  detail?: RrppNightDetail | null;
   synced_at: string;
+}
+
+export interface RrppNightDetail {
+  tickets: { rate: string; price: number; people: number; entered: number; amount: number }[];
+  lists: { rate: string; people: number; entered: number }[] | null;
+  bookings: { kind: 'cortesia' | 'pagado'; zone: string; count: number; people: number; amount: number }[] | null;
 }
 
 /** Resumen de una sincronización con Fourvenues (supabase/functions/fourvenues-sync) */

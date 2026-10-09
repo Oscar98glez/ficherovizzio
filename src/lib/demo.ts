@@ -24,6 +24,7 @@ import type {
   Profile,
   Reservation,
   ReservationStatus,
+  RrppNightDetail,
   Shift,
   ShiftResponse,
   Supplier,
@@ -59,7 +60,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v25';
+const DB_KEY = 'vizzio.demo.db.v26';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -819,7 +820,21 @@ function seed(): DB {
       tLeft -= t;
       lLeft -= l;
       bLeft -= bk;
-      fourvenuesRrppNights.push({ id: uid(), event_id: ev.id, fourvenues_user_id: fvId, name, tickets: t, lists: l, bookings: bk, synced_at: stamp });
+      // Desglose: entradas anticipadas (10 €) y de última hora (15 €), una lista y reservados de cortesía o pagados
+      const early = Math.round(t * 0.7);
+      const courtesy = Math.min(bk, Math.round(bk * 0.3));
+      const detail: RrppNightDetail = {
+        tickets: [
+          { rate: 'Anticipada', price: 10, people: early, entered: Math.round(early * 0.8), amount: early * 10 },
+          { rate: 'Última hora', price: 15, people: t - early, entered: Math.round((t - early) * 0.8), amount: (t - early) * 15 },
+        ].filter((x) => x.people > 0),
+        lists: l ? [{ rate: 'Lista gratis antes de la 1:30', people: l, entered: Math.round(l * 0.7) }] : [],
+        bookings: [
+          { kind: 'pagado' as const, zone: 'VIP', count: bk - courtesy, people: (bk - courtesy) * 8, amount: (bk - courtesy) * 300 },
+          { kind: 'cortesia' as const, zone: 'VIP', count: courtesy, people: courtesy * 6, amount: 0 },
+        ].filter((x) => x.count > 0),
+      };
+      fourvenuesRrppNights.push({ id: uid(), event_id: ev.id, fourvenues_user_id: fvId, name, tickets: t, lists: l, bookings: bk, detail, synced_at: stamp });
     });
   }
   const reservations: Reservation[] = [];

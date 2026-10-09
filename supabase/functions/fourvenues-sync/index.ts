@@ -107,6 +107,8 @@ export interface FvTicket {
   refunded?: number;
   /** RRPP que la ha vendido (usuario de Fourvenues): su id o, a veces, el usuario entero */
   referral_id?: Referral;
+  /** Tipo de entrada (tarifa) */
+  rate_name?: string;
 }
 
 /** Inscripción en una lista de Fourvenues (QR gratis); sólo los campos que se usan */
@@ -121,6 +123,8 @@ export interface FvListEntry {
   enter?: number;
   /** RRPP de la lista (usuario de Fourvenues), como en las entradas */
   referral_id?: Referral;
+  /** Nombre de la lista (tarifa) */
+  rate_name?: string;
 }
 
 /** Reserva de mesa de Fourvenues; sólo los campos que se usan */
@@ -132,6 +136,15 @@ export interface FvBooking {
   state?: string;
   /** RRPP de la reserva (usuario de Fourvenues) */
   referral_id?: Referral;
+  /** Personas */
+  for?: number;
+  /** Precio de la reserva, señal y lo pagado de la señal */
+  price?: number;
+  deposit?: number;
+  deposit_paid?: number;
+  /** Tarifa y zona (p. ej. "VIP") */
+  rate_slug?: string;
+  zone_name?: string;
 }
 
 export interface FvUser {
@@ -304,6 +317,73 @@ export function summarizeBookings(bookings: FvBooking[]) {
     out.count++;
     const ref = refId(b.referral_id);
     out.byReferral.set(ref, (out.byReferral.get(ref) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** Desglose de lo vendido por un RRPP en una noche (fourvenues_rrpp_nights.detail) */
+export interface RrppDetail {
+  /** Entradas de pago por tipo y precio */
+  tickets: { rate: string; price: number; people: number; entered: number; amount: number }[];
+  /** Personas en cada lista; null si no hay acceso a las listas */
+  lists: { rate: string; people: number; entered: number }[] | null;
+  /** Reservados por tipo (cortesía o pagado) y zona; null si no hay acceso a las reservas */
+  bookings: { kind: 'cortesia' | 'pagado'; zone: string; count: number; people: number; amount: number }[] | null;
+}
+
+/** Un reservado es de cortesía si su tarifa lo dice o si no cuesta nada (ni precio ni señal) */
+export const isCourtesy = (b: FvBooking) =>
+  /cortes|invita|gratis|free/i.test(`${b.rate_slug ?? ''} ${b.zone_name ?? ''}`) || (num(b.price) <= 0 && num(b.deposit) <= 0 && num(b.deposit_paid) <= 0);
+
+/** Desglose de cada RRPP ('' = sin RRPP) a partir de las entradas, listas y reservas de una noche */
+export function rrppDetails(tickets: FvTicket[], lists: FvListEntry[] | null, bookings: FvBooking[] | null): Map<string, RrppDetail> {
+  const out = new Map<string, RrppDetail>();
+  const of = (ref: string) => {
+    let d = out.get(ref);
+    if (!d) out.set(ref, (d = { tickets: [], lists: lists ? [] : null, bookings: bookings ? [] : null }));
+    return d;
+  };
+  for (const t of tickets) {
+    if (!isValid(t)) continue;
+    const net = netAmount(t);
+    if (num(t.refunded) > 0 && net === 0) continue;
+    // Como en "entradas vendidas": sólo las de pago
+    if (t.sale_type === 'invitation' || num(t.total_paid ?? t.price) <= 0) continue;
+    const p = people(t);
+    const rate = str(t.rate_name) ?? 'Entrada';
+    const price = round2(num(t.price));
+    const d = of(refId(t.referral_id));
+    let row = d.tickets.find((x) => x.rate === rate && x.price === price);
+    if (!row) d.tickets.push((row = { rate, price, people: 0, entered: 0, amount: 0 }));
+    row.people += p;
+    row.entered += Math.min(p, Math.max(0, Math.round(num(t.enter))));
+    row.amount = round2(row.amount + net);
+  }
+  for (const e of lists ?? []) {
+    if (statuses(e).some((st) => st === 'cancelled')) continue;
+    const p = people(e);
+    const rate = str(e.rate_name) ?? 'Lista';
+    const d = of(refId(e.referral_id));
+    let row = d.lists!.find((x) => x.rate === rate);
+    if (!row) d.lists!.push((row = { rate, people: 0, entered: 0 }));
+    row.people += p;
+    row.entered += Math.min(p, Math.max(0, Math.round(num(e.enter))));
+  }
+  for (const b of bookings ?? []) {
+    if ([...statuses(b), b.state ?? ''].some((st) => DEAD_BOOKING.test(st))) continue;
+    const kind = isCourtesy(b) ? 'cortesia' : 'pagado';
+    const zone = str(b.zone_name) ?? 'Reservado';
+    const d = of(refId(b.referral_id));
+    let row = d.bookings!.find((x) => x.kind === kind && x.zone === zone);
+    if (!row) d.bookings!.push((row = { kind, zone, count: 0, people: 0, amount: 0 }));
+    row.count++;
+    row.people += Math.max(0, Math.round(num(b.for)));
+    row.amount = round2(row.amount + Math.max(0, num(b.price)));
+  }
+  for (const d of out.values()) {
+    d.tickets.sort((a, b) => b.price - a.price || b.people - a.people);
+    d.lists?.sort((a, b) => b.people - a.people);
+    d.bookings?.sort((a, b) => a.kind.localeCompare(b.kind) || b.count - a.count);
   }
   return out;
 }
@@ -565,7 +645,13 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
   let listsUnavailable = false;
   let bookingsUnavailable = false;
   /** Desglose por RRPP de cada noche: entradas de pago, personas en listas y reservados */
-  const breakdowns: { eventId: string; tickets: Map<string, number>; lists: Map<string, number> | null; bookings: Map<string, number> | null }[] = [];
+  const breakdowns: {
+    eventId: string;
+    tickets: Map<string, number>;
+    lists: Map<string, number> | null;
+    bookings: Map<string, number> | null;
+    details: Map<string, RrppDetail>;
+  }[] = [];
   /** Nombre de cada RRPP que venga dentro de las propias ventas */
   const embeddedNames = new Map<string, string>();
   for (const { fvId, local } of synced) {
@@ -578,9 +664,10 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
 
     // QR gratis (listas) y reservados (reservas de mesa). Si Fourvenues no los da, se sigue sin ellos
     let lists: ReturnType<typeof summarizeLists> | null = null;
+    let listEntries: FvListEntry[] | null = null;
     if (!listsUnavailable) {
       try {
-        const entries = await eventLists(fvId);
+        const entries = (listEntries = await eventLists(fvId));
         collectReferralNames(entries, embeddedNames);
         lists = summarizeLists(entries);
         result.free += lists.people;
@@ -591,9 +678,10 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
       }
     }
     let bookings: ReturnType<typeof summarizeBookings> | null = null;
+    let bookingItems: FvBooking[] | null = null;
     if (!bookingsUnavailable) {
       try {
-        const items = await eventBookings(fvId, local.date);
+        const items = (bookingItems = await eventBookings(fvId, local.date));
         collectReferralNames(items, embeddedNames);
         bookings = summarizeBookings(items);
         result.bookings += bookings.count;
@@ -619,7 +707,13 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
       'Noches',
     );
 
-    breakdowns.push({ eventId: local.id, tickets: s.paidByReferral, lists: lists?.byReferral ?? null, bookings: bookings?.byReferral ?? null });
+    breakdowns.push({
+      eventId: local.id,
+      tickets: s.paidByReferral,
+      lists: lists?.byReferral ?? null,
+      bookings: bookings?.byReferral ?? null,
+      details: rrppDetails(tickets, listEntries, bookingItems),
+    });
 
     const night = rrppByNight.get(local.date) ?? new Map<string, Sales>();
     for (const [ref, v] of s.byReferral) {
@@ -705,20 +799,20 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     const refs = new Set([...b.tickets.keys(), ...(b.lists?.keys() ?? []), ...(b.bookings?.keys() ?? [])]);
     check(await db.from('fourvenues_rrpp_nights').delete().eq('event_id', b.eventId), 'Desglose por RRPP');
     if (!refs.size) continue;
-    check(
-      await db.from('fourvenues_rrpp_nights').insert(
-        [...refs].map((ref) => ({
-          event_id: b.eventId,
-          fourvenues_user_id: ref,
-          name: rrppName(ref),
-          tickets: b.tickets.get(ref) ?? 0,
-          lists: b.lists ? b.lists.get(ref) ?? 0 : null,
-          bookings: b.bookings ? b.bookings.get(ref) ?? 0 : null,
-          synced_at: now,
-        })),
-      ),
-      'Desglose por RRPP',
-    );
+    const rows = [...refs].map((ref) => ({
+      event_id: b.eventId,
+      fourvenues_user_id: ref,
+      name: rrppName(ref),
+      tickets: b.tickets.get(ref) ?? 0,
+      lists: b.lists ? b.lists.get(ref) ?? 0 : null,
+      bookings: b.bookings ? b.bookings.get(ref) ?? 0 : null,
+      detail: b.details.get(ref) ?? null,
+      synced_at: now,
+    }));
+    let insert = await db.from('fourvenues_rrpp_nights').insert(rows);
+    // Sin la migración del desglose (columna detail) se guarda lo demás
+    if (insert.error && /detail/.test(insert.error.message)) insert = await db.from('fourvenues_rrpp_nights').insert(rows.map(({ detail: _d, ...r }) => r));
+    check(insert, 'Desglose por RRPP');
   }
 
   for (const [date, night] of rrppByNight) {
@@ -799,12 +893,15 @@ async function inspect() {
   const recent = events.slice(-8);
   const allTickets: FvTicket[] = [];
   const allLists: FvListEntry[] = [];
+  const allBookings: FvBooking[] = [];
   let best: { e: FvEvent; tickets: FvTicket[] } | null = null;
   for (const e of recent) {
     const tickets = await eventTickets(e._id);
     allTickets.push(...tickets);
     const lists = await grab(() => eventLists(e._id));
     allLists.push(...(lists.items ?? []));
+    const bk = await grab(() => eventBookings(e._id, eventNight(e) ?? today));
+    allBookings.push(...(bk.items ?? []));
     if (!best || tickets.length > best.tickets.length) best = { e, tickets };
   }
   if (!best) return out;
@@ -833,6 +930,15 @@ async function inspect() {
     bookings: bookings.items ? { count: bookings.items.length, fields: shapes(bookings.items), ...refs(bookings.items) } : bookings,
     users: users.items ? { count: users.items.length, withName: users.items.filter((u) => fullName(u)).length } : users,
     ticketReferralsWithoutName: unknown.length,
+    // Tipos de reservado (tarifas y zonas son del local, no datos personales)
+    bookingKinds: {
+      count: allBookings.length,
+      courtesy: allBookings.filter(isCourtesy).length,
+      priceZero: allBookings.filter((b) => num(b.price) <= 0).length,
+      rates: Object.entries(allBookings.reduce<Record<string, number>>((acc, b) => ((acc[`${b.rate_slug ?? '-'} · ${b.zone_name ?? '-'} · ${num(b.price) > 0 ? 'con precio' : 'sin precio'}`] = (acc[`${b.rate_slug ?? '-'} · ${b.zone_name ?? '-'} · ${num(b.price) > 0 ? 'con precio' : 'sin precio'}`] ?? 0) + 1), acc), {})),
+      states: [...new Set(allBookings.flatMap((b) => [...statuses(b), b.state ?? '']))],
+    },
+    ticketRates: [...new Set(allTickets.map((t) => `${t.rate_name ?? '-'} · ${num(t.price)}`))].slice(0, 40),
   };
 }
 
