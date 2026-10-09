@@ -70,6 +70,9 @@ FICHAJES (hoja de firmas)
 - Enséñale una tabla con las diferencias (persona, app y hoja) antes de cambiar nada, salvo que te haya dicho que corrijas directamente. Por defecto, una diferencia de 10 minutos o menos se da por buena.
 - Corrige con corregir_fichajes: modifica la entrada/salida del fichaje que está mal, crea el fichaje si la persona está en la hoja pero no fichó, y solo borra fichajes si el usuario lo pide. Las horas se indican en hora española (HH:MM) junto con la noche (AAAA-MM-DD).
 
+RESERVADOS
+- ver_reservados_noche enseña los reservados de una noche en la app y las reservas de Fourvenues (por RRPP) para cotejarlos. Es sólo de lectura y lleva datos de clientes: úsalo sólo cuando el usuario lo pida.
+
 Si te equivocas, puedes deshacer con eliminar_movimientos o eliminar_factura.`;
 
 // ---------------------------------------------------------------------
@@ -801,6 +804,74 @@ const TOOLS: Tool[] = [
         .filter((s) => !fichado.has(`${s.noche}|${s.empleado_id}`))
         .map((s) => ({ ...s, empleado: names.get(s.empleado_id) ?? '¿?' }));
       return { desde: from, hasta: to, cantidad: fichajes.length, fichajes, turno_sin_fichar: sinFichar };
+    },
+  },
+
+  {
+    name: 'ver_reservados_noche',
+    title: 'Ver reservados de una noche',
+    description:
+      'Reservados de una noche en el apartado Reservados de la app (cliente, teléfono, personas, reservado, botellas con las de cortesía, total, estado y RRPP) y las reservas de Fourvenues de esa noche por RRPP (cliente, teléfono, zona, personas y precio), para cotejarlas. Sólo lectura.',
+    inputSchema: {
+      type: 'object',
+      properties: { fecha: { ...DATE, description: 'La noche (AAAA-MM-DD)' } },
+      required: ['fecha'],
+    },
+    annotations: READ_ONLY,
+    run: async ({ db }, a) => {
+      const night = date(a, 'fecha', true)!;
+      const [resRes, tablesRes, eventsRes] = await Promise.all([
+        db
+          .from('reservations')
+          .select('id, customer_name, customer_phone, guests, arrival_time, table_id, bottles, mixers, total_amount, deposit, status, rrpp_name, rrpp_origin, host_rrpp_name, notes')
+          .eq('date', night)
+          .order('arrival_time'),
+        db.from('vip_tables').select('id, name, zone'),
+        db.from('events').select('id, name, fourvenues_id').eq('date', night),
+      ]);
+      const tables = new Map((check(tablesRes, 'No se pudieron leer los reservados') as Record<string, unknown>[]).map((t) => [t.id, [t.name, t.zone].filter(Boolean).join(' · ')]));
+      type Item = { name: string; qty: number; courtesy?: boolean; price?: number };
+      const app = (check(resRes, 'No se pudieron leer las reservas') as Record<string, unknown>[]).map((r) => {
+        const bottles = (r.bottles as Item[] | null) ?? [];
+        return {
+          cliente: r.customer_name,
+          telefono: r.customer_phone,
+          personas: r.guests,
+          llegada: r.arrival_time,
+          reservado: r.table_id ? tables.get(r.table_id) ?? null : null,
+          botellas: bottles.map((b) => `${b.qty}× ${b.name}${b.courtesy ? ' (cortesía)' : ''}`).join(', '),
+          todas_cortesia: bottles.length > 0 && bottles.every((b) => b.courtesy),
+          total: r.total_amount,
+          senal: r.deposit,
+          estado: r.status,
+          rrpp: r.rrpp_name ?? r.rrpp_origin,
+          rrpp_que_atiende: r.host_rrpp_name,
+          notas: r.notes,
+        };
+      });
+      const events = check(eventsRes, 'No se pudieron leer las noches') as Record<string, unknown>[];
+      const ids = events.map((e) => e.id as string);
+      const nightsRes = ids.length
+        ? await db.from('fourvenues_rrpp_nights').select('fourvenues_user_id, name, bookings, detail').in('event_id', ids)
+        : { data: [], error: null };
+      const fourvenues = (check(nightsRes, 'No se pudo leer el desglose de Fourvenues') as Record<string, unknown>[]).flatMap((r) => {
+        const detail = r.detail as { bookingItems?: Record<string, unknown>[] } | null;
+        return (detail?.bookingItems ?? []).map((b) => ({
+          rrpp: r.name ?? (r.fourvenues_user_id ? `RRPP ${String(r.fourvenues_user_id).slice(-6)}` : 'Sin RRPP'),
+          cliente: b.name,
+          telefono: b.phone,
+          zona: b.zone,
+          personas: b.people,
+          precio: b.price,
+          cortesia_segun_fourvenues: b.courtesy,
+        }));
+      });
+      return {
+        noche: night,
+        eventos: events.map((e) => ({ nombre: e.name, de_fourvenues: !!e.fourvenues_id })),
+        reservados_app: app,
+        reservas_fourvenues: fourvenues,
+      };
     },
   },
 
