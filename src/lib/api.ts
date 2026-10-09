@@ -315,7 +315,8 @@ export const api = {
   suppliers: repo<Supplier>('suppliers'),
   claudeConnectors: repo<ClaudeConnector>('claude_connectors'),
   vipTables: repo<VipTable>('vip_tables'),
-  reservations: repo<Reservation>('reservations'),
+  /** Al apuntar un reservado, la base de datos crea el aviso para los camareros de bandeja y se envía */
+  reservations: notifying(repo<Reservation>('reservations')),
   commissionRates: repo<CommissionRate>('rrpp_commission_rates'),
   ticketSales: repo<TicketSale>('rrpp_ticket_sales'),
   /** Desglose por RRPP de cada noche (lo escribe la sincronización con Fourvenues) */

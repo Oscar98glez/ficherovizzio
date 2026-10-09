@@ -73,10 +73,10 @@ function RequireAdmin() {
   return isAdmin ? <Outlet /> : <Navigate to="/fichar" replace />;
 }
 
-/** Reservados: administradores y RRPP */
+/** Reservados: administradores y RRPP (y los camareros de bandeja, para verlos) */
 function RequireReservations() {
-  const { isAdmin, isRrpp } = useAuth();
-  return isAdmin || isRrpp ? <Outlet /> : <Navigate to="/fichar" replace />;
+  const { isAdmin, isRrpp, isTray } = useAuth();
+  return isAdmin || isRrpp || isTray ? <Outlet /> : <Navigate to="/fichar" replace />;
 }
 
 /** Turnos, disponibilidad y solicitudes: no aplican a los RRPP */

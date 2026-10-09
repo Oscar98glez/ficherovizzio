@@ -6,7 +6,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 
 **Administrador**
 - **Resumen** — ingresos, gastos, coste de personal y resultado del mes; quién está fichado ahora mismo en tiempo real; próximas noches y solicitudes pendientes.
-- **Personal** — fichas de empleado con puesto, departamento, contrato y coste por hora. Horas y coste por persona de la semana, el mes o el año (camareros y DJ / técnicos). Gestión del rol (admin / trabajador).
+- **Personal** — fichas de empleado con puesto, departamento, contrato y coste por hora. Horas y coste por persona de la semana, el mes o el año (camareros de barra, de bandeja y DJ / técnicos). Gestión del rol: camarero de barra, camarero de bandeja, DJ / técnico, RRPP o administrador. Los **camareros de bandeja** hacen lo mismo que los de barra y además ven el apartado *Reservados* (sólo consulta) y reciben un aviso en el móvil cada vez que se apunta un reservado.
 - **Fichajes** — entradas y salidas agrupadas por noche, fichajes manuales, cierre de fichajes abiertos, exportación a CSV. Cada fichaje de la app indica dónde se hizo (*En el local*, *Entrada fuera · 1,7 km*…) y, al abrirlo, el mapa de la entrada y de la salida.
 - **Disponibilidad** — tabla semanal con los días que puede trabajar cada persona; desde cada casilla se asigna el turno.
 - **Turnos** — planificación semanal, asignación de varias personas de una vez, coste previsto y "copiar semana anterior". Se ve quién ha aceptado (✓), rechazado (✗) o no ha respondido cada turno.
@@ -18,7 +18,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Conector de Claude** (en Ajustes) — pásale a Claude extractos, tickets o facturas y los registra en Finanzas y Facturas, creando los proveedores que falten. Ver más abajo.
 - **Nóminas** — devengado por empleado según fichajes, pagado y pendiente; registro de pagos.
 - **Solicitudes** — aprobar o rechazar vacaciones, ausencias y cambios de turno.
-- **Mensajes** — avisos y tareas para una persona, un grupo (camareros, DJ / técnicos, RRPP) o todo el equipo; se ve quién los ha leído y quién acepta o rechaza cada tarea, y se contesta a sus respuestas (conversación privada con cada persona).
+- **Mensajes** — avisos y tareas para una persona, un grupo (camareros de barra, de bandeja, DJ / técnicos, RRPP) o todo el equipo; se ve quién los ha leído y quién acepta o rechaza cada tarea, y se contesta a sus respuestas (conversación privada con cada persona).
 
 **Trabajador**
 - **Fichar** entrada / salida con un botón (la hora la pone el servidor, no se puede manipular). Al fichar se guarda la ubicación del móvil; si en *Ajustes → Ubicación del local* está activado *Impedir fichar fuera del local*, la entrada sólo se puede fichar en el local (radio configurable, con margen por la precisión del GPS) y dando permiso de ubicación. La salida nunca se bloquea, pero si es fuera queda marcada.

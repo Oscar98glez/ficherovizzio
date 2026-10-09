@@ -15,7 +15,8 @@ import type {
 export type Tone = 'gray' | 'blue' | 'green' | 'red' | 'orange' | 'purple' | 'teal' | 'pink' | 'indigo';
 
 export const ROLES: Record<Role, string> = {
-  worker: 'Camarero',
+  worker: 'Camarero de barra',
+  tray: 'Camarero de bandeja',
   rrpp: 'RRPP',
   tech: 'DJ / Técnico',
   admin: 'Administrador',

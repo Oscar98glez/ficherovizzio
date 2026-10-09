@@ -50,7 +50,7 @@ export const SHIFTS_CHANGED = 'vizzio:shifts-changed';
 export const MESSAGES_CHANGED = 'vizzio:messages-changed';
 
 export function AppShell() {
-  const { profile, employee, isAdmin, isRrpp, signOut } = useAuth();
+  const { profile, employee, isAdmin, isRrpp, isTray, signOut } = useAuth();
   const [pending, setPending] = useState(0);
   const [unanswered, setUnanswered] = useState(0);
   const [shiftsTick, setShiftsTick] = useState(0);
@@ -155,7 +155,7 @@ export function AppShell() {
         {
           items: [
             { to: '/fichar', label: 'Fichar', icon: Fingerprint },
-            ...(isRrpp ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
+            ...(isRrpp || isTray ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
             { to: '/mis-horas', label: 'Mis horas', icon: Clock },
             ...(isRrpp ? [{ to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox }] : []),
             // Los RRPP no tienen turnos, disponibilidad ni solicitudes

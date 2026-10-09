@@ -19,7 +19,8 @@ const UNIT_COL: Record<PeriodUnit, string> = { week: 'semana', month: 'mes', yea
 type Kind = Role;
 
 const KINDS: { value: Kind; label: string }[] = [
-  { value: 'worker', label: 'Camareros' },
+  { value: 'worker', label: 'Barra' },
+  { value: 'tray', label: 'Bandejas' },
   { value: 'tech', label: 'DJ / Técnicos' },
   { value: 'rrpp', label: 'RRPP' },
   { value: 'admin', label: 'Administración' },
@@ -29,7 +30,7 @@ const KIND_KEY = 'vizzio.personal.kind';
 const savedKind = (): Kind => {
   try {
     const v = localStorage.getItem(KIND_KEY);
-    return v === 'rrpp' || v === 'admin' || v === 'tech' ? v : 'worker';
+    return v === 'rrpp' || v === 'admin' || v === 'tech' || v === 'tray' ? v : 'worker';
   } catch {
     return 'worker';
   }

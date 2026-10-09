@@ -102,6 +102,10 @@ export function downloadBlob(filename: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-/** Tipo de usuario: el rol de su cuenta; sin cuenta, por su departamento (relaciones públicas → RRPP, cabina → DJ / técnico) */
+/**
+ * Tipo de usuario: el rol de su cuenta; sin cuenta, por su departamento (relaciones públicas → RRPP,
+ * cabina → DJ / técnico, sala → camarero de bandeja)
+ */
 export const staffKind = (e: Employee, roles: Map<string, Role>): Role =>
-  (e.user_id && roles.get(e.user_id)) || (e.department === 'relaciones' ? 'rrpp' : e.department === 'cabina' ? 'tech' : 'worker');
+  (e.user_id && roles.get(e.user_id)) ||
+  (e.department === 'relaciones' ? 'rrpp' : e.department === 'cabina' ? 'tech' : e.department === 'sala' ? 'tray' : 'worker');

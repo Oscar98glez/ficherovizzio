@@ -60,7 +60,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v27';
+const DB_KEY = 'vizzio.demo.db.v28';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -68,6 +68,7 @@ export const DEMO_USERS = {
   worker: 'demo-worker',
   rrpp: 'demo-rrpp',
   tech: 'demo-tech',
+  tray: 'demo-tray',
 } as const;
 
 // ---------- Sesión demo ----------
@@ -484,6 +485,7 @@ function seed(): DB {
     ['Paula', 'Navarro', 'Guardarropa', 'guardarropa', 'extra', 11, '#30b0c7', 23.5, 7],
     ['Irene', 'Castro', 'Limpieza', 'limpieza', 'fijo_discontinuo', 12, '#34c759', 29.5, 4],
     ['Hugo', 'Morales', 'Camarero', 'barra', 'extra', 12, '#ff3b30', 23.5, 6.5],
+    ['Rocío', 'Vega', 'Camarera de bandeja', 'sala', 'fijo_discontinuo', 12.5, '#ff9500', 23.5, 6.5, DEMO_USERS.tray],
   ];
 
   const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -512,6 +514,7 @@ function seed(): DB {
     { id: DEMO_USERS.worker, email: 'lucia.martin@vizzio.club', full_name: 'Lucía Martín', role: 'worker', created_at: stamp },
     { id: DEMO_USERS.rrpp, email: 'marta.lopez@vizzio.club', full_name: 'Marta López', role: 'rrpp', created_at: stamp },
     { id: DEMO_USERS.tech, email: 'nacho.vidal@vizzio.club', full_name: 'Nacho Vidal', role: 'tech', created_at: stamp },
+    { id: DEMO_USERS.tray, email: 'rocio.vega@vizzio.club', full_name: 'Rocío Vega', role: 'tray', created_at: stamp },
   ];
 
   const events: ClubEvent[] = [];
