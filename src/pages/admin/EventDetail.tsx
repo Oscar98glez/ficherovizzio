@@ -113,6 +113,7 @@ export default function EventDetail() {
 }
 
 const num = (v: number | null | undefined) => (v == null ? '—' : fmtNum(v, 0));
+const shortId = (id: string) => id.slice(-6);
 
 /**
  * Por RRPP, con el nombre que tiene en Fourvenues: entradas de pago, personas en sus listas y
@@ -127,7 +128,8 @@ function RrppBreakdown({ rows, employees }: { rows: FourvenuesRrppNight[]; emplo
       return {
         ...x,
         employee,
-        label: x.fourvenues_user_id ? x.name || fullName(employee) || 'Usuario de Fourvenues' : 'Sin RRPP',
+        // El nombre tal y como está en Fourvenues; si Fourvenues no lo da, el de su ficha o su código
+        label: !x.fourvenues_user_id ? 'Sin RRPP' : x.name || (employee ? fullName(employee) : `RRPP ${shortId(x.fourvenues_user_id)}`),
         total: x.tickets + (x.lists ?? 0) + (x.bookings ?? 0),
       };
     })
@@ -161,7 +163,12 @@ function RrppBreakdown({ rows, employees }: { rows: FourvenuesRrppNight[]; emplo
                   <Avatar name={r.label} color={r.employee?.color ?? '#8e8e93'} src={r.employee?.photo_url} size={30} className="hidden sm:inline-grid" />
                   <div className="min-w-0">
                     <div className={cx('truncate text-[14px] font-medium', !r.fourvenues_user_id && 'text-ink-2')}>{r.label}</div>
-                    {r.fourvenues_user_id && !r.employee && <div className="truncate text-[12px] text-orange">Sin asociar a una ficha</div>}
+                    {r.fourvenues_user_id && !r.name && (
+                      <div className="truncate text-[12px] text-orange">Fourvenues no ha dado su nombre · código {r.fourvenues_user_id}</div>
+                    )}
+                    {r.fourvenues_user_id && r.name && r.employee && fullName(r.employee) !== r.name && (
+                      <div className="truncate text-[12px] text-ink-2">Ficha: {fullName(r.employee)}</div>
+                    )}
                   </div>
                 </div>
                 <span className="tabular text-right text-[15px] font-semibold">{fmtNum(r.tickets, 0)}</span>

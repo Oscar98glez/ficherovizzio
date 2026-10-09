@@ -1,0 +1,64 @@
+name: Diagnóstico de Fourvenues
+
+# Comprueba qué datos da Fourvenues y vuelve a sincronizar, sin abrir la app.
+# Llama a la función fourvenues-sync con la clave de servicio del proyecto (se pide a la API de
+# Supabase con SUPABASE_ACCESS_TOKEN y no se muestra). En el registro sólo salen los nombres de
+# los campos y recuentos: nunca nombres, emails ni teléfonos (el repositorio es público).
+on:
+  workflow_dispatch:
+    inputs:
+      sincronizar:
+        description: 'Volver a sincronizar después del diagnóstico'
+        type: boolean
+        default: true
+      desde:
+        description: 'Sincronizar desde esta fecha (AAAA-MM-DD; vacío = la última semana)'
+        type: string
+        default: ''
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SINCRONIZAR: ${{ inputs.sincronizar }}
+      DESDE: ${{ inputs.desde }}
+    steps:
+      - name: Clave de servicio
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::Faltan los secretos SUPABASE_ACCESS_TOKEN y/o SUPABASE_PROJECT_REF."; exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys?reveal=true" > keys.json
+          key=$(python3 -c '
+          import json
+          keys = json.load(open("keys.json"))
+          pick = [k for k in keys if k.get("type") == "secret"] + [k for k in keys if k.get("name") == "service_role"]
+          print(pick[0]["api_key"] if pick else "")')
+          rm keys.json
+          if [ -z "$key" ]; then echo "::error::No se ha encontrado la clave de servicio."; exit 1; fi
+          echo "::add-mask::$key"
+          echo "SERVICE_KEY=$key" >> "$GITHUB_ENV"
+
+      - name: Qué da Fourvenues (sólo campos y recuentos)
+        run: |
+          curl -sS -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/fourvenues-sync" \
+            -H "Authorization: Bearer $SERVICE_KEY" -H "apikey: $SERVICE_KEY" -H "Content-Type: application/json" \
+            -d '{"action":"inspect"}' | python3 -m json.tool
+
+      - name: Sincronizar
+        if: env.SINCRONIZAR == 'true'
+        run: |
+          body=$(python3 -c 'import json, os; d = os.environ.get("DESDE", "").strip(); print(json.dumps({"action": "sync", "force": True, **({"from": d} if d else {})}))')
+          curl -sS -X POST "https://$SUPABASE_PROJECT_REF.supabase.co/functions/v1/fourvenues-sync" \
+            -H "Authorization: Bearer $SERVICE_KEY" -H "apikey: $SERVICE_KEY" -H "Content-Type: application/json" \
+            -d "$body" > sync.json
+          # Sin los nombres de los RRPP (sólo cuántos)
+          python3 -c '
+          import json
+          r = json.load(open("sync.json"))
+          res = r.get("result") or {}
+          res["unmatched"] = len(res.get("unmatched") or [])
+          print(json.dumps({"error": r.get("error"), "skipped": r.get("skipped"), "result": res}, indent=2, ensure_ascii=False))'
