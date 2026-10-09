@@ -7,7 +7,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 **Administrador**
 - **Resumen** — ingresos, gastos, coste de personal y resultado del mes; quién está fichado ahora mismo en tiempo real; próximas noches y solicitudes pendientes.
 - **Personal** — fichas de empleado con puesto, departamento, contrato y coste por hora. Horas y coste por persona de la semana, el mes o el año (camareros y DJ / técnicos). Gestión del rol (admin / trabajador).
-- **Fichajes** — entradas y salidas agrupadas por noche, fichajes manuales, cierre de fichajes abiertos, exportación a CSV.
+- **Fichajes** — entradas y salidas agrupadas por noche, fichajes manuales, cierre de fichajes abiertos, exportación a CSV. Cada fichaje de la app indica dónde se hizo (*En el local*, *Entrada fuera · 1,7 km*…) y, al abrirlo, el mapa de la entrada y de la salida.
 - **Disponibilidad** — tabla semanal con los días que puede trabajar cada persona; desde cada casilla se asigna el turno.
 - **Turnos** — planificación semanal, asignación de varias personas de una vez, coste previsto y "copiar semana anterior". Se ve quién ha aceptado (✓), rechazado (✗) o no ha respondido cada turno.
 - **Noches** — sesiones y eventos con su rentabilidad (ingresos − gastos − personal).
@@ -21,7 +21,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Mensajes** — avisos y tareas para una persona, un grupo (camareros, DJ / técnicos, RRPP) o todo el equipo; se ve quién los ha leído y quién acepta o rechaza cada tarea, y se contesta a sus respuestas (conversación privada con cada persona).
 
 **Trabajador**
-- **Fichar** entrada / salida con un botón (la hora la pone el servidor, no se puede manipular).
+- **Fichar** entrada / salida con un botón (la hora la pone el servidor, no se puede manipular). Al fichar se guarda la ubicación del móvil; si en *Ajustes → Ubicación del local* está activado *Impedir fichar fuera del local*, la entrada sólo se puede fichar en el local (radio configurable, con margen por la precisión del GPS) y dando permiso de ubicación. La salida nunca se bloquea, pero si es fuera queda marcada.
 - **Disponibilidad** semanal: qué días puede trabajar (con horario y nota opcionales).
 - **Mis turnos**: aceptar ("Asistiré") o rechazar ("No puedo", con motivo opcional) cada turno hasta que empieza.
 - **Mensajes**: los avisos y tareas del responsable; las tareas se aceptan o se rechazan (con motivo opcional) y puede responder a cualquiera de ellos.

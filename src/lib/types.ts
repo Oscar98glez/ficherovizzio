@@ -87,6 +87,28 @@ export interface TimeEntry {
   source: 'app' | 'manual';
   notes: string | null;
   created_at: string;
+  /** Dónde se fichó desde la app (null: sin ubicación). distance: metros al local; outside: fuera del local */
+  clock_in_lat?: number | null;
+  clock_in_lng?: number | null;
+  clock_in_accuracy?: number | null;
+  clock_in_distance?: number | null;
+  clock_in_outside?: boolean | null;
+  clock_out_lat?: number | null;
+  clock_out_lng?: number | null;
+  clock_out_accuracy?: number | null;
+  clock_out_distance?: number | null;
+  clock_out_outside?: boolean | null;
+}
+
+/** Ubicación del local para comprobar dónde se ficha */
+export interface VenueLocation {
+  lat: number;
+  lng: number;
+  /** Metros alrededor del local que cuentan como "en el local" */
+  radius_m: number;
+  /** No se puede fichar la entrada fuera del local ni sin ubicación */
+  enforce: boolean;
+  updated_at?: string;
 }
 
 /** Fichaje propio del trabajador: sin tarifa, con lo ganado (calculado en el servidor; null si sigue abierto) */
