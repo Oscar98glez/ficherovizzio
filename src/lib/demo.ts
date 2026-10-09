@@ -60,7 +60,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v26';
+const DB_KEY = 'vizzio.demo.db.v27';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -873,6 +873,26 @@ function seed(): DB {
         updated_at: stamp,
       });
     });
+  }
+
+  // Las reservas de cada noche también están en Fourvenues, a nombre de Marta; la primera es de cortesía
+  // en la app (en Fourvenues figura con precio), para ver el cotejo con Reservados
+  for (const ev of events) {
+    const night = reservations.filter((x) => x.date === ev.date && x.status !== 'cancelled');
+    const marta = fourvenuesRrppNights.find((x) => x.event_id === ev.id && x.fourvenues_user_id === 'fv-marta');
+    if (!night.length || !marta?.detail) continue;
+    const items = night.map((x) => ({
+      name: x.customer_name.toUpperCase(),
+      phone: (x.customer_phone ?? '').replace(/\D/g, '').slice(-9),
+      zone: 'VIP',
+      people: x.guests,
+      price: x.total_amount ?? 0,
+      courtesy: false,
+    }));
+    night[0].bottles = night[0].bottles.map((b) => ({ ...b, courtesy: true }));
+    night[0].total_amount = 0;
+    marta.bookings = items.length;
+    marta.detail.bookingItems = items;
   }
 
   // Comisiones de RRPP: % por día de la semana y entradas vendidas por Marta en las noches pasadas

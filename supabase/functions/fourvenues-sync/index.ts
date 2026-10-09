@@ -145,6 +145,9 @@ export interface FvBooking {
   /** Tarifa y zona (p. ej. "VIP") */
   rate_slug?: string;
   zone_name?: string;
+  /** Cliente de la reserva (para cotejarla con el apartado Reservados de la app) */
+  name?: string;
+  phone?: string;
 }
 
 export interface FvUser {
@@ -329,7 +332,15 @@ export interface RrppDetail {
   lists: { rate: string; people: number; entered: number }[] | null;
   /** Reservados por tipo (cortesía o pagado) y zona; null si no hay acceso a las reservas */
   bookings: { kind: 'cortesia' | 'pagado'; zone: string; count: number; people: number; amount: number }[] | null;
+  /** Cada reserva, para cotejarla en la app con su reserva del apartado Reservados (cortesía o pagada) */
+  bookingItems?: { name: string | null; phone: string | null; zone: string; people: number; price: number; courtesy: boolean }[];
 }
+
+/** Últimos 9 dígitos del teléfono (sin prefijo ni espacios) */
+const phoneKey = (v: unknown) => {
+  const d = typeof v === 'string' ? v.replace(/\D/g, '') : '';
+  return d.length >= 6 ? d.slice(-9) : null;
+};
 
 /** Un reservado es de cortesía si su tarifa lo dice o si no cuesta nada (ni precio ni señal) */
 export const isCourtesy = (b: FvBooking) =>
@@ -340,7 +351,7 @@ export function rrppDetails(tickets: FvTicket[], lists: FvListEntry[] | null, bo
   const out = new Map<string, RrppDetail>();
   const of = (ref: string) => {
     let d = out.get(ref);
-    if (!d) out.set(ref, (d = { tickets: [], lists: lists ? [] : null, bookings: bookings ? [] : null }));
+    if (!d) out.set(ref, (d = { tickets: [], lists: lists ? [] : null, bookings: bookings ? [] : null, bookingItems: bookings ? [] : undefined }));
     return d;
   };
   for (const t of tickets) {
@@ -379,6 +390,14 @@ export function rrppDetails(tickets: FvTicket[], lists: FvListEntry[] | null, bo
     row.count++;
     row.people += Math.max(0, Math.round(num(b.for)));
     row.amount = round2(row.amount + Math.max(0, num(b.price)));
+    d.bookingItems!.push({
+      name: str(b.name),
+      phone: phoneKey(b.phone),
+      zone,
+      people: Math.max(0, Math.round(num(b.for))),
+      price: round2(Math.max(0, num(b.price))),
+      courtesy: kind === 'cortesia',
+    });
   }
   for (const d of out.values()) {
     d.tickets.sort((a, b) => b.price - a.price || b.people - a.people);

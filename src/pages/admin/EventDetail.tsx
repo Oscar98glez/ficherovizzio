@@ -11,7 +11,8 @@ import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessToday, isoDate } from '../../lib/dates';
 import { fmtDate, fmtDateFull, fmtMoney, fmtNum, fmtTime } from '../../lib/format';
 import { syncFourvenues } from '../../lib/fourvenues';
-import type { Employee, FourvenuesRrppNight } from '../../lib/types';
+import { checkBookings, type CheckedBooking } from '../../lib/booking-match';
+import type { Employee, FourvenuesRrppNight, Reservation } from '../../lib/types';
 import { cx, fullName, sumBy } from '../../lib/utils';
 
 /** La noche: sólo lo que viene de Fourvenues (entradas, listas y reservados, en total y por RRPP) */
@@ -25,11 +26,13 @@ export default function EventDetail() {
   const { data, loading, error, reload } = useLoad(async () => {
     const event = await api.events.get(id);
     if (!event) return null;
-    const [rrppNights, employees] = await Promise.all([
+    const [rrppNights, employees, reservations] = await Promise.all([
       event.fourvenues_id ? api.fourvenuesRrppNights.list({ eq: { event_id: id } }).catch(() => [] as FourvenuesRrppNight[]) : ([] as FourvenuesRrppNight[]),
       api.employees.list(),
+      // Para cotejar los reservados de Fourvenues con los del apartado Reservados (cortesía o pagados)
+      api.reservations.list({ eq: { date: event.date } }).catch(() => [] as Reservation[]),
     ]);
-    return { event, rrppNights, employees };
+    return { event, rrppNights, employees, reservations };
   }, [id]);
 
   async function sync() {
@@ -96,7 +99,7 @@ export default function EventDetail() {
             <StatCard label="Reservados" value={num(ev.bookings)} sub={ev.bookings == null ? 'Sin acceso a las reservas' : 'Reservas de mesa'} />
             <StatCard label="Dentro" value={num(ev.tickets_entered)} sub="Personas que han entrado" />
           </div>
-          <RrppBreakdown rows={data.rrppNights} employees={data.employees} onChanged={reload} />
+          <RrppBreakdown rows={data.rrppNights} employees={data.employees} reservations={data.reservations} onChanged={reload} />
         </>
       ) : (
         <Card>
@@ -120,7 +123,17 @@ const shortId = (id: string) => id.slice(-6);
  * reservados. Lo que no lleva RRPP sale como "Sin RRPP". Si el RRPP no está asociado a una ficha
  * de la app (Ajustes → Fourvenues), se avisa.
  */
-function RrppBreakdown({ rows, employees, onChanged }: { rows: FourvenuesRrppNight[]; employees: Employee[]; onChanged: () => void }) {
+function RrppBreakdown({
+  rows,
+  employees,
+  reservations,
+  onChanged,
+}: {
+  rows: FourvenuesRrppNight[];
+  employees: Employee[];
+  reservations: Reservation[];
+  onChanged: () => void;
+}) {
   const [naming, setNaming] = useState<string | null>(null);
   const [open, setOpen] = useState<(typeof listed)[number] | null>(null);
   const byFvUser = new Map(employees.filter((e) => e.fourvenues_user_id).map((e) => [e.fourvenues_user_id!, e]));
@@ -205,16 +218,26 @@ function RrppBreakdown({ rows, employees, onChanged }: { rows: FourvenuesRrppNig
         </p>
       )}
       <RrppNameModal fourvenuesUserId={naming} onClose={() => setNaming(null)} onSaved={onChanged} />
-      <RrppDetailModal row={open} onClose={() => setOpen(null)} />
+      <RrppDetailModal row={open} reservations={reservations} onClose={() => setOpen(null)} />
     </Card>
   );
 }
 
 /** Lo que ha vendido un RRPP esa noche: entradas por tipo y precio, reservados (cortesía o pagados) y listas */
-function RrppDetailModal({ row, onClose }: { row: (FourvenuesRrppNight & { label: string }) | null; onClose: () => void }) {
+function RrppDetailModal({
+  row,
+  reservations,
+  onClose,
+}: {
+  row: (FourvenuesRrppNight & { label: string }) | null;
+  reservations: Reservation[];
+  onClose: () => void;
+}) {
   const d = row?.detail;
   const courtesy = d?.bookings?.filter((b) => b.kind === 'cortesia') ?? [];
   const paid = d?.bookings?.filter((b) => b.kind === 'pagado') ?? [];
+  // Cada reserva cotejada con Reservados: si está en la app, manda la app (cortesía o pagada)
+  const checked = d?.bookingItems ? checkBookings(d.bookingItems, reservations) : null;
   return (
     <Modal open={!!row} onClose={onClose} title={row?.label ?? ''}>
       {row && (
@@ -241,30 +264,62 @@ function RrppDetailModal({ row, onClose }: { row: (FourvenuesRrppNight & { label
                   />
                 ))}
               </DetailSection>
-              {d.bookings && (
-                <DetailSection title="Reservados" empty="Sin reservados">
+              {checked ? (
+                <DetailSection title="Reservados" empty="Sin reservados" total={checked.length ? `${fmtMoney(sumBy(checked, (c) => c.amount))}` : undefined}>
                   {[
-                    ['Pagados', paid],
-                    ['De cortesía', courtesy],
+                    ['Pagados', checked.filter((c) => !c.courtesy)],
+                    ['De cortesía', checked.filter((c) => c.courtesy)],
                   ].map(([label, list]) =>
-                    (list as typeof paid).length ? (
+                    (list as CheckedBooking[]).length ? (
                       <div key={label as string}>
                         <div className="px-3 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-ink-3">
-                          {label as string} · {fmtNum(sumBy(list as typeof paid, (b) => b.count), 0)}
+                          {label as string} · {(list as CheckedBooking[]).length}
                         </div>
-                        {(list as typeof paid).map((b) => (
+                        {(list as CheckedBooking[]).map((c, i) => (
                           <DetailRow
-                            key={`${b.kind}-${b.zone}`}
-                            title={b.zone}
-                            sub={b.people ? `${fmtNum(b.people, 0)} personas` : undefined}
-                            value={fmtNum(b.count, 0)}
-                            extra={b.kind === 'pagado' ? fmtMoney(b.amount) : 'Cortesía'}
+                            key={c.reservation?.id ?? `${c.item.name}-${i}`}
+                            title={c.reservation?.customer_name ?? c.item.name ?? c.item.zone}
+                            sub={[
+                              c.item.zone,
+                              c.item.people ? `${fmtNum(c.item.people, 0)} pers.` : null,
+                              c.reservation ? (c.partialCourtesy ? 'en Reservados, con botellas de cortesía' : 'según Reservados') : 'no está en Reservados',
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                            value={c.courtesy ? 'Cortesía' : fmtMoney(c.amount)}
+                            extra={c.reservation && Math.abs(c.amount - c.item.price) > 0.005 ? `En Fourvenues: ${fmtMoney(c.item.price)}` : undefined}
                           />
                         ))}
                       </div>
                     ) : null,
                   )}
                 </DetailSection>
+              ) : (
+                d.bookings && (
+                  <DetailSection title="Reservados" empty="Sin reservados">
+                    {[
+                      ['Pagados', paid],
+                      ['De cortesía', courtesy],
+                    ].map(([label, list]) =>
+                      (list as typeof paid).length ? (
+                        <div key={label as string}>
+                          <div className="px-3 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-ink-3">
+                            {label as string} · {fmtNum(sumBy(list as typeof paid, (b) => b.count), 0)}
+                          </div>
+                          {(list as typeof paid).map((b) => (
+                            <DetailRow
+                              key={`${b.kind}-${b.zone}`}
+                              title={b.zone}
+                              sub={b.people ? `${fmtNum(b.people, 0)} personas` : undefined}
+                              value={fmtNum(b.count, 0)}
+                              extra={b.kind === 'pagado' ? fmtMoney(b.amount) : 'Cortesía'}
+                            />
+                          ))}
+                        </div>
+                      ) : null,
+                    )}
+                  </DetailSection>
+                )
               )}
               {d.lists && (
                 <DetailSection title="Listas (QR gratis)" empty="Sin personas en listas">
