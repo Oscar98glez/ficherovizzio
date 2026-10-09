@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Children, useEffect, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Pencil, RefreshCw } from 'lucide-react';
 import { EventForm } from '../../components/finance-forms';
@@ -9,7 +9,7 @@ import { api, errorMessage } from '../../lib/api';
 import { IS_DEMO } from '../../lib/config';
 import { EVENT_KINDS } from '../../lib/constants';
 import { addDays, businessToday, isoDate } from '../../lib/dates';
-import { fmtDate, fmtDateFull, fmtNum, fmtTime } from '../../lib/format';
+import { fmtDate, fmtDateFull, fmtMoney, fmtNum, fmtTime } from '../../lib/format';
 import { syncFourvenues } from '../../lib/fourvenues';
 import type { Employee, FourvenuesRrppNight } from '../../lib/types';
 import { cx, fullName, sumBy } from '../../lib/utils';
@@ -122,6 +122,7 @@ const shortId = (id: string) => id.slice(-6);
  */
 function RrppBreakdown({ rows, employees, onChanged }: { rows: FourvenuesRrppNight[]; employees: Employee[]; onChanged: () => void }) {
   const [naming, setNaming] = useState<string | null>(null);
+  const [open, setOpen] = useState<(typeof listed)[number] | null>(null);
   const byFvUser = new Map(employees.filter((e) => e.fourvenues_user_id).map((e) => [e.fourvenues_user_id!, e]));
   const listed = rows
     .map((x) => {
@@ -142,7 +143,7 @@ function RrppBreakdown({ rows, employees, onChanged }: { rows: FourvenuesRrppNig
 
   return (
     <Card className="mt-4 lg:mt-5">
-      <CardHeader title="Por RRPP" subtitle="Entradas, listas (QR gratis) y reservados de cada RRPP en Fourvenues" />
+      <CardHeader title="Por RRPP" subtitle="Entradas, listas (QR gratis) y reservados de cada RRPP en Fourvenues. Pulsa uno para ver el desglose." />
       {listed.length ? (
         <div className="pb-2">
           <div className={cx('grid gap-2 border-b border-line px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3 sm:px-5 sm:text-[12px]', cols)}>
@@ -159,13 +160,23 @@ function RrppBreakdown({ rows, employees, onChanged }: { rows: FourvenuesRrppNig
           </div>
           <div className="divide-y divide-line">
             {listed.map((r) => (
-              <div key={r.id} className={cx('grid items-center gap-2 px-4 py-2.5 sm:px-5', cols)}>
+              <div
+                key={r.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpen(r)}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setOpen(r))}
+                className={cx('grid cursor-pointer items-center gap-2 px-4 py-2.5 transition hover:bg-fill/60 sm:px-5', cols)}
+              >
                 <div className="flex min-w-0 items-center gap-2.5">
                   <Avatar name={r.label} color={r.employee?.color ?? '#8e8e93'} src={r.employee?.photo_url} size={30} className="hidden sm:inline-grid" />
                   <div className="min-w-0">
                     <div className={cx('truncate text-[14px] font-medium', !r.fourvenues_user_id && 'text-ink-2')}>{r.label}</div>
                     {r.fourvenues_user_id && !r.name && (
-                      <button type="button" onClick={() => setNaming(r.fourvenues_user_id)} className="truncate text-left text-[12px] font-medium text-accent hover:opacity-70">
+                      <button
+                        type="button"
+                        onClick={(e) => (e.stopPropagation(), setNaming(r.fourvenues_user_id))}
+                        className="truncate text-left text-[12px] font-medium text-accent hover:opacity-70">
                         Fourvenues no da su nombre · Poner nombre
                       </button>
                     )}
@@ -194,7 +205,116 @@ function RrppBreakdown({ rows, employees, onChanged }: { rows: FourvenuesRrppNig
         </p>
       )}
       <RrppNameModal fourvenuesUserId={naming} onClose={() => setNaming(null)} onSaved={onChanged} />
+      <RrppDetailModal row={open} onClose={() => setOpen(null)} />
     </Card>
+  );
+}
+
+/** Lo que ha vendido un RRPP esa noche: entradas por tipo y precio, reservados (cortesía o pagados) y listas */
+function RrppDetailModal({ row, onClose }: { row: (FourvenuesRrppNight & { label: string }) | null; onClose: () => void }) {
+  const d = row?.detail;
+  const courtesy = d?.bookings?.filter((b) => b.kind === 'cortesia') ?? [];
+  const paid = d?.bookings?.filter((b) => b.kind === 'pagado') ?? [];
+  return (
+    <Modal open={!!row} onClose={onClose} title={row?.label ?? ''}>
+      {row && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-3 gap-2">
+            <MiniStat label="Entradas" value={row.tickets} />
+            <MiniStat label="Listas" value={row.lists} />
+            <MiniStat label="Reservados" value={row.bookings} />
+          </div>
+          {!d ? (
+            <p className="rounded-xl bg-fill/60 px-4 py-3 text-[14px] text-ink-2">
+              Aún no hay desglose de esta noche. Pulsa «Sincronizar con Fourvenues» y vuelve a abrirlo.
+            </p>
+          ) : (
+            <>
+              <DetailSection title="Entradas" empty="Sin entradas de pago" total={d.tickets.length > 1 ? `${fmtNum(sumBy(d.tickets, (t) => t.people), 0)} · ${fmtMoney(sumBy(d.tickets, (t) => t.amount))}` : undefined}>
+                {d.tickets.map((t) => (
+                  <DetailRow
+                    key={`${t.rate}-${t.price}`}
+                    title={t.rate}
+                    sub={`${fmtMoney(t.price)} cada una${t.entered ? ` · ${fmtNum(t.entered, 0)} dentro` : ''}`}
+                    value={fmtNum(t.people, 0)}
+                    extra={fmtMoney(t.amount)}
+                  />
+                ))}
+              </DetailSection>
+              {d.bookings && (
+                <DetailSection title="Reservados" empty="Sin reservados">
+                  {[
+                    ['Pagados', paid],
+                    ['De cortesía', courtesy],
+                  ].map(([label, list]) =>
+                    (list as typeof paid).length ? (
+                      <div key={label as string}>
+                        <div className="px-3 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-ink-3">
+                          {label as string} · {fmtNum(sumBy(list as typeof paid, (b) => b.count), 0)}
+                        </div>
+                        {(list as typeof paid).map((b) => (
+                          <DetailRow
+                            key={`${b.kind}-${b.zone}`}
+                            title={b.zone}
+                            sub={b.people ? `${fmtNum(b.people, 0)} personas` : undefined}
+                            value={fmtNum(b.count, 0)}
+                            extra={b.kind === 'pagado' ? fmtMoney(b.amount) : 'Cortesía'}
+                          />
+                        ))}
+                      </div>
+                    ) : null,
+                  )}
+                </DetailSection>
+              )}
+              {d.lists && (
+                <DetailSection title="Listas (QR gratis)" empty="Sin personas en listas">
+                  {d.lists.map((l) => (
+                    <DetailRow key={l.rate} title={l.rate} sub={l.entered ? `${fmtNum(l.entered, 0)} dentro` : undefined} value={fmtNum(l.people, 0)} extra="personas" />
+                  ))}
+                </DetailSection>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: number | null | undefined }) {
+  return (
+    <div className="rounded-xl bg-fill/60 px-3 py-2.5 text-center">
+      <div className="tabular text-[20px] font-semibold">{num(value)}</div>
+      <div className="text-[12px] text-ink-2">{label}</div>
+    </div>
+  );
+}
+
+function DetailSection({ title, empty, total, children }: { title: string; empty: string; total?: string; children: ReactNode }) {
+  const items = Children.toArray(children).filter(Boolean);
+  return (
+    <section>
+      <div className="mb-1.5 flex items-baseline justify-between px-1">
+        <h3 className="text-[15px] font-semibold">{title}</h3>
+        {total && <span className="tabular text-[13px] text-ink-2">{total}</span>}
+      </div>
+      <div className="divide-y divide-line overflow-hidden rounded-xl bg-fill/40">{items.length ? items : <p className="px-3 py-3 text-[14px] text-ink-2">{empty}</p>}</div>
+    </section>
+  );
+}
+
+function DetailRow({ title, sub, value, extra }: { title: string; sub?: string; value: string; extra?: string }) {
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[14px] font-medium">{title}</div>
+        {sub && <div className="truncate text-[12px] text-ink-2">{sub}</div>}
+      </div>
+      <div className="text-right">
+        <div className="tabular text-[15px] font-semibold">{value}</div>
+        {extra && <div className="tabular text-[12px] text-ink-2">{extra}</div>}
+      </div>
+    </div>
   );
 }
 
