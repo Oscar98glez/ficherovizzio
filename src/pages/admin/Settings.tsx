@@ -124,7 +124,8 @@ export default function Settings() {
                       <Badge tone="purple">Tú</Badge>
                     ) : (
                       <Select value={p.role} onChange={(e) => changeRole(p.id, e.target.value as Role)} className="h-8 w-auto rounded-lg py-0 text-[13px]">
-                        <option value="worker">Camarero</option>
+                        <option value="worker">Camarero de barra</option>
+                        <option value="tray">Camarero de bandeja</option>
                         <option value="tech">DJ / Técnico</option>
                         <option value="rrpp">RRPP</option>
                         <option value="admin">Administrador</option>

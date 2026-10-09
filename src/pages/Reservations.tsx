@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Coins, Plus, Settings2, Sofa, Users } from 'lucide-react';
 import { useAuth } from '../auth';
 import { ClubMap } from '../components/ClubMap';
@@ -38,9 +39,17 @@ const arrivalKey = (r: Reservation) => {
 };
 
 export default function Reservations() {
-  const { isAdmin, employee, userId } = useAuth();
+  const { isAdmin, isRrpp, isTray, employee, userId } = useAuth();
+  // Los camareros de bandeja sólo consultan los reservados: no apuntan ni cambian reservas
+  const readOnly = isTray && !isAdmin && !isRrpp;
   const today = isoDate(businessToday());
-  const [date, setDate] = useState(today);
+  // Al abrir el aviso de un reservado nuevo se va a su noche (?d=AAAA-MM-DD)
+  const [params] = useSearchParams();
+  const linked = params.get('d');
+  const [date, setDate] = useState(() => (linked && /^\d{4}-\d{2}-\d{2}$/.test(linked) ? linked : today));
+  useEffect(() => {
+    if (linked && /^\d{4}-\d{2}-\d{2}$/.test(linked)) setDate(linked);
+  }, [linked]);
   const [filter, setFilter] = useState<Filter>('all');
   const [form, setForm] = useState<{
     reservation?: Reservation;
@@ -96,14 +105,15 @@ export default function Reservations() {
 
   // Puede editarla quien la creó, su RRPP, el RRPP que la atiende o un administrador
   const canEdit = (r: Reservation) =>
-    isAdmin || (!!userId && r.created_by === userId) || (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id));
+    !readOnly &&
+    (isAdmin || (!!userId && r.created_by === userId) || (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id)));
   const move = (days: number) => setDate(isoDate(addDays(parseDate(date), days)));
 
   return (
     <>
       <PageHeader
         title="Reservados"
-        subtitle="Reservas de cada noche"
+        subtitle={readOnly ? 'Reservas de cada noche (sólo consulta)' : 'Reservas de cada noche'}
         actions={
           <>
             {isAdmin && (
@@ -111,9 +121,11 @@ export default function Reservations() {
                 Reservados del local
               </Button>
             )}
-            <Button icon={<Plus />} onClick={() => setForm({})}>
-              Nueva reserva
-            </Button>
+            {!readOnly && (
+              <Button icon={<Plus />} onClick={() => setForm({})}>
+                Nueva reserva
+              </Button>
+            )}
           </>
         }
       />
@@ -175,7 +187,7 @@ export default function Reservations() {
                 tables={view.placed}
                 reservationByTable={view.byTable}
                 myEmployeeId={employee?.id ?? null}
-                onSelect={(t, r) => setForm(r ? { reservation: r } : { table: t })}
+                onSelect={(t, r) => (r ? setForm({ reservation: r }) : !readOnly && setForm({ table: t }))}
               />
             ) : (
               <EmptyState
@@ -201,7 +213,7 @@ export default function Reservations() {
             {/* Reservas */}
             <SectionTitle
               action={
-                !isAdmin && (
+                isRrpp && (
                   <Segmented
                     value={filter}
                     onChange={setFilter}
@@ -260,9 +272,11 @@ export default function Reservations() {
                   icon={<CalendarDays />}
                   title={filter === 'mine' ? 'No tienes reservas esta noche' : 'No hay reservas esta noche'}
                   action={
-                    <Button icon={<Plus />} onClick={() => setForm({})}>
-                      Nueva reserva
-                    </Button>
+                    !readOnly && (
+                      <Button icon={<Plus />} onClick={() => setForm({})}>
+                        Nueva reserva
+                      </Button>
+                    )
                   }
                 />
               </Card>
@@ -286,7 +300,7 @@ export default function Reservations() {
                         <button
                           key={t.id}
                           type="button"
-                          onClick={() => setForm(r ? { reservation: r } : { table: t })}
+                          onClick={() => (r ? setForm({ reservation: r }) : !readOnly && setForm({ table: t }))}
                           className={cx(
                             'card flex min-h-[112px] flex-col items-start p-3.5 text-left transition hover:scale-[1.01] active:scale-[0.99]',
                             r ? 'ring-2 ring-inset' : 'border-dashed',
@@ -341,7 +355,7 @@ export default function Reservations() {
         reservation={form?.reservation}
         table={form?.table}
         staff={data.staff}
-        canEdit={!form?.reservation || canEdit(form.reservation)}
+        canEdit={form?.reservation ? canEdit(form.reservation) : !readOnly}
         myEmployeeId={employee?.id ?? null}
         onSaved={reload}
       />

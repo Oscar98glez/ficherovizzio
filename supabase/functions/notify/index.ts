@@ -42,7 +42,7 @@ interface Notification {
   employee_id: string | null;
   /** ...o directamente para un usuario (administradores) */
   user_id: string | null;
-  kind: 'shift_new' | 'shift_changed' | 'shift_cancelled' | 'message' | 'task' | 'reply';
+  kind: 'shift_new' | 'shift_changed' | 'shift_cancelled' | 'message' | 'task' | 'reply' | 'reservation_new';
   ref_id: string | null;
   data: Record<string, string | null>;
   created_at: string;
@@ -101,6 +101,18 @@ export function describe(n: Pick<Notification, 'kind' | 'data'>): { title: strin
       return { title: 'Turno cancelado', body: `${nightLabel(d.start_at!)} · ${timeLabel(d.start_at!)}` };
     case 'task':
       return { title: 'Nueva tarea', body: `${d.title ?? ''}${d.due_date ? ` · hasta el ${dateLabel(d.due_date)}` : ''}` };
+    case 'reservation_new': {
+      // A los camareros de bandeja: noche, reservado, personas, hora y cliente
+      const guests = Number(d.guests ?? 0);
+      const parts = [
+        d.date ? dateLabel(d.date) : null,
+        d.table || 'sin reservado asignado',
+        guests ? `${guests} pers.` : null,
+        d.arrival ? `llegada ${d.arrival}` : null,
+        d.customer,
+      ];
+      return { title: 'Nuevo reservado', body: parts.filter(Boolean).join(' · ').slice(0, 180) };
+    }
     case 'reply':
       return fromAdmin(n)
         ? { title: `Respuesta a «${d.title ?? ''}»`, body: (d.body ?? '').slice(0, 180) }
@@ -117,7 +129,9 @@ export function payloadFor(list: Pick<Notification, 'kind' | 'data'>[]): Payload
   const toAdmin = list.every((n) => n.kind === 'reply' && !fromAdmin(n));
   const url = toAdmin
     ? list.length === 1 && list[0].data?.message_id ? `/mensajes?m=${list[0].data.message_id}` : '/mensajes'
-    : list.some(isMessage) ? '/mis-mensajes' : '/mis-turnos';
+    : list.every((n) => n.kind === 'reservation_new')
+      ? list.length === 1 && list[0].data?.date ? `/reservados?d=${list[0].data.date}` : '/reservados'
+      : list.some(isMessage) ? '/mis-mensajes' : '/mis-turnos';
   if (list.length === 1) return { ...describe(list[0]), url };
   const lines = list.map((n) => {
     const { title, body } = describe(n);

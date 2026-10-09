@@ -13,7 +13,8 @@ import { byId, cx, fullName, groupBy, staffKind } from '../../lib/utils';
 
 const KIND_LABEL: Record<MessageKind, string> = { message: 'Mensaje', task: 'Tarea' };
 const GROUPS: { value: Role; label: string }[] = [
-  { value: 'worker', label: 'Camareros' },
+  { value: 'worker', label: 'Camareros de barra' },
+  { value: 'tray', label: 'Bandejas' },
   { value: 'tech', label: 'DJ / Técnicos' },
   { value: 'rrpp', label: 'RRPP' },
 ];

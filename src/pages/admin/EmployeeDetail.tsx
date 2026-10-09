@@ -207,7 +207,8 @@ export default function EmployeeDetail() {
                       value={data.profile.role}
                       onChange={(r) => (data.profile!.id === userId ? toast.error('No puedes cambiar tu propio rol') : setRole(r))}
                       options={[
-                        { value: 'worker', label: 'Camarero' },
+                        { value: 'worker', label: 'Barra' },
+                        { value: 'tray', label: 'Bandeja' },
                         { value: 'tech', label: 'DJ / Técnico' },
                         { value: 'rrpp', label: 'RRPP' },
                         { value: 'admin', label: 'Admin' },

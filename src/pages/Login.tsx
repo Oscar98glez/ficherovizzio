@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
+import { ConciergeBell, Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
 import { useAuth } from '../auth';
 import { Logo } from '../components/AppShell';
 import { useFeedback } from '../components/overlay';
@@ -8,6 +8,7 @@ import { Button, Field, Input } from '../components/ui';
 import { errorMessage } from '../lib/api';
 import { APP_NAME, IS_DEMO } from '../lib/config';
 import { AUTH_LINK_ERROR } from '../lib/supabase';
+import type { Role } from '../lib/types';
 
 export function AuthLayout({ title, subtitle, children }: { title: string; subtitle?: ReactNode; children: ReactNode }) {
   return (
@@ -65,7 +66,7 @@ export default function Login() {
     }
   }
 
-  async function demo(role: 'admin' | 'worker' | 'rrpp' | 'tech') {
+  async function demo(role: Role) {
     await demoSignIn(role);
     navigate('/');
   }
@@ -82,9 +83,15 @@ export default function Login() {
           />
           <DemoOption
             icon={<UserRound className="h-6 w-6" />}
-            title="Trabajador"
+            title="Camarero/a de barra"
             text="Fichar entrada y salida, horas, turnos y solicitudes."
             onClick={() => demo('worker')}
+          />
+          <DemoOption
+            icon={<ConciergeBell className="h-6 w-6" />}
+            title="Camarero/a de bandeja"
+            text="Lo mismo que un camarero y, además, ver los reservados y recibir aviso de los nuevos."
+            onClick={() => demo('tray')}
           />
           <DemoOption
             icon={<Headphones className="h-6 w-6" />}

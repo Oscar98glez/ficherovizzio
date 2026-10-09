@@ -21,8 +21,10 @@ interface AuthContext extends AuthState {
   isAdmin: boolean;
   /** Relaciones públicas: ficha como un trabajador y gestiona reservados */
   isRrpp: boolean;
+  /** Camarero/a de bandeja: como un camarero, y además ve los reservados (sin cambiarlos) */
+  isTray: boolean;
   signIn(email: string, password: string): Promise<void>;
-  /** Registro de un trabajador: elige si es camarero/a ('worker'), RRPP ('rrpp') o DJ / técnico ('tech') */
+  /** Registro de un trabajador: camarero/a de barra ('worker') o de bandeja ('tray'), RRPP ('rrpp') o DJ / técnico ('tech') */
   signUp(name: string, email: string, password: string, role: Exclude<Role, 'admin'>): Promise<{ needsConfirmation: boolean }>;
   signOut(): Promise<void>;
   demoSignIn(role: Role): Promise<void>;
@@ -84,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ...state,
     isAdmin: state.profile?.role === 'admin',
     isRrpp: state.profile?.role === 'rrpp',
+    isTray: state.profile?.role === 'tray',
     recovering: recovering && !!state.userId,
     finishRecovery: () => setRecovering(false),
 

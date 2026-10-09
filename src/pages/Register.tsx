@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GlassWater, Headphones, MailCheck, Sofa, type LucideIcon } from 'lucide-react';
+import { ConciergeBell, GlassWater, Headphones, MailCheck, Sofa, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../auth';
 import { useFeedback } from '../components/overlay';
 import { Button, Field, Input } from '../components/ui';
@@ -8,10 +8,11 @@ import { errorMessage } from '../lib/api';
 import { cx } from '../lib/utils';
 import { AuthLayout } from './Login';
 
-type WorkerRole = 'worker' | 'rrpp' | 'tech';
+type WorkerRole = 'worker' | 'tray' | 'rrpp' | 'tech';
 
 const ROLE_OPTIONS: { value: WorkerRole; title: string; text: string; icon: LucideIcon }[] = [
-  { value: 'worker', title: 'Camarero/a', text: 'Fichar, horas, turnos y disponibilidad', icon: GlassWater },
+  { value: 'worker', title: 'Camarero/a de barra', text: 'Fichar, horas, turnos y disponibilidad', icon: GlassWater },
+  { value: 'tray', title: 'Camarero/a de bandeja', text: 'Lo mismo y, además, ver los reservados', icon: ConciergeBell },
   { value: 'tech', title: 'DJ / Técnico', text: 'Fichar, horas, turnos y disponibilidad', icon: Headphones },
   { value: 'rrpp', title: 'RRPP', text: 'Fichar y gestionar los reservados', icon: Sofa },
 ];
@@ -29,7 +30,7 @@ export default function Register() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!role) return toast.error('Elige tu puesto: camarero/a, DJ / técnico o RRPP');
+    if (!role) return toast.error('Elige tu puesto: camarero/a de barra o de bandeja, DJ / técnico o RRPP');
     if (password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
     setLoading(true);
     try {
