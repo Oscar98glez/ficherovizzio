@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft, Pencil, RefreshCw } from 'lucide-react';
 import { EventForm } from '../../components/finance-forms';
-import { useFeedback } from '../../components/overlay';
-import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, Loading, StatCard } from '../../components/ui';
+import { Modal, useFeedback } from '../../components/overlay';
+import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, Field, Input, Loading, StatCard } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { IS_DEMO } from '../../lib/config';
@@ -96,7 +96,7 @@ export default function EventDetail() {
             <StatCard label="Reservados" value={num(ev.bookings)} sub={ev.bookings == null ? 'Sin acceso a las reservas' : 'Reservas de mesa'} />
             <StatCard label="Dentro" value={num(ev.tickets_entered)} sub="Personas que han entrado" />
           </div>
-          <RrppBreakdown rows={data.rrppNights} employees={data.employees} />
+          <RrppBreakdown rows={data.rrppNights} employees={data.employees} onChanged={reload} />
         </>
       ) : (
         <Card>
@@ -120,7 +120,8 @@ const shortId = (id: string) => id.slice(-6);
  * reservados. Lo que no lleva RRPP sale como "Sin RRPP". Si el RRPP no está asociado a una ficha
  * de la app (Ajustes → Fourvenues), se avisa.
  */
-function RrppBreakdown({ rows, employees }: { rows: FourvenuesRrppNight[]; employees: Employee[] }) {
+function RrppBreakdown({ rows, employees, onChanged }: { rows: FourvenuesRrppNight[]; employees: Employee[]; onChanged: () => void }) {
+  const [naming, setNaming] = useState<string | null>(null);
   const byFvUser = new Map(employees.filter((e) => e.fourvenues_user_id).map((e) => [e.fourvenues_user_id!, e]));
   const listed = rows
     .map((x) => {
@@ -164,7 +165,9 @@ function RrppBreakdown({ rows, employees }: { rows: FourvenuesRrppNight[]; emplo
                   <div className="min-w-0">
                     <div className={cx('truncate text-[14px] font-medium', !r.fourvenues_user_id && 'text-ink-2')}>{r.label}</div>
                     {r.fourvenues_user_id && !r.name && (
-                      <div className="truncate text-[12px] text-orange">Fourvenues no ha dado su nombre · código {r.fourvenues_user_id}</div>
+                      <button type="button" onClick={() => setNaming(r.fourvenues_user_id)} className="truncate text-left text-[12px] font-medium text-accent hover:opacity-70">
+                        Fourvenues no da su nombre · Poner nombre
+                      </button>
                     )}
                     {r.fourvenues_user_id && r.name && r.employee && fullName(r.employee) !== r.name && (
                       <div className="truncate text-[12px] text-ink-2">Ficha: {fullName(r.employee)}</div>
@@ -190,6 +193,45 @@ function RrppBreakdown({ rows, employees }: { rows: FourvenuesRrppNight[]; emplo
           sincronización ha dado un error (se muestra al sincronizar y en Ajustes → Fourvenues).
         </p>
       )}
+      <RrppNameModal fourvenuesUserId={naming} onClose={() => setNaming(null)} onSaved={onChanged} />
     </Card>
+  );
+}
+
+/** Nombre a mano para un RRPP del que Fourvenues no da el nombre (vale para todas sus noches) */
+function RrppNameModal({ fourvenuesUserId, onClose, onSaved }: { fourvenuesUserId: string | null; onClose: () => void; onSaved: () => void }) {
+  const { toast } = useFeedback();
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setName(''), [fourvenuesUserId]);
+
+  async function submit() {
+    if (!fourvenuesUserId) return;
+    if (!name.trim()) return toast.error('Escribe el nombre del RRPP');
+    setSaving(true);
+    try {
+      await api.setFourvenuesRrppName(fourvenuesUserId, name.trim());
+      toast.success('Nombre guardado en todas sus noches');
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open={!!fourvenuesUserId} onClose={onClose} title="Nombre del RRPP" onSubmit={submit} saving={saving}>
+      <div className="space-y-3">
+        <p className="text-[14px] text-ink-2">
+          Fourvenues no da el nombre de este RRPP (no está entre sus usuarios). Escríbelo tal y como aparece en Fourvenues: se usará en todas sus noches. Si más
+          adelante Fourvenues lo da, se usará el suyo.
+        </p>
+        <Field label="Nombre" hint={`Código en Fourvenues: ${fourvenuesUserId ?? ''}`}>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre y apellidos" autoFocus />
+        </Field>
+      </div>
+    </Modal>
   );
 }
