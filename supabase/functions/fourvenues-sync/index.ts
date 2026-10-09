@@ -513,16 +513,41 @@ async function eventLists(eventId: string): Promise<FvListEntry[]> {
   return eventItemsWithFallback<FvListEntry>('/lists/', eventId);
 }
 
+/** Las reservas se hacen hasta con este margen antes de la noche */
+const BOOKING_LEAD_DAYS = 120;
+
 /**
- * Todas las reservas de mesa de un evento. Fourvenues exige un rango de fechas (start_date y
- * end_date en ISO 8601) y no admite páginas de 500: se pide la noche con un día de margen, de 100 en
- * 100, y se quedan sólo las de este evento (las de las noches de al lado vienen también).
+ * Todas las reservas de mesa hechas entre dos fechas, de cualquier evento. Fourvenues filtra las
+ * reservas por la fecha en que se hicieron (start_date / end_date en ISO 8601, obligatorias), no por
+ * la noche, e ignora el evento: se piden por tramos de un mes, de 100 en 100 (no admite páginas de
+ * 500), y luego cada noche se queda con las de su evento.
  */
-async function eventBookings(eventId: string, night: string): Promise<FvBooking[]> {
-  const iso = (d: string) => `${d}T00:00:00.000Z`;
-  const items = await eventItems<FvBooking>('/bookings/', eventId, { start_date: iso(addDays(night, -1)), end_date: iso(addDays(night, 2)) }, 100);
-  // Fourvenues devuelve todas las reservas de esas fechas aunque se le pida un evento: sólo las de este
-  return items.filter((b) => b.event_id === eventId);
+async function bookingsMadeBetween(from: string, to: string): Promise<FvBooking[]> {
+  const byId = new Map<string, FvBooking>();
+  for (let start = from; start <= to; start = addDays(start, 30)) {
+    const end = addDays(start, 30) < addDays(to, 1) ? addDays(start, 30) : addDays(to, 1);
+    let previousFirst: string | undefined;
+    for (let offset = 0; offset < 50_000; offset += 100) {
+      const page = (await fv<FvBooking[]>('/bookings/', { start_date: `${start}T00:00:00.000Z`, end_date: `${end}T00:00:00.000Z`, limit: '100', offset: String(offset) })) ?? [];
+      if (!page.length || page[0]._id === previousFirst) break;
+      previousFirst = page[0]._id;
+      for (const b of page) if (b?._id) byId.set(b._id, b);
+      if (page.length < 100) break;
+    }
+  }
+  return [...byId.values()];
+}
+
+/** Reservas de las noches entre dos fechas, agrupadas por evento de Fourvenues */
+async function bookingsByEvent(firstNight: string, lastNight: string): Promise<Map<string, FvBooking[]>> {
+  const out = new Map<string, FvBooking[]>();
+  for (const b of await bookingsMadeBetween(addDays(firstNight, -BOOKING_LEAD_DAYS), addDays(lastNight, 2))) {
+    if (!b.event_id) continue;
+    const list = out.get(b.event_id) ?? [];
+    list.push(b);
+    out.set(b.event_id, list);
+  }
+  return out;
 }
 
 /**
@@ -676,6 +701,7 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
   }[] = [];
   /** Nombre de cada RRPP que venga dentro de las propias ventas */
   const embeddedNames = new Map<string, string>();
+  let allBookings: Map<string, FvBooking[]> | undefined;
   for (const { fvId, local } of synced) {
     const tickets = await eventTickets(fvId);
     collectReferralNames(tickets, embeddedNames);
@@ -703,7 +729,9 @@ export async function runSync(db: SupabaseClient, from: string, to: string): Pro
     let bookingItems: FvBooking[] | null = null;
     if (!bookingsUnavailable) {
       try {
-        const items = (bookingItems = await eventBookings(fvId, local.date));
+        // Todas las reservas de la ventana se piden una sola vez (Fourvenues no filtra por evento)
+        allBookings ??= await bookingsByEvent(synced.reduce((m, x) => (x.local.date < m ? x.local.date : m), local.date), synced.reduce((m, x) => (x.local.date > m ? x.local.date : m), local.date));
+        const items = (bookingItems = allBookings.get(fvId) ?? []);
         collectReferralNames(items, embeddedNames);
         bookings = summarizeBookings(items);
         result.bookings += bookings.count;
@@ -922,12 +950,13 @@ async function inspect() {
     allTickets.push(...tickets);
     const lists = await grab(() => eventLists(e._id));
     allLists.push(...(lists.items ?? []));
-    const bk = await grab(() => eventBookings(e._id, eventNight(e) ?? today));
-    allBookings.push(...(bk.items ?? []));
     if (!best || tickets.length > best.tickets.length) best = { e, tickets };
   }
   if (!best) return out;
-  const bookings = await grab(() => eventBookings(best!.e._id, eventNight(best!.e) ?? today));
+  const nights = recent.map((e) => eventNight(e) ?? today).sort();
+  const byEvent = await bookingsByEvent(nights[0], nights[nights.length - 1]).catch(() => new Map<string, FvBooking[]>());
+  for (const e of recent) allBookings.push(...(byEvent.get(e._id) ?? []));
+  const bookings = { items: byEvent.get(best.e._id) ?? [] } as { items?: FvBooking[]; error?: string };
   const users = await grab(() => allUsers());
   const userMap = new Map((users.items ?? []).map((u) => [u._id, u]));
   const names = new Map<string, string>();
@@ -979,9 +1008,9 @@ async function bookingsAudit(night: string) {
   };
   const out: Record<string, unknown>[] = [];
   const seen = new Set<string>();
+  const raw = await bookingsMadeBetween(addDays(night, -BOOKING_LEAD_DAYS), addDays(night, 2));
   for (const e of events.filter((x) => evInfo.get(x._id)?.noche === night)) {
-    const raw = await eventItems<FvBooking>('/bookings/', e._id, { start_date: `${addDays(night, -1)}T00:00:00.000Z`, end_date: `${addDays(night, 2)}T00:00:00.000Z` }, 100);
-    for (const b of raw) {
+    for (const b of raw.filter((x) => x.event_id === e._id)) {
       if (seen.has(b._id)) continue;
       seen.add(b._id);
       const x = b as FvBooking & { date?: string; local_date?: string; hour?: string; event_name?: string };
