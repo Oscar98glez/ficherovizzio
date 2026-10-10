@@ -823,7 +823,7 @@ const TOOLS: Tool[] = [
       const [resRes, tablesRes, eventsRes] = await Promise.all([
         db
           .from('reservations')
-          .select('id, customer_name, customer_phone, guests, arrival_time, table_id, bottles, mixers, total_amount, deposit, status, rrpp_name, rrpp_origin, host_rrpp_name, notes')
+          .select('id, customer_name, customer_phone, guests, arrival_time, table_id, bottles, mixers, extra_orders, total_amount, deposit, status, rrpp_name, rrpp_origin, host_rrpp_name, notes')
           .eq('date', night)
           .order('arrival_time'),
         db.from('vip_tables').select('id, name, zone'),
@@ -832,7 +832,9 @@ const TOOLS: Tool[] = [
       const tables = new Map((check(tablesRes, 'No se pudieron leer los reservados') as Record<string, unknown>[]).map((t) => [t.id, [t.name, t.zone].filter(Boolean).join(' · ')]));
       type Item = { name: string; qty: number; courtesy?: boolean; price?: number };
       const app = (check(resRes, 'No se pudieron leer las reservas') as Record<string, unknown>[]).map((r) => {
-        const bottles = (r.bottles as Item[] | null) ?? [];
+        const extra = (r.extra_orders as { bottles?: Item[]; mixers?: Item[] }[] | null) ?? [];
+        const bottles = [...((r.bottles as Item[] | null) ?? []), ...extra.flatMap((o) => o.bottles ?? [])];
+        const text = (items: Item[] | undefined) => (items ?? []).map((b) => `${b.qty}× ${b.name}${b.courtesy ? ' (cortesía)' : ''}`).join(', ');
         return {
           cliente: r.customer_name,
           telefono: r.customer_phone,
@@ -841,6 +843,12 @@ const TOOLS: Tool[] = [
           reservado: r.table_id ? tables.get(r.table_id) ?? null : null,
           botellas: bottles.map((b) => `${b.qty}× ${b.name}${b.courtesy ? ' (cortesía)' : ''}`).join(', '),
           todas_cortesia: bottles.length > 0 && bottles.every((b) => b.courtesy),
+          // Cada pedido con sus botellas y sus refrescos (el 1 es el de la reserva)
+          pedidos: [{ bottles: (r.bottles as Item[] | null) ?? [], mixers: (r.mixers as Item[] | null) ?? [] }, ...extra].map((o, i) => ({
+            pedido: i + 1,
+            botellas: text(o.bottles),
+            refrescos: text(o.mixers),
+          })),
           total: r.total_amount,
           senal: r.deposit,
           estado: r.status,

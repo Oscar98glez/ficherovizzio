@@ -2,7 +2,7 @@
  * Cotejo de las reservas de Fourvenues con las del apartado Reservados de la app: si la reserva
  * está en la app, manda lo que diga la app (cortesía o pagada, y su importe).
  */
-import { itemsTotal } from '../components/reservation-forms';
+import { allBottles, allMixers, itemsTotal } from './orders';
 import type { Reservation, RrppNightDetail } from './types';
 
 type BookingItem = NonNullable<RrppNightDetail['bookingItems']>[number];
@@ -45,11 +45,13 @@ function sameName(a: string, b: string) {
 }
 
 /** La reserva de la app es de cortesía: todas sus botellas lo son, o su importe es 0 € */
-export const isAppCourtesy = (r: Reservation) =>
-  r.total_amount === 0 || (!!r.bottles?.length && r.bottles.every((b) => b.courtesy));
+export const isAppCourtesy = (r: Reservation) => {
+  const bottles = allBottles(r);
+  return r.total_amount === 0 || (!!bottles.length && bottles.every((b) => b.courtesy));
+};
 
 /** Importe de la reserva en la app: el total guardado o, si no, el de sus botellas y refrescos */
-export const appAmount = (r: Reservation) => r.total_amount ?? itemsTotal(r.bottles) + itemsTotal(r.mixers);
+export const appAmount = (r: Reservation) => r.total_amount ?? itemsTotal(allBottles(r)) + itemsTotal(allMixers(r));
 
 /** Empareja cada reserva de Fourvenues con una de la app de esa noche (por teléfono o por nombre) */
 export function checkBookings(items: BookingItem[], reservations: Reservation[]): CheckedBooking[] {
@@ -71,7 +73,7 @@ export function checkBookings(items: BookingItem[], reservations: Reservation[])
       item,
       reservation,
       courtesy,
-      partialCourtesy: !courtesy && !!reservation.bottles?.some((b) => b.courtesy),
+      partialCourtesy: !courtesy && allBottles(reservation).some((b) => b.courtesy),
       amount: courtesy ? 0 : appAmount(reservation),
     };
   });
@@ -121,7 +123,7 @@ export function appOnlyBooking(r: Reservation, zone: string | null): CheckedBook
     item: { name: r.customer_name, phone: r.customer_phone, zone: zone ?? 'Reservado', people: r.guests, price: amount, courtesy },
     reservation: r,
     courtesy,
-    partialCourtesy: !courtesy && !!r.bottles?.some((b) => b.courtesy),
+    partialCourtesy: !courtesy && allBottles(r).some((b) => b.courtesy),
     amount,
     appOnly: true,
   };

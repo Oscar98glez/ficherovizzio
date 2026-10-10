@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Coins, Plus, Settings2, Sofa, Users } from 'lucide-react';
 import { useAuth } from '../auth';
 import { ClubMap } from '../components/ClubMap';
-import { itemsText, ReservationForm, VipTablesManager } from '../components/reservation-forms';
+import { allBottles, itemsText, ReservationForm, VipTablesManager } from '../components/reservation-forms';
 import {
   Badge,
   Button,
@@ -246,7 +246,8 @@ export default function Reservations() {
                       subtitle={[
                         t ? t.name : 'Sin reservado',
                         `${r.guests} pers.`,
-                        itemsText(r.bottles),
+                        itemsText(allBottles(r)),
+                        (r.extra_orders?.length ?? 0) > 0 && `${(r.extra_orders?.length ?? 0) + 1} pedidos`,
                         r.rrpp_id === employee?.id ? 'Tu reserva' : r.rrpp_name,
                         r.host_rrpp_name && `atiende ${r.host_rrpp_id === employee?.id ? 'tú' : r.host_rrpp_name}`,
                       ]
