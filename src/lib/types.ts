@@ -305,6 +305,17 @@ export interface OrderItem {
 
 export type ReservationOrigin = 'otros' | 'empresa';
 
+/** Botellas añadidas a un reservado ya apuntado, con sus propios refrescos */
+export interface ReservationOrder {
+  id: string;
+  /** Cuándo se añadió (ISO) */
+  at: string;
+  /** Quién lo añadió */
+  by?: string | null;
+  bottles: OrderItem[];
+  mixers: OrderItem[];
+}
+
 export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'cancelled' | 'no_show';
 
 export interface Reservation {
@@ -325,6 +336,8 @@ export interface Reservation {
   bottles: OrderItem[];
   /** Refrescos pedidos */
   mixers: OrderItem[];
+  /** Pedidos añadidos después (el pedido 1 son bottles / mixers), cada uno con sus refrescos */
+  extra_orders?: ReservationOrder[] | null;
   /** Importe total del reservado */
   total_amount: number | null;
   status: ReservationStatus;

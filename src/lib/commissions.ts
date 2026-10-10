@@ -6,6 +6,7 @@
 import { isActiveReservation } from './constants';
 import { parseDate } from './dates';
 import { menuPrice } from './menu';
+import { allBottles } from './orders';
 import type { CommissionRate, Employee, Reservation, TicketSale } from './types';
 
 /** Días en el orden de la semana española (lunes primero); el valor es el de Date.getDay() */
@@ -60,7 +61,7 @@ export interface RrppCommission {
 
 /** Botellas vendidas en una reserva (sin las de cortesía) y su importe según el precio guardado o la carta */
 export function reservationBottles(r: Reservation) {
-  const sold = (r.bottles ?? []).filter((b) => !b.courtesy);
+  const sold = allBottles(r).filter((b) => !b.courtesy);
   return {
     qty: sold.reduce((a, b) => a + b.qty, 0),
     sales: round2(sold.reduce((a, b) => a + b.qty * (b.price ?? menuPrice(b.name) ?? 0), 0)),

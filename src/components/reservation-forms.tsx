@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, Minus, Plus, Trash2, X } from 'lucide-react';
+import { ChevronLeft, Minus, Plus, PlusCircle, Trash2, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { hhmm } from '../lib/availability';
 import { isActiveReservation, RESERVATION_ORIGINS, RESERVATION_STATUS } from '../lib/constants';
-import { fmtDateFull, fmtMoneyExact } from '../lib/format';
+import { fmtDateFull, fmtMoneyExact, fmtTime } from '../lib/format';
 import { BOTTLE_GROUPS, menuPrice, MIXER_GROUPS, type MenuGroup } from '../lib/menu';
+import { allBottles, allMixers, extraOrdersTotal, itemsTotal, ordersOf } from '../lib/orders';
 import type { OrderItem, Reservation, ReservationOrigin, ReservationStatus, StaffOption, VipTable } from '../lib/types';
-import { cx, parseAmount } from '../lib/utils';
+import { cx, parseAmount, uid } from '../lib/utils';
+import { useAuth } from '../auth';
 import { Modal, useFeedback } from './overlay';
 import { Badge, Button, EmptyState, Field, Input, List, ListRow, Select, Switch, Textarea } from './ui';
 
@@ -20,14 +22,129 @@ export const tableLabel = (t: VipTable) => [t.name, t.zone].filter(Boolean).join
 export const itemsText = (items: OrderItem[] | null | undefined) =>
   (items ?? []).map((i) => `${i.qty}× ${i.name}${i.courtesy ? ' (cortesía)' : ''}`).join(', ');
 
+/**
+ * Pedidos de una reserva, cada uno por separado con sus botellas y sus refrescos (los refrescos de
+ * una botella añadida después no se juntan con los del pedido anterior).
+ */
+function OrdersView({ reservation, onRemove }: { reservation: Reservation; onRemove?: (index: number) => void }) {
+  const orders = ordersOf(reservation).filter((o, i) => i > 0 || o.bottles.length || o.mixers.length);
+  if (!orders.length) return null;
+  const several = (reservation.extra_orders ?? []).length > 0;
+  return (
+    <div className="space-y-2">
+      {orders.map((o) => (
+        <div key={o.n} className="rounded-xl bg-fill/60 px-3.5 py-2.5">
+          {several && (
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-ink-3">
+                Pedido {o.n}
+                {o.n > 1 && o.at ? ` · ${fmtTime(o.at)}` : ''}
+                {o.n > 1 && o.by ? ` · ${o.by}` : ''}
+              </span>
+              {onRemove && o.n > 1 && (
+                <button
+                  type="button"
+                  onClick={() => onRemove(o.n - 2)}
+                  className="grid h-7 w-7 place-items-center rounded-full text-ink-3 hover:bg-fill hover:text-red"
+                  aria-label={`Quitar el pedido ${o.n}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          )}
+          <div className="text-[14px]">
+            <span className="text-ink-2">Botellas: </span>
+            {itemsText(o.bottles) || '—'}
+          </div>
+          <div className="text-[14px]">
+            <span className="text-ink-2">Refrescos: </span>
+            {itemsText(o.mixers) || '—'}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Botellas añadidas a un reservado ya apuntado: van en un pedido nuevo, con sus propios refrescos */
+function NewOrderModal({ reservation, onClose, onSaved }: { reservation: Reservation; onClose: () => void; onSaved: () => void }) {
+  const { toast } = useFeedback();
+  const { profile, employee } = useAuth();
+  const [bottles, setBottles] = useState<OrderItem[]>([{ name: '', qty: 1 }]);
+  const [mixers, setMixers] = useState<OrderItem[]>([]);
+  const [saving, setSaving] = useState(false);
+  const total = round2(itemsTotal(bottles) + itemsTotal(mixers));
+
+  async function submit() {
+    const b = cleanItems(bottles);
+    const m = cleanItems(mixers);
+    if (!b.length && !m.length) return toast.error('Añade al menos una botella o un refresco');
+    setSaving(true);
+    try {
+      // Se parte de la reserva tal y como está ahora (por si otro ha añadido un pedido a la vez)
+      const latest = (await api.reservations.get(reservation.id)) ?? reservation;
+      const orderTotal = round2(itemsTotal(b) + itemsTotal(m));
+      const before = latest.total_amount ?? round2(itemsTotal(allBottles(latest)) + itemsTotal(allMixers(latest)));
+      const by = employee ? `${employee.first_name} ${employee.last_name ?? ''}`.trim() : profile?.full_name || null;
+      await api.reservations.update(reservation.id, {
+        extra_orders: [...(latest.extra_orders ?? []), { id: uid(), at: new Date().toISOString(), by, bottles: b, mixers: m }],
+        total_amount: round2(before + orderTotal),
+      });
+      toast.success('Pedido añadido: les llega un aviso a los camareros de bandeja');
+      onSaved();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Nuevo pedido" onSubmit={submit} submitLabel="Añadir" saving={saving}>
+      <div className="space-y-4">
+        <p className="text-[14px] text-ink-2">
+          {reservation.customer_name}: las botellas que añadas aquí van en un pedido aparte, con sus propios refrescos, y se avisa a los camareros de
+          bandeja.
+        </p>
+        <div className="space-y-4 rounded-2xl bg-fill/50 p-3.5">
+          <ItemsEditor
+            label="Botellas"
+            addLabel="Añadir botella"
+            items={bottles}
+            onChange={setBottles}
+            groups={BOTTLE_GROUPS}
+            emptyLabel="Elige una botella"
+            otherLabel="Otra…"
+            placeholder="Escribe la botella"
+            courtesy
+          />
+          <ItemsEditor
+            label="Refrescos de este pedido"
+            addLabel="Añadir refresco"
+            items={mixers}
+            onChange={setMixers}
+            groups={MIXER_GROUPS}
+            emptyLabel="Elige un refresco"
+            otherLabel="Otro…"
+            placeholder="Escribe el refresco"
+          />
+          {total > 0 && (
+            <div className="flex items-center justify-between text-[14px]">
+              <span className="text-ink-2">Este pedido</span>
+              <span className="tabular font-semibold">{fmtMoneyExact(total)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 const OTHER = '__otro__';
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Precio unitario: 0 si es cortesía; si no, el guardado en la reserva o el de la carta */
-const priceOf = (i: OrderItem) => (i.courtesy ? 0 : (i.price ?? menuPrice(i.name) ?? 0));
-
-/** Total de una lista de botellas o refrescos (cantidad × precio) */
-export const itemsTotal = (items: OrderItem[] | null | undefined) => round2((items ?? []).reduce((a, i) => a + priceOf(i) * i.qty, 0));
+export { allBottles, allMixers, extraOrdersTotal, itemsTotal, ordersOf };
 
 /**
  * Lista editable de botellas o refrescos con su cantidad, elegidos de la carta del local
@@ -253,15 +370,24 @@ export function ReservationForm({
   const { toast, confirm } = useFeedback();
   const [f, setF] = useState(() => toForm(date, reservation, table));
   const [saving, setSaving] = useState(false);
+  // Añadiendo botellas en un pedido nuevo
+  const [adding, setAdding] = useState(false);
   // El coste total se calcula con la carta hasta que se escribe a mano
   const [autoTotal, setAutoTotal] = useState(true);
   useEffect(() => {
     if (!open) return;
     setF(toForm(date, reservation, table, myEmployeeId && staff.some((s) => s.id === myEmployeeId) ? myEmployeeId : null));
-    setAutoTotal(!reservation || reservation.total_amount == null || Math.abs(reservation.total_amount - itemsTotal(reservation.bottles) - itemsTotal(reservation.mixers)) < 0.005);
+    setAutoTotal(
+      !reservation ||
+        reservation.total_amount == null ||
+        Math.abs(reservation.total_amount - itemsTotal(allBottles(reservation)) - itemsTotal(allMixers(reservation))) < 0.005,
+    );
+    setAdding(false);
   }, [open, date, reservation, table, myEmployeeId, staff]);
   const set = <K extends keyof ReservationFormState>(k: K, v: ReservationFormState[K]) => setF((s) => ({ ...s, [k]: v }));
-  const menuTotal = (s: Pick<ReservationFormState, 'bottles' | 'mixers'>) => round2(itemsTotal(s.bottles) + itemsTotal(s.mixers));
+  // El total incluye los pedidos añadidos después (que no se editan aquí)
+  const menuTotal = (s: Pick<ReservationFormState, 'bottles' | 'mixers'>) =>
+    round2(itemsTotal(s.bottles) + itemsTotal(s.mixers) + extraOrdersTotal(reservation));
   const totalText = (n: number) => (n > 0 ? (Number.isInteger(n) ? String(n) : n.toFixed(2).replace('.', ',')) : '');
   const setItems = (k: 'bottles' | 'mixers', v: OrderItem[]) =>
     setF((s) => {
@@ -321,6 +447,25 @@ export function ReservationForm({
     }
   }
 
+  async function removeOrder(index: number) {
+    if (!reservation) return;
+    const order = reservation.extra_orders?.[index];
+    if (!order) return;
+    if (!(await confirm({ title: `¿Quitar el pedido ${index + 2}?`, message: itemsText(order.bottles) || undefined, confirmLabel: 'Quitar', destructive: true }))) return;
+    try {
+      const orderTotal = round2(itemsTotal(order.bottles) + itemsTotal(order.mixers));
+      await api.reservations.update(reservation.id, {
+        extra_orders: (reservation.extra_orders ?? []).filter((_, i) => i !== index),
+        total_amount: reservation.total_amount != null ? Math.max(0, round2(reservation.total_amount - orderTotal)) : null,
+      });
+      toast.success('Pedido quitado');
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  }
+
   async function remove() {
     if (!reservation) return;
     if (
@@ -362,17 +507,30 @@ export function ReservationForm({
             <ListRow title="Llegada" trailing={<span className="tabular text-ink-2">{hhmm(reservation.arrival_time) || '—'}</span>} />
             <ListRow title="RRPP" trailing={<span className="text-ink-2">{reservation.rrpp_name ?? '—'}</span>} />
             <ListRow title="RRPP que atiende" trailing={<span className="text-ink-2">{reservation.host_rrpp_name ?? '—'}</span>} />
-            {!!reservation.bottles?.length && <ListRow title="Botellas" subtitle={itemsText(reservation.bottles)} />}
-            {!!reservation.mixers?.length && <ListRow title="Refrescos" subtitle={itemsText(reservation.mixers)} />}
             {reservation.total_amount != null && (
               <ListRow title="Coste total" trailing={<span className="tabular font-semibold">{fmtMoneyExact(reservation.total_amount)}</span>} />
             )}
           </List>
+          <OrdersView reservation={reservation} />
           <p className="text-center text-[13px] text-ink-3">Sólo quien la creó, su RRPP, el RRPP que la atiende o un administrador pueden modificarla.</p>
         </div>
       </Modal>
     );
   }
+
+  if (reservation && adding && open)
+    return (
+      <NewOrderModal
+        reservation={reservation}
+        onClose={() => setAdding(false)}
+        onSaved={() => {
+          onSaved();
+          onClose();
+        }}
+      />
+    );
+
+  const extras = reservation?.extra_orders ?? [];
 
   return (
     <Modal
@@ -449,6 +607,7 @@ export function ReservationForm({
           </Field>
         </div>
         <div className="space-y-4 rounded-2xl bg-fill/50 p-3.5">
+          {extras.length > 0 && <div className="text-[12px] font-semibold uppercase tracking-wide text-ink-3">Pedido 1</div>}
           <ItemsEditor
             label="Botellas"
             addLabel="Añadir botella"
@@ -505,6 +664,19 @@ export function ReservationForm({
             </Field>
           </div>
         </div>
+        {reservation && (
+          <div className="space-y-2">
+            {extras.length > 0 && (
+              <>
+                <div className="px-1 text-[13px] font-medium text-ink-2">Pedidos añadidos</div>
+                <OrdersView reservation={{ ...reservation, bottles: [], mixers: [] }} onRemove={removeOrder} />
+              </>
+            )}
+            <Button variant="secondary" className="w-full" icon={<PlusCircle />} onClick={() => setAdding(true)}>
+              Añadir botellas (pedido nuevo)
+            </Button>
+          </div>
+        )}
         <Field label="Estado">
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
             {(Object.keys(RESERVATION_STATUS) as ReservationStatus[]).map((s) => (

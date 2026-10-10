@@ -42,7 +42,7 @@ interface Notification {
   employee_id: string | null;
   /** ...o directamente para un usuario (administradores) */
   user_id: string | null;
-  kind: 'shift_new' | 'shift_changed' | 'shift_cancelled' | 'message' | 'task' | 'reply' | 'reservation_new';
+  kind: 'shift_new' | 'shift_changed' | 'shift_cancelled' | 'message' | 'task' | 'reply' | 'reservation_new' | 'reservation_order';
   ref_id: string | null;
   data: Record<string, string | null>;
   created_at: string;
@@ -110,8 +110,15 @@ export function describe(n: Pick<Notification, 'kind' | 'data'>): { title: strin
         guests ? `${guests} pers.` : null,
         d.arrival ? `llegada ${d.arrival}` : null,
         d.customer,
+        d.bottles,
+        d.mixers ? `Refrescos: ${d.mixers}` : null,
       ];
-      return { title: 'Nuevo reservado', body: parts.filter(Boolean).join(' · ').slice(0, 180) };
+      return { title: 'Nuevo reservado', body: parts.filter(Boolean).join(' · ').slice(0, 240) };
+    }
+    case 'reservation_order': {
+      // Botellas añadidas a un reservado ya apuntado: su pedido, con sus propios refrescos
+      const parts = [d.customer, d.order ? `pedido ${d.order}` : null, d.bottles, d.mixers ? `Refrescos: ${d.mixers}` : null];
+      return { title: `Nuevo pedido · ${d.table || 'sin reservado'}`, body: parts.filter(Boolean).join(' · ').slice(0, 240) };
     }
     case 'reply':
       return fromAdmin(n)
@@ -129,7 +136,7 @@ export function payloadFor(list: Pick<Notification, 'kind' | 'data'>[]): Payload
   const toAdmin = list.every((n) => n.kind === 'reply' && !fromAdmin(n));
   const url = toAdmin
     ? list.length === 1 && list[0].data?.message_id ? `/mensajes?m=${list[0].data.message_id}` : '/mensajes'
-    : list.every((n) => n.kind === 'reservation_new')
+    : list.every((n) => n.kind === 'reservation_new' || n.kind === 'reservation_order')
       ? list.length === 1 && list[0].data?.date ? `/reservados?d=${list[0].data.date}` : '/reservados'
       : list.some(isMessage) ? '/mis-mensajes' : '/mis-turnos';
   if (list.length === 1) return { ...describe(list[0]), url };
