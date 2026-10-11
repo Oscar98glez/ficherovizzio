@@ -5,7 +5,7 @@ import { useAuth } from '../../auth';
 import { EmployeeForm, EntryForm } from '../../components/forms';
 import { RrppCommissionCard } from '../../components/rrpp-commissions';
 import { useFeedback } from '../../components/overlay';
-import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, ListRow, LiveDot, Loading, Segmented, StatCard } from '../../components/ui';
+import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, ListRow, LiveDot, Loading, Select, StatCard, Switch } from '../../components/ui';
 import { useLoad, useNow } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { CONTRACTS, DEPARTMENTS, ROLES, SHIFT_STATUS } from '../../lib/constants';
@@ -75,6 +75,16 @@ export default function EmployeeDetail() {
     try {
       await api.profiles.update(data.profile.id, { role });
       toast.success(`Ahora es ${role === 'rrpp' || role === 'tech' ? ROLES[role] : ROLES[role].toLowerCase()}`);
+      reload();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  }
+
+  async function setManager(on: boolean) {
+    try {
+      await api.employees.update(e.id, { manages_reservations: on });
+      toast.success(on ? 'Ahora gestiona todos los reservados' : 'Ya no gestiona todos los reservados');
       reload();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -202,18 +212,29 @@ export default function EmployeeDetail() {
                 <>
                   <p className="mb-3 text-[14px] text-ink-2">Cuenta vinculada{data.profile ? ` a ${data.profile.email}` : ''}.</p>
                   {data.profile && (
-                    <Segmented
-                      full
+                    <Select
                       value={data.profile.role}
-                      onChange={(r) => (data.profile!.id === userId ? toast.error('No puedes cambiar tu propio rol') : setRole(r))}
-                      options={[
-                        { value: 'worker', label: 'Barra' },
-                        { value: 'tray', label: 'Bandeja' },
-                        { value: 'tech', label: 'DJ / Técnico' },
-                        { value: 'rrpp', label: 'RRPP' },
-                        { value: 'admin', label: 'Admin' },
-                      ]}
-                    />
+                      onChange={(ev) =>
+                        data.profile!.id === userId ? toast.error('No puedes cambiar tu propio rol') : setRole(ev.target.value as Role)
+                      }
+                      aria-label="Tipo de usuario"
+                    >
+                      <option value="worker">Camarero de barra</option>
+                      <option value="tray">Camarero de bandeja</option>
+                      <option value="tech">DJ / Técnico</option>
+                      <option value="rrpp">RRPP</option>
+                      <option value="admin">Administrador</option>
+                    </Select>
+                  )}
+                  {data.profile && data.profile.role !== 'admin' && (
+                    <div className="mt-4">
+                      <Switch
+                        checked={!!e.manages_reservations}
+                        onChange={setManager}
+                        label="Gestiona todos los reservados"
+                        description="Como el hoster: puede modificar cualquier reserva aunque no la haya creado y le llegan los avisos de reservados y pedidos nuevos."
+                      />
+                    </div>
                   )}
                 </>
               ) : e.email ? (

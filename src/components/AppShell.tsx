@@ -155,7 +155,7 @@ export function AppShell() {
         {
           items: [
             { to: '/fichar', label: 'Fichar', icon: Fingerprint },
-            ...(isRrpp || isTray ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
+            ...(isRrpp || isTray || employee?.manages_reservations ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
             { to: '/mis-horas', label: 'Mis horas', icon: Clock },
             ...(isRrpp ? [{ to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox }] : []),
             // Los RRPP no tienen turnos, disponibilidad ni solicitudes
