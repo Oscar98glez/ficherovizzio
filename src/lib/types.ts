@@ -53,6 +53,8 @@ export interface Employee {
   /** RRPP: su usuario de Fourvenues (las entradas que vende con su enlace) */
   fourvenues_user_id?: string | null;
   created_at: string;
+  /** Gestiona todos los reservados (el hoster): puede modificar cualquier reserva */
+  manages_reservations?: boolean;
 }
 
 export interface ClubEvent {

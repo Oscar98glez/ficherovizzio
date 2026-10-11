@@ -75,8 +75,8 @@ function RequireAdmin() {
 
 /** Reservados: administradores y RRPP (y los camareros de bandeja, para verlos) */
 function RequireReservations() {
-  const { isAdmin, isRrpp, isTray } = useAuth();
-  return isAdmin || isRrpp || isTray ? <Outlet /> : <Navigate to="/fichar" replace />;
+  const { isAdmin, isRrpp, isTray, employee } = useAuth();
+  return isAdmin || isRrpp || isTray || employee?.manages_reservations ? <Outlet /> : <Navigate to="/fichar" replace />;
 }
 
 /** Turnos, disponibilidad y solicitudes: no aplican a los RRPP */

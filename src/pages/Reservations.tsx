@@ -41,7 +41,7 @@ const arrivalKey = (r: Reservation) => {
 export default function Reservations() {
   const { isAdmin, isRrpp, isTray, employee, userId } = useAuth();
   // Los camareros de bandeja sólo consultan los reservados: no apuntan ni cambian reservas
-  const readOnly = isTray && !isAdmin && !isRrpp;
+  const readOnly = isTray && !isAdmin && !isRrpp && !employee?.manages_reservations;
   const today = isoDate(businessToday());
   // Al abrir el aviso de un reservado nuevo se va a su noche (?d=AAAA-MM-DD)
   const [params] = useSearchParams();
@@ -106,7 +106,10 @@ export default function Reservations() {
   // Puede editarla quien la creó, su RRPP, el RRPP que la atiende o un administrador
   const canEdit = (r: Reservation) =>
     !readOnly &&
-    (isAdmin || (!!userId && r.created_by === userId) || (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id)));
+    (isAdmin ||
+      !!employee?.manages_reservations ||
+      (!!userId && r.created_by === userId) ||
+      (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id)));
   const move = (days: number) => setDate(isoDate(addDays(parseDate(date), days)));
 
   return (
