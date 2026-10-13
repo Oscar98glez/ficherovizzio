@@ -427,6 +427,7 @@ export function ReservationForm({
   reservation,
   table,
   replaces,
+  onAddBottles,
   staff,
   canEdit,
   myEmployeeId,
@@ -444,6 +445,8 @@ export function ReservationForm({
   table?: VipTable | null;
   /** Cliente nuevo en un reservado ocupado: esta reserva pasa a "Se ha ido" al crear la nueva */
   replaces?: Reservation | null;
+  /** "Añadir botellas": preguntar antes si es el mismo cliente o uno nuevo (si no, se abre el pedido nuevo) */
+  onAddBottles?: (reservation: Reservation) => void;
   /** RRPP que se pueden elegir como "RRPP" y "RRPP que atiende" */
   staff: StaffOption[];
   canEdit: boolean;
@@ -776,8 +779,13 @@ export function ReservationForm({
                 <OrdersView reservation={{ ...reservation, bottles: [], mixers: [] }} onRemove={removeOrder} />
               </>
             )}
-            <Button variant="secondary" className="w-full" icon={<PlusCircle />} onClick={() => setAdding(true)}>
-              Añadir botellas (pedido nuevo)
+            <Button
+              variant="secondary"
+              className="w-full"
+              icon={<PlusCircle />}
+              onClick={() => (onAddBottles ? onAddBottles(reservation) : setAdding(true))}
+            >
+              Añadir botellas
             </Button>
           </div>
         )}

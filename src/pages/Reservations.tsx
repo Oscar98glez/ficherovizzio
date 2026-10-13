@@ -128,11 +128,19 @@ export default function Reservations() {
       (!!userId && r.created_by === userId) ||
       (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id)));
   const move = (days: number) => setDate(isoDate(addDays(parseDate(date), days)));
-  // Reservado pulsado en el plano o en las tarjetas
-  const selectTable = (t: VipTable, r?: Reservation) => {
-    if (!r) return !readOnly && setForm({ table: t });
-    if (canEdit(r)) setOccupied({ table: t, reservation: r });
-    else setForm({ reservation: r });
+  // Reserva que ocupa su reservado: antes de nada se pregunta si es el mismo cliente o uno nuevo
+  const ask = (r: Reservation) => {
+    const t = r.table_id && occupiesTable(r) && canEdit(r) ? data.tables.find((x) => x.id === r.table_id) : undefined;
+    if (t) setOccupied({ table: t, reservation: r });
+    return !!t;
+  };
+  // Reserva pulsada en el plano, en las tarjetas o en la lista
+  const open = (r: Reservation) => ask(r) || setForm({ reservation: r });
+  const selectTable = (t: VipTable, r?: Reservation) => (r ? open(r) : !readOnly && setForm({ table: t }));
+  // "Añadir botellas" dentro de la reserva
+  const addBottles = (r: Reservation) => {
+    setForm(null);
+    if (!ask(r)) setOrdering(r);
   };
   const choose = (choice: OccupiedChoice) => {
     if (!occupied) return;
@@ -269,7 +277,7 @@ export default function Reservations() {
                   return (
                     <ListRow
                       key={r.id}
-                      onClick={() => setForm({ reservation: r })}
+                      onClick={() => open(r)}
                       className={cx(!occupiesTable(r) && 'opacity-55')}
                       leading={
                         <div className="tabular w-12 shrink-0 rounded-[10px] bg-fill/70 py-1.5 text-center text-[14px] font-semibold">
@@ -390,6 +398,7 @@ export default function Reservations() {
         reservation={form?.reservation}
         table={form?.table}
         replaces={form?.replaces}
+        onAddBottles={addBottles}
         staff={data.staff}
         canEdit={form?.reservation ? canEdit(form.reservation) : !readOnly}
         myEmployeeId={employee?.id ?? null}
