@@ -1,0 +1,55 @@
+name: Diagnóstico de la base de datos
+
+# Cuántas conexiones hay abiertas en la base de datos, de qué servicio y en qué estado, y cuánto
+# llevan (sólo recuentos y tiempos: nunca el texto de las consultas ni datos, el repositorio es
+# público). Con "liberar" marcado, cierra las conexiones atascadas (consultas o transacciones
+# abiertas desde hace más de 2 minutos), que son las que agotan el pool.
+on:
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/db-diagnostico.yml']
+  workflow_dispatch:
+    inputs:
+      liberar:
+        description: 'Cerrar las conexiones atascadas (más de 2 minutos)'
+        type: boolean
+        default: false
+
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      LIBERAR: ${{ inputs.liberar || 'false' }}
+    steps:
+      - name: Estado del proyecto
+        run: |
+          curl -sS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF" \
+            | python3 -c 'import json,sys; p=json.load(sys.stdin); print({k: p.get(k) for k in ("status","region","created_at")}); print("db:", (p.get("database") or {}).get("version"))'
+          curl -sS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/health?services=db&services=pooler&services=rest&services=auth" | python3 -m json.tool || true
+
+      - name: Conexiones
+        run: |
+          q() {
+            curl -sS -m 60 -X POST -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+              "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+              -d "$(python3 -c 'import json,sys; print(json.dumps({"query": sys.argv[1]}))' "$1")" | python3 -m json.tool
+          }
+          echo "== Límite de conexiones =="
+          q "select current_setting('max_connections') as max_connections, (select count(*) from pg_stat_activity) as abiertas"
+          echo "== Por servicio y estado =="
+          q "select coalesce(nullif(application_name,''),'(sin nombre)') as servicio, usename as usuario, state as estado, wait_event_type as espera, count(*) as conexiones, round(max(extract(epoch from now()-coalesce(xact_start, query_start, backend_start)))) as max_segundos from pg_stat_activity where backend_type = 'client backend' group by 1,2,3,4 order by conexiones desc"
+          echo "== Atascadas (más de 2 minutos en consulta o transacción) =="
+          q "select coalesce(nullif(application_name,''),'(sin nombre)') as servicio, usename as usuario, state as estado, wait_event_type as espera, wait_event, round(extract(epoch from now()-coalesce(xact_start, query_start))) as segundos from pg_stat_activity where backend_type = 'client backend' and pid <> pg_backend_pid() and state <> 'idle' and now()-coalesce(xact_start, query_start) > interval '2 minutes' order by segundos desc limit 30"
+          echo "== Bloqueos esperando =="
+          q "select count(*) as esperando_bloqueo from pg_locks where not granted"
+
+      - name: Liberar conexiones atascadas
+        if: env.LIBERAR == 'true'
+        run: |
+          curl -sS -m 60 -X POST -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/database/query" \
+            -d '{"query": "select count(*) filter (where pg_terminate_backend(pid)) as cerradas from pg_stat_activity where backend_type = '"'"'client backend'"'"' and pid <> pg_backend_pid() and state <> '"'"'idle'"'"' and now()-coalesce(xact_start, query_start) > interval '"'"'2 minutes'"'"'"}' | python3 -m json.tool
