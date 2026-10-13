@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
+  Banknote,
   CalendarCheck,
   CalendarDays,
   Clock,
@@ -140,6 +141,7 @@ export function AppShell() {
             { to: '/reservados', label: 'Reservados', icon: Sofa },
             { to: '/finanzas', label: 'Finanzas', icon: Wallet },
             { to: '/facturas', label: 'Facturas', icon: FileText },
+            { to: '/sueldos', label: 'Sueldos', icon: Banknote },
             { to: '/nominas', label: 'Nóminas', icon: Receipt },
           ],
         },
