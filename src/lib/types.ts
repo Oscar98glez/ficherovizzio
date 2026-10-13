@@ -453,3 +453,25 @@ export interface FourvenuesUser {
   name: string | null;
   email: string | null;
 }
+
+/** Secciones de los sobres de Sueldos */
+export type WageSectionKey = 'camareras' | 'bandejas' | 'dj' | 'embajadoras' | 'otros' | 'porteros';
+
+/** Extra de los sobres: alguien sin ficha ni cuenta que trabajó una noche */
+export interface WageExtraEntry {
+  id: string;
+  /** La noche (día en que empieza) */
+  date: string;
+  section: WageSectionKey;
+  name: string;
+  /** HH:MM, hora española (null si sólo se saben las horas) */
+  clock_in: string | null;
+  clock_out: string | null;
+  hours: number;
+  /** €/h (0 hasta que el administrador lo pone) */
+  rate: number;
+  /** Importe fijo de la noche, en lugar de horas × precio */
+  amount: number | null;
+  notes: string | null;
+  created_at: string;
+}

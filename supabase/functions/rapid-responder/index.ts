@@ -46,6 +46,7 @@ const EXPENSE_CATEGORIES = [
   'Otros gastos',
 ];
 const METHODS = ['efectivo', 'tarjeta', 'transferencia', 'bizum', 'otro'];
+const WAGE_SECTIONS = ['camareras', 'bandejas', 'dj', 'embajadoras', 'otros', 'porteros'];
 const DEPARTMENTS = ['direccion', 'barra', 'sala', 'seguridad', 'cabina', 'relaciones', 'taquilla', 'guardarropa', 'limpieza'];
 
 const INSTRUCTIONS = `Conector de la app Vizzio (discoteca): Finanzas, Facturas y Proveedores. Todo en español.
@@ -66,7 +67,8 @@ FACTURAS Y PROVEEDORES
 FICHAJES (hoja de firmas)
 - Cuando el usuario pase una hoja de firmas (PDF o foto), léela: por cada persona, nombre, noche, hora de entrada, hora de salida y descanso si lo hay.
 - Usa listar_personal para emparejar cada nombre de la hoja con su ficha (pueden venir con apodo, solo nombre o con faltas de ortografía). Si dudas entre dos fichas, pregunta.
-- Quien no esté en la app no se registra salvo que el usuario lo pida: dile quiénes eran. Si te pide añadirlos, pregúntale antes el precio por hora de cada uno (o si lo pondrá él en la app) y dalos de alta con crear_trabajador (ficha sin cuenta: sólo nombre, puesto y precio por hora); después crea sus fichajes con corregir_fichajes.
+- Quien esté en la hoja y no tenga ficha en la app va a los sobres como extra: regístralo con registrar_extras en su sección (camareras, bandejas, dj, embajadoras, porteros u otros, según el apartado de la hoja: "Mantenis" son bandejas y "Seguridad" porteros), con su noche, entrada, salida y horas. El precio por hora lo pone el usuario en Sueldos (déjalo a 0 salvo que te lo diga). Un pago fijo de la noche (p. ej. "120") va en importe. No le crees ficha ni fichajes salvo que el usuario lo pida (crear_trabajador).
+- Lo pagado de la caja (gastos de la hoja de caja) ya está pagado: no va en los sobres.
 - Usa ver_fichajes_noche para ver lo fichado esa noche y compáralo con la hoja. La noche va de 06:00 a 06:00: una salida a las 05:30 es de la noche anterior.
 - Enséñale una tabla con las diferencias (persona, app y hoja) antes de cambiar nada, salvo que te haya dicho que corrijas directamente. Por defecto, una diferencia de 10 minutos o menos se da por buena.
 - Corrige con corregir_fichajes: modifica la entrada/salida del fichaje que está mal, crea el fichaje si la persona está en la hoja pero no fichó, y solo borra fichajes si el usuario lo pide. Las horas se indican en hora española (HH:MM) junto con la noche (AAAA-MM-DD).
@@ -745,10 +747,105 @@ const TOOLS: Tool[] = [
   },
 
   {
+    name: 'registrar_extras',
+    title: 'Registrar extras de los sobres',
+    description:
+      'Añade a los sobres de Sueldos a quien trabajó y no tiene ficha en la app (extras, porteros, embajadoras, reparto…): una línea por persona y noche, en su sección, con entrada, salida y horas. El precio por hora lo pone el usuario (0 por defecto). Omite las que ya estén (misma noche, sección y nombre).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        extras: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 200,
+          items: {
+            type: 'object',
+            properties: {
+              noche: { ...DATE, description: 'La noche (AAAA-MM-DD): el día en que empieza' },
+              seccion: { type: 'string', enum: WAGE_SECTIONS },
+              nombre: { type: 'string' },
+              entrada: { type: 'string', description: 'HH:MM (opcional si sólo se saben las horas)' },
+              salida: { type: 'string', description: 'HH:MM' },
+              horas: { type: 'number', minimum: 0, description: 'Si no hay entrada y salida' },
+              tarifa_hora: { type: 'number', minimum: 0, description: '€/h; 0 si lo pondrá el usuario' },
+              importe: { type: 'number', minimum: 0, description: 'Importe fijo de la noche, en lugar de horas × precio' },
+              notas: { type: 'string' },
+            },
+            required: ['noche', 'seccion', 'nombre'],
+          },
+        },
+      },
+      required: ['extras'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    run: async ({ db }, a) => {
+      const raw = a.extras;
+      if (!Array.isArray(raw) || !raw.length) throw new UserError('"extras" debe ser una lista con al menos una línea');
+      if (raw.length > 200) throw new UserError('Máximo 200 líneas por llamada');
+      const clock = (r: Args, key: string) => {
+        const v = str(r, key);
+        if (v && !/^\d{1,2}:\d{2}$/.test(v)) throw new UserError(`"${key}" debe ser HH:MM`);
+        return v ? v.padStart(5, '0') : null;
+      };
+      const minutes = (hhmm: string) => {
+        const [h, m] = hhmm.split(':').map(Number);
+        return h * 60 + m;
+      };
+      // Si la salida es anterior a la entrada, es del día siguiente (23:00–05:30, 00:00–06:30)
+      const span = (from: string, to: string) => {
+        const d = minutes(to) - minutes(from);
+        return (d > 0 ? d : d + 24 * 60) / 60;
+      };
+      const errors: string[] = [];
+      const rows: Record<string, unknown>[] = [];
+      raw.forEach((c, i) => {
+        try {
+          if (!c || typeof c !== 'object') throw new UserError('no es un objeto');
+          const r = c as Args;
+          const section = str(r, 'seccion', { required: true })!;
+          if (!WAGE_SECTIONS.includes(section)) throw new UserError(`"seccion" debe ser una de: ${WAGE_SECTIONS.join(', ')}`);
+          const inT = clock(r, 'entrada');
+          const outT = clock(r, 'salida');
+          const amount = r.importe == null ? null : Number(r.importe);
+          if (amount != null && (!Number.isFinite(amount) || amount < 0)) throw new UserError('"importe" debe ser un importe en euros');
+          const hours = inT && outT ? span(inT, outT) : Number(r.horas ?? 0);
+          if (!Number.isFinite(hours) || hours < 0 || hours > 24) throw new UserError('"horas" no es válido');
+          if (!hours && amount == null) throw new UserError('indica entrada y salida, las horas o un importe');
+          const rate = Number(r.tarifa_hora ?? 0);
+          if (!Number.isFinite(rate) || rate < 0) throw new UserError('"tarifa_hora" debe ser 0 o más');
+          rows.push({
+            date: date(r, 'noche', true),
+            section,
+            name: str(r, 'nombre', { required: true, max: 120 }),
+            clock_in: inT,
+            clock_out: outT,
+            hours: Math.round(hours * 100) / 100,
+            rate: Math.round(rate * 100) / 100,
+            amount,
+            notes: str(r, 'notas', { max: 300 }),
+          });
+        } catch (e) {
+          errors.push(`Línea ${i + 1}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      });
+      if (errors.length) throw new UserError(`No se ha guardado nada. Corrige estas líneas:\n${errors.join('\n')}`);
+      const dates = [...new Set(rows.map((x) => x.date as string))];
+      const existing = check(await db.from('wage_extras').select('date, section, name').in('date', dates), 'No se pudieron leer los extras') as Record<string, unknown>[];
+      const key = (x: Record<string, unknown>) => `${x.date}|${x.section}|${norm(String(x.name))}`;
+      const seen = new Set(existing.map(key));
+      const fresh = rows.filter((x) => !seen.has(key(x)));
+      const saved = fresh.length
+        ? (check(await db.from('wage_extras').insert(fresh).select('id, date, section, name, clock_in, clock_out, hours, rate, amount'), 'No se pudieron guardar') as Record<string, unknown>[])
+        : [];
+      return { guardados: saved.length, omitidos_por_duplicados: rows.length - fresh.length, extras: saved };
+    },
+  },
+
+  {
     name: 'crear_trabajador',
     title: 'Dar de alta un trabajador',
     description:
-      'Da de alta a un trabajador sin cuenta en la app (no ficha desde el móvil): nombre, puesto, departamento y precio por hora. Úsalo sólo si el usuario lo pide, p. ej. para quien está en la hoja de firmas y no en la app. Comprueba antes con listar_personal que no existe.',
+      'Da de alta a un trabajador sin cuenta en la app (no ficha desde el móvil): nombre, puesto, departamento y precio por hora. Úsalo sólo si el usuario pide crearle una ficha; para quien sólo viene alguna noche usa registrar_extras. Comprueba antes con listar_personal que no existe.',
     inputSchema: {
       type: 'object',
       properties: {

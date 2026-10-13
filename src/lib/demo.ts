@@ -52,6 +52,7 @@ export type TableName =
   | 'rrpp_ticket_sales'
   | 'fourvenues_rrpp_nights'
   | 'suppliers'
+  | 'wage_extras'
   | 'claude_connectors'
   | 'messages'
   | 'message_recipients'
