@@ -15,6 +15,7 @@ import Finance from './pages/admin/Finance';
 import Invoices from './pages/admin/Invoices';
 import Messages from './pages/admin/Messages';
 import Payroll from './pages/admin/Payroll';
+import Wages from './pages/admin/Wages';
 import Requests from './pages/admin/Requests';
 import Schedule from './pages/admin/Schedule';
 import Settings from './pages/admin/Settings';
@@ -113,6 +114,7 @@ export default function App() {
                 <Route path="finanzas" element={<Finance />} />
                 <Route path="facturas" element={<Invoices />} />
                 <Route path="nominas" element={<Payroll />} />
+                <Route path="sueldos" element={<Wages />} />
                 <Route path="solicitudes" element={<Requests />} />
                 <Route path="ajustes" element={<Settings />} />
               </Route>

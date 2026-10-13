@@ -16,6 +16,7 @@ Aplicación web (escritorio y móvil) para gestionar el personal y las finanzas 
 - **Proveedores** (en Facturas) — cada proveedor tiene su apartado con sus facturas, total y pendiente de pago, y su ficha (CIF, contacto, categoría habitual).
 - **Fourvenues** (en Ajustes) — trae las noches, sus entradas vendidas, los QR gratis de las listas, los reservados y lo vendido por cada RRPP para sus comisiones (no apunta ingresos en Finanzas). Ver más abajo.
 - **Conector de Claude** (en Ajustes) — pásale a Claude extractos, tickets o facturas y los registra en Finanzas y Facturas, creando los proveedores que falten. Ver más abajo.
+- **Sueldos** — los sobres de cada semana: por sección (camareras, bandejas, DJ y luces, embajadoras y, si hay, otros y porteros), las horas y lo ganado de cada persona cada noche y en la semana. Se descargan en **Excel**, con el formato de la plantilla de sobres (H ENTRADA · H SALIDA · H TOTAL · V HORAS · TOTAL por noche y TOTAL SEMANA, con fórmulas para retocarlo; *Gastos extras* con los gastos de DJ / artistas de esas noches y *Porteros* con el IVA), o en **PDF** con el mismo aspecto.
 - **Nóminas** — devengado por empleado según fichajes, pagado y pendiente; registro de pagos.
 - **Solicitudes** — aprobar o rechazar vacaciones, ausencias y cambios de turno.
 - **Mensajes** — avisos y tareas para una persona, un grupo (camareros de barra, de bandeja, DJ / técnicos, RRPP) o todo el equipo; se ve quién los ha leído y quién acepta o rechaza cada tarea, y se contesta a sus respuestas (conversación privada con cada persona).
