@@ -5,14 +5,14 @@ import { useAuth } from '../../auth';
 import { EmployeeForm, EntryForm } from '../../components/forms';
 import { RrppCommissionCard } from '../../components/rrpp-commissions';
 import { useFeedback } from '../../components/overlay';
-import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, ListRow, LiveDot, Loading, Select, StatCard, Switch } from '../../components/ui';
+import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorBox, ListRow, LiveDot, Loading, Segmented, Select, StatCard, Switch } from '../../components/ui';
 import { useLoad, useNow } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
 import { CONTRACTS, DEPARTMENTS, ROLES, SHIFT_STATUS } from '../../lib/constants';
 import { addDays, businessDate, businessStart, businessToday, isoDate, makePeriod, periodRange } from '../../lib/dates';
 import { fmtDate, fmtDateLong, fmtDuration, fmtHours, fmtMoney, fmtTime, fmtShiftTimes } from '../../lib/format';
 import type { Role, TimeEntry } from '../../lib/types';
-import { entryCost, entryHours, fullName, sumBy } from '../../lib/utils';
+import { cx, entryCost, entryHours, fullName, groupBy, sumBy } from '../../lib/utils';
 
 export default function EmployeeDetail() {
   const { id = '' } = useParams();
@@ -23,6 +23,8 @@ export default function EmployeeDetail() {
   const [editing, setEditing] = useState(false);
   const [entryModal, setEntryModal] = useState<{ entry: TimeEntry | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Noche que se está cambiando de residente a invitado (o al revés)
+  const [switching, setSwitching] = useState<string | null>(null);
   const month = useMemo(() => makePeriod('month'), []);
 
   const { data, loading, error, reload } = useLoad(async () => {
@@ -50,6 +52,31 @@ export default function EmployeeDetail() {
   const open = data.entries.find((x) => !x.clock_out);
   // RRPP: por el perfil de su cuenta o, sin cuenta, por ser de relaciones públicas
   const isRrpp = data.profile ? data.profile.role === 'rrpp' : e.department === 'relaciones';
+  // DJ / técnico: igual, por su cuenta o por ser de cabina
+  const isTech = data.profile ? data.profile.role === 'tech' : e.department === 'cabina';
+  // Noches que ha venido (de la más reciente a la más antigua), para marcar si vino de residente o de invitado
+  const workedNights = isTech
+    ? Object.entries(groupBy(data.entries, (x) => businessDate(x.clock_in))).sort(([a], [b]) => b.localeCompare(a))
+    : [];
+
+  async function setNightGuest(night: string, entries: TimeEntry[], guest: boolean) {
+    if (guest && e.guest_rate == null) {
+      toast.error('Pon primero su tarifa como invitado en Editar');
+      setEditing(true);
+      return;
+    }
+    const rate = guest ? e.guest_rate! : e.hourly_rate;
+    setSwitching(night);
+    try {
+      await Promise.all(entries.map((x) => api.timeEntries.update(x.id, { guest, hourly_rate: rate })));
+      toast.success(`${fmtDateLong(night)}: ${guest ? 'invitado' : 'residente'} · ${fmtMoney(rate)}/h`);
+      reload();
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSwitching(null);
+    }
+  }
 
   async function toggleClock() {
     setBusy(true);
@@ -159,7 +186,11 @@ export default function EmployeeDetail() {
       </Card>
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
-        <StatCard label="Coste por hora" value={fmtMoney(e.hourly_rate)} />
+        <StatCard
+          label={isTech ? 'Coste por hora · residente' : 'Coste por hora'}
+          value={fmtMoney(e.hourly_rate)}
+          sub={isTech ? (e.guest_rate != null ? `Invitado: ${fmtMoney(e.guest_rate)}/h` : 'Sin tarifa de invitado') : undefined}
+        />
         <StatCard label={`Horas · ${month.label}`} value={fmtHours(hours)} />
         <StatCard label={`Coste · ${month.label}`} value={fmtMoney(cost)} tone="purple" />
         <StatCard label="Noches trabajadas" value={nights} sub={nights ? `${fmtHours(hours / nights)} de media` : undefined} />
@@ -188,6 +219,7 @@ export default function EmployeeDetail() {
                       {fmtTime(x.clock_in)} – {x.clock_out ? fmtTime(x.clock_out) : 'en curso'}
                       {x.break_minutes > 0 && ` · pausa ${x.break_minutes} min`}
                       {x.source === 'manual' && ' · manual'}
+                      {x.guest && ' · invitado'}
                     </>
                   }
                   trailing={
@@ -287,13 +319,53 @@ export default function EmployeeDetail() {
         </div>
       </div>
 
+      {isTech && (
+        <Card className="mt-4 lg:mt-5">
+          <CardHeader
+            title="Noches: residente o invitado"
+            subtitle={
+              e.guest_rate != null
+                ? `Residente ${fmtMoney(e.hourly_rate)}/h · invitado ${fmtMoney(e.guest_rate)}/h · últimos 45 días`
+                : 'Para marcar noches como invitado, pon su tarifa de invitado en Editar'
+            }
+          />
+          {workedNights.length ? (
+            <div className="divide-y divide-line pb-2">
+              {workedNights.map(([night, entries]) => {
+                const guest = entries.every((x) => x.guest);
+                return (
+                  <div key={night} className={cx('flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3', switching === night && 'opacity-50')}>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[15px] font-medium">{fmtDateLong(night)}</div>
+                      <div className="tabular text-[13px] text-ink-2">
+                        {fmtHours(sumBy(entries, (x) => entryHours(x, now)))} · {fmtMoney(sumBy(entries, (x) => entryCost(x, now)))}
+                      </div>
+                    </div>
+                    <Segmented
+                      value={guest ? 'guest' : 'resident'}
+                      onChange={(v) => switching == null && (v === 'guest') !== guest && setNightGuest(night, entries, v === 'guest')}
+                      options={[
+                        { value: 'resident', label: 'Residente' },
+                        { value: 'guest', label: 'Invitado' },
+                      ]}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="px-5 pb-5 text-[14px] text-ink-2">No ha venido ninguna noche en los últimos 45 días.</p>
+          )}
+        </Card>
+      )}
+
       {isRrpp && (
         <div className="mt-4 lg:mt-5">
           <RrppCommissionCard employee={e} />
         </div>
       )}
 
-      <EmployeeForm open={editing} onClose={() => setEditing(false)} employee={e} onSaved={reload} rrpp={isRrpp} />
+      <EmployeeForm open={editing} onClose={() => setEditing(false)} employee={e} onSaved={reload} rrpp={isRrpp} tech={isTech} />
       <EntryForm
         open={!!entryModal}
         onClose={() => setEntryModal(null)}

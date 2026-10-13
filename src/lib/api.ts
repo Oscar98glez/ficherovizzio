@@ -207,7 +207,7 @@ async function myEmployee(userId: string): Promise<Employee | null> {
     if (error && !missingView(error)) throw fail(error);
     emp = error ? (await sbRepo<Employee>('employees').list({ eq: { user_id: userId } }))[0] ?? null : (data as Employee | null);
   }
-  return emp && { ...withoutRate(emp), notes: null };
+  return emp && { ...withoutRate(emp), guest_rate: null, notes: null };
 }
 
 /** Lo ganado en un fichaje cerrado (null mientras siga abierto) */

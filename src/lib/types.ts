@@ -55,6 +55,8 @@ export interface Employee {
   created_at: string;
   /** Gestiona todos los reservados (el hoster): puede modificar cualquier reserva */
   manages_reservations?: boolean;
+  /** DJ / técnicos: tarifa (€/h) las noches que viene de invitado (null: no tiene) */
+  guest_rate?: number | null;
 }
 
 export interface ClubEvent {
@@ -89,6 +91,8 @@ export interface TimeEntry {
   source: 'app' | 'manual';
   notes: string | null;
   created_at: string;
+  /** DJ / técnicos: esa noche vino de invitado (su tarifa es la de invitado) */
+  guest?: boolean;
   /** Dónde se fichó desde la app (null: sin ubicación). distance: metros al local; outside: fuera del local */
   clock_in_lat?: number | null;
   clock_in_lng?: number | null;
