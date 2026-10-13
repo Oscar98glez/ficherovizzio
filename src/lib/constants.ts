@@ -172,13 +172,20 @@ export const RESERVATION_ORIGINS: Record<ReservationOrigin, string> = {
   empresa: 'Empresa',
 };
 
-/** Estados de una reserva (las canceladas y "no vino" dejan el reservado libre) */
+/**
+ * Estados de una reserva. Las canceladas y "No vino" no cuentan; las de "Se ha ido" cuentan (coste,
+ * comisiones) pero, como las anteriores, dejan el reservado libre para otro cliente.
+ */
 export const RESERVATION_STATUS: Record<ReservationStatus, { label: string; tone: Tone }> = {
   pending: { label: 'Pendiente', tone: 'orange' },
   confirmed: { label: 'Confirmada', tone: 'green' },
   arrived: { label: 'Ha llegado', tone: 'purple' },
+  left: { label: 'Se ha ido', tone: 'teal' },
   cancelled: { label: 'Cancelada', tone: 'gray' },
   no_show: { label: 'No vino', tone: 'red' },
 };
 
 export const isActiveReservation = (r: { status: ReservationStatus }) => r.status !== 'cancelled' && r.status !== 'no_show';
+
+/** La reserva tiene el reservado ocupado (no está cancelada, ni "No vino", ni "Se ha ido") */
+export const occupiesTable = (r: { status: ReservationStatus }) => isActiveReservation(r) && r.status !== 'left';

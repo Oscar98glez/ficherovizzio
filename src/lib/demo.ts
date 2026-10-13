@@ -4,7 +4,7 @@
  */
 import type { Query, Repo } from './api';
 import { CLUB_TABLES } from './club-map';
-import { PAYROLL_CATEGORY } from './constants';
+import { occupiesTable, PAYROLL_CATEGORY } from './constants';
 import { distanceM, isOutside, type Position } from './geo';
 import { menuPrice } from './menu';
 import { addDays, addMonths, businessDate, businessToday, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
@@ -248,11 +248,10 @@ function reservationRules(res: Reservation, isNew: boolean): Reservation {
   res.rrpp_name = res.rrpp_origin ? (res.rrpp_origin === 'empresa' ? 'Empresa' : 'Otros') : nameOf(res.rrpp_id);
   res.host_rrpp_name = nameOf(res.host_rrpp_id ?? null);
   res.updated_at = new Date().toISOString();
-  const active = (x: Reservation) => x.status !== 'cancelled' && x.status !== 'no_show';
   if (
     res.table_id &&
-    active(res) &&
-    (d.reservations as unknown as Reservation[]).some((x) => x.id !== res.id && x.table_id === res.table_id && x.date === res.date && active(x))
+    occupiesTable(res) &&
+    (d.reservations as unknown as Reservation[]).some((x) => x.id !== res.id && x.table_id === res.table_id && x.date === res.date && occupiesTable(x))
   )
     throw new Error('reservations_table_night');
   return res;

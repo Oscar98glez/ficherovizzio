@@ -8,6 +8,7 @@ const STATUS_COLOR: Record<ReservationStatus, string> = {
   pending: 'var(--orange)',
   confirmed: 'var(--green)',
   arrived: 'var(--purple)',
+  left: 'var(--teal)',
   cancelled: 'var(--ink-3)',
   no_show: 'var(--red)',
 };

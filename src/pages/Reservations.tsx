@@ -3,7 +3,15 @@ import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Coins, Plus, Settings2, Sofa, Users } from 'lucide-react';
 import { useAuth } from '../auth';
 import { ClubMap } from '../components/ClubMap';
-import { allBottles, itemsText, ReservationForm, VipTablesManager } from '../components/reservation-forms';
+import {
+  allBottles,
+  itemsText,
+  NewOrderModal,
+  OccupiedTableModal,
+  ReservationForm,
+  VipTablesManager,
+  type OccupiedChoice,
+} from '../components/reservation-forms';
 import {
   Badge,
   Button,
@@ -23,7 +31,7 @@ import {
 import { useLoad } from '../hooks';
 import { api } from '../lib/api';
 import { hhmm } from '../lib/availability';
-import { isActiveReservation, RESERVATION_STATUS } from '../lib/constants';
+import { isActiveReservation, occupiesTable, RESERVATION_STATUS } from '../lib/constants';
 import { addDays, businessToday, isoDate, parseDate } from '../lib/dates';
 import { fmtDateFull, fmtMoneyExact } from '../lib/format';
 import type { Reservation, VipTable } from '../lib/types';
@@ -32,10 +40,13 @@ import { cx, groupBy, sumBy } from '../lib/utils';
 type Filter = 'all' | 'mine';
 
 const byName = (a: VipTable, b: VipTable) => a.sort - b.sort || a.name.localeCompare(b.name, 'es', { numeric: true });
-/** Las reservas activas primero, por hora de llegada (la madrugada va detrás de la noche) */
+/**
+ * Primero las que ocupan su reservado, luego las de "Se ha ido" y al final las canceladas y "No vino";
+ * cada grupo por hora de llegada (la madrugada va detrás de la noche)
+ */
 const arrivalKey = (r: Reservation) => {
   const t = hhmm(r.arrival_time);
-  return `${isActiveReservation(r) ? 0 : 1}${t ? (t < '06:00' ? `1${t}` : `0${t}`) : '2'}${r.customer_name}`;
+  return `${occupiesTable(r) ? 0 : isActiveReservation(r) ? 1 : 2}${t ? (t < '06:00' ? `1${t}` : `0${t}`) : '2'}${r.customer_name}`;
 };
 
 export default function Reservations() {
@@ -54,7 +65,12 @@ export default function Reservations() {
   const [form, setForm] = useState<{
     reservation?: Reservation;
     table?: VipTable;
+    /** Cliente nuevo en un reservado ocupado: la reserva que había pasa a "Se ha ido" */
+    replaces?: Reservation;
   } | null>(null);
+  // Reservado ocupado que se ha pulsado (añadir botellas, cliente nuevo o ver la reserva)
+  const [occupied, setOccupied] = useState<{ table: VipTable; reservation: Reservation } | null>(null);
+  const [ordering, setOrdering] = useState<Reservation | null>(null);
   const [managing, setManaging] = useState(false);
 
   const { data, loading, error, reload } = useLoad(async () => {
@@ -76,7 +92,8 @@ export default function Reservations() {
   const view = useMemo(() => {
     if (!data) return null;
     const active = data.reservations.filter(isActiveReservation);
-    const byTable = new Map(active.filter((r) => r.table_id).map((r) => [r.table_id!, r]));
+    // Las de "Se ha ido" cuentan pero ya no ocupan su reservado
+    const byTable = new Map(active.filter((r) => r.table_id && occupiesTable(r)).map((r) => [r.table_id!, r]));
     const tables = data.tables.filter((t) => t.active || byTable.has(t.id));
     // En el plano van los reservados ubicados; el resto, en tarjetas debajo
     const placed = tables.filter((t) => t.map_x != null && t.map_y != null);
@@ -111,6 +128,20 @@ export default function Reservations() {
       (!!userId && r.created_by === userId) ||
       (!!employee && (r.rrpp_id === employee.id || r.host_rrpp_id === employee.id)));
   const move = (days: number) => setDate(isoDate(addDays(parseDate(date), days)));
+  // Reservado pulsado en el plano o en las tarjetas
+  const selectTable = (t: VipTable, r?: Reservation) => {
+    if (!r) return !readOnly && setForm({ table: t });
+    if (canEdit(r)) setOccupied({ table: t, reservation: r });
+    else setForm({ reservation: r });
+  };
+  const choose = (choice: OccupiedChoice) => {
+    if (!occupied) return;
+    const { table, reservation } = occupied;
+    setOccupied(null);
+    if (choice === 'add') setOrdering(reservation);
+    else if (choice === 'new') setForm({ table, replaces: reservation });
+    else setForm({ reservation });
+  };
 
   return (
     <>
@@ -190,7 +221,7 @@ export default function Reservations() {
                 tables={view.placed}
                 reservationByTable={view.byTable}
                 myEmployeeId={employee?.id ?? null}
-                onSelect={(t, r) => (r ? setForm({ reservation: r }) : !readOnly && setForm({ table: t }))}
+                onSelect={selectTable}
               />
             ) : (
               <EmptyState
@@ -239,7 +270,7 @@ export default function Reservations() {
                     <ListRow
                       key={r.id}
                       onClick={() => setForm({ reservation: r })}
-                      className={cx(!isActiveReservation(r) && 'opacity-55')}
+                      className={cx(!occupiesTable(r) && 'opacity-55')}
                       leading={
                         <div className="tabular w-12 shrink-0 rounded-[10px] bg-fill/70 py-1.5 text-center text-[14px] font-semibold">
                           {hhmm(r.arrival_time) || '—'}
@@ -304,7 +335,7 @@ export default function Reservations() {
                         <button
                           key={t.id}
                           type="button"
-                          onClick={() => (r ? setForm({ reservation: r }) : !readOnly && setForm({ table: t }))}
+                          onClick={() => selectTable(t, r)}
                           className={cx(
                             'card flex min-h-[112px] flex-col items-start p-3.5 text-left transition hover:scale-[1.01] active:scale-[0.99]',
                             r ? 'ring-2 ring-inset' : 'border-dashed',
@@ -358,11 +389,23 @@ export default function Reservations() {
         reservations={data.reservations}
         reservation={form?.reservation}
         table={form?.table}
+        replaces={form?.replaces}
         staff={data.staff}
         canEdit={form?.reservation ? canEdit(form.reservation) : !readOnly}
         myEmployeeId={employee?.id ?? null}
         onSaved={reload}
       />
+      <OccupiedTableModal table={occupied?.table ?? null} reservation={occupied?.reservation ?? null} onChoose={choose} onClose={() => setOccupied(null)} />
+      {ordering && (
+        <NewOrderModal
+          reservation={ordering}
+          onClose={() => setOrdering(null)}
+          onSaved={() => {
+            setOrdering(null);
+            reload();
+          }}
+        />
+      )}
       {isAdmin && <VipTablesManager open={managing} onClose={() => setManaging(false)} tables={data.tables} onSaved={reload} />}
     </>
   );
