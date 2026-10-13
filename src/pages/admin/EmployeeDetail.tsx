@@ -189,7 +189,14 @@ export default function EmployeeDetail() {
         <StatCard
           label={isTech ? 'Coste por hora · residente' : 'Coste por hora'}
           value={fmtMoney(e.hourly_rate)}
-          sub={isTech ? (e.guest_rate != null ? `Invitado: ${fmtMoney(e.guest_rate)}/h` : 'Sin tarifa de invitado') : undefined}
+          sub={
+            [
+              isTech && (e.guest_rate != null ? `Invitado: ${fmtMoney(e.guest_rate)}/h` : 'Sin tarifa de invitado'),
+              e.daily_cap != null && `Máximo ${fmtMoney(e.daily_cap)} por noche`,
+            ]
+              .filter(Boolean)
+              .join(' · ') || undefined
+          }
         />
         <StatCard label={`Horas · ${month.label}`} value={fmtHours(hours)} />
         <StatCard label={`Coste · ${month.label}`} value={fmtMoney(cost)} tone="purple" />
