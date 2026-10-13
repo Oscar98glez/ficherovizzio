@@ -500,6 +500,8 @@ function seed(): DB {
     department,
     contract_type: contract,
     hourly_rate: rate,
+    // El DJ cobra más las noches que viene de invitado
+    guest_rate: department === 'cabina' ? rate + 25 : null,
     hire_date: isoDate(addDays(today, -int(90, 1100))),
     active: first !== 'Hugo',
     photo_url: null,

@@ -50,6 +50,7 @@ interface EmployeeFormState {
   department: Department;
   contract_type: ContractType;
   hourly_rate: string;
+  guest_rate: string;
   hire_date: string;
   color: string;
   active: boolean;
@@ -69,6 +70,7 @@ const toEmployeeForm = (e?: Employee | null): EmployeeFormState => ({
   department: e?.department ?? 'barra',
   contract_type: e?.contract_type ?? 'fijo_discontinuo',
   hourly_rate: e ? String(e.hourly_rate).replace('.', ',') : '',
+  guest_rate: e?.guest_rate != null ? String(e.guest_rate).replace('.', ',') : '',
   hire_date: e?.hire_date ?? isoDate(new Date()),
   color: e?.color ?? EMPLOYEE_COLORS[Math.floor(Math.random() * EMPLOYEE_COLORS.length)],
   active: e?.active ?? true,
@@ -85,6 +87,7 @@ export function EmployeeForm({
   employee,
   onSaved,
   rrpp = false,
+  tech = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -92,6 +95,8 @@ export function EmployeeForm({
   onSaved: (e: Employee) => void;
   /** Es RRPP (por su cuenta): muestra sus comisiones */
   rrpp?: boolean;
+  /** Es DJ / técnico (por su cuenta): muestra su tarifa como invitado */
+  tech?: boolean;
 }) {
   const { toast } = useFeedback();
   const [f, setF] = useState(() => toEmployeeForm(employee));
@@ -124,6 +129,8 @@ export function EmployeeForm({
         department: f.department,
         contract_type: f.contract_type,
         hourly_rate: parseAmount(f.hourly_rate),
+        // Tarifa como invitado: sólo se envía si se muestra o ya tenía una
+        ...(showTech || employee?.guest_rate != null ? { guest_rate: optional(f.guest_rate) } : {}),
         hire_date: f.hire_date || null,
         color: f.color,
         active: f.active,
@@ -148,6 +155,7 @@ export function EmployeeForm({
 
   const name = `${f.first_name} ${f.last_name}`.trim() || '?';
   const showRrpp = rrpp || f.department === 'relaciones';
+  const showTech = tech || f.department === 'cabina';
 
   return (
     <Modal open={open} onClose={onClose} title={employee ? 'Editar empleado' : 'Nuevo empleado'} onSubmit={submit} submitLabel={employee ? 'Guardar' : 'Crear'} saving={saving}>
@@ -231,7 +239,7 @@ export function EmployeeForm({
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <Field label="Coste por hora (€)" className="sm:col-span-1">
+          <Field label={showTech ? 'Coste por hora · residente (€)' : 'Coste por hora (€)'} className="sm:col-span-1">
             <Input inputMode="decimal" placeholder="0,00" value={f.hourly_rate} onChange={(e) => set('hourly_rate', e.target.value)} />
           </Field>
           <Field label="Contrato">
@@ -247,6 +255,15 @@ export function EmployeeForm({
             <Input type="date" value={f.hire_date} onChange={(e) => set('hire_date', e.target.value)} />
           </Field>
         </div>
+
+        {showTech && (
+          <Field
+            label="Coste por hora · invitado (€)"
+            hint="Se aplica las noches que venga de invitado (se marcan en su ficha, en «Noches: residente o invitado»)."
+          >
+            <Input inputMode="decimal" placeholder="Sin tarifa de invitado" value={f.guest_rate} onChange={(e) => set('guest_rate', e.target.value)} />
+          </Field>
+        )}
 
         {showRrpp && (
           <div className="rounded-xl bg-fill/60 p-4">
@@ -313,6 +330,7 @@ export function EntryForm({
     clock_out: entry?.clock_out ? toLocalInput(entry.clock_out) : '',
     break_minutes: String(entry?.break_minutes ?? 0),
     hourly_rate: entry ? String(entry.hourly_rate).replace('.', ',') : String(employees.find((e) => e.id === defaultEmployeeId)?.hourly_rate ?? '').replace('.', ','),
+    guest: !!entry?.guest,
     notes: entry?.notes ?? '',
   });
   const [f, setF] = useState(init);
@@ -323,7 +341,15 @@ export function EntryForm({
 
   const pickEmployee = (id: string) => {
     const emp = employees.find((e) => e.id === id);
-    setF((s) => ({ ...s, employee_id: id, hourly_rate: emp ? String(emp.hourly_rate).replace('.', ',') : s.hourly_rate }));
+    setF((s) => ({ ...s, employee_id: id, guest: false, hourly_rate: emp ? String(emp.hourly_rate).replace('.', ',') : s.hourly_rate }));
+  };
+  // DJ / técnicos: residente o invitado (cada uno con su tarifa)
+  const emp = employees.find((e) => e.id === f.employee_id);
+  const canBeGuest = !!emp && (emp.department === 'cabina' || emp.guest_rate != null || f.guest);
+  const setGuest = (guest: boolean) => {
+    if (!emp) return;
+    if (guest && emp.guest_rate == null) return toast.error(`${fullName(emp)} no tiene tarifa de invitado: ponla en su ficha (Editar)`);
+    setF((s) => ({ ...s, guest, hourly_rate: String(guest ? emp.guest_rate : emp.hourly_rate).replace('.', ',') }));
   };
 
   const preview = useMemo(() => {
@@ -349,6 +375,7 @@ export function EntryForm({
         clock_out: f.clock_out ? fromLocalInput(f.clock_out) : null,
         break_minutes: Math.max(0, Math.round(Number(f.break_minutes) || 0)),
         hourly_rate: parseAmount(f.hourly_rate),
+        ...(canBeGuest ? { guest: f.guest } : {}),
         notes: f.notes.trim() || null,
       };
       if (entry) await api.timeEntries.update(entry.id, values);
@@ -395,6 +422,19 @@ export function EntryForm({
             ))}
           </Select>
         </Field>
+        {canBeGuest && (
+          <Field label="Vino de">
+            <Segmented
+              full
+              value={f.guest ? 'guest' : 'resident'}
+              onChange={(v) => setGuest(v === 'guest')}
+              options={[
+                { value: 'resident', label: `Residente · ${fmtMoney(emp!.hourly_rate)}/h` },
+                { value: 'guest', label: emp!.guest_rate != null ? `Invitado · ${fmtMoney(emp!.guest_rate)}/h` : 'Invitado' },
+              ]}
+            />
+          </Field>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Entrada">
             <Input type="datetime-local" value={f.clock_in} onChange={(e) => setF({ ...f, clock_in: e.target.value })} required />
