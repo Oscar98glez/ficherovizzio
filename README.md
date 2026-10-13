@@ -50,6 +50,7 @@ El esquema está en `supabase/migrations/`. **Cada push a `main` aplica las migr
 2. El administrador da de alta a cada empleado en *Personal* con su email.
 3. El empleado se registra en `/registro` con ese mismo email y queda vinculado a su ficha automáticamente.
 4. Cualquier otra persona puede registrarse también: se le crea una ficha de **Camarero/a** con tarifa 0 €/h (en Personal aparece como "falta tarifa" para que el administrador la complete).
+5. Quien no tiene cuenta (extras, porteros, reparto…) puede tener ficha sin email: se da de alta en *Personal* o, desde la hoja de firmas, con el conector de Claude (`crear_trabajador`). Si se le da de alta sin precio por hora, al ponérselo después sus fichajes a 0 € pasan al precio nuevo.
 
 ### Enlaces de los correos (cambiar la contraseña, confirmar la cuenta)
 Llevan a la *Site URL* de Supabase. La acción *Configurar enlaces de los correos de Supabase* (`.github/workflows/supabase-auth-urls.yml`) la pone en `https://ficherovizzio.vercel.app` y añade la app a las *Redirect URLs*. Si la app cambia de dirección, crea la variable del repositorio `APP_URL` con la nueva y lanza la acción a mano marcando "aplicar".

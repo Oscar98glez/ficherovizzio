@@ -143,7 +143,16 @@ export function EmployeeForm({
         ...(f.photo_url !== (employee?.photo_url ?? null) ? { photo_url: f.photo_url } : {}),
       };
       const saved = employee ? await api.employees.update(employee.id, values) : await api.employees.create(values);
-      toast.success(employee ? 'Cambios guardados' : 'Empleado creado');
+      // Si no tenía precio por hora, sus fichajes (que se guardaron a 0 €) pasan al precio nuevo
+      let repriced = 0;
+      if (employee && !employee.hourly_rate && values.hourly_rate) {
+        const unpriced = await api.timeEntries.list({ eq: { employee_id: employee.id, hourly_rate: 0 } });
+        await Promise.all(unpriced.map((x) => api.timeEntries.update(x.id, { hourly_rate: values.hourly_rate })));
+        repriced = unpriced.length;
+      }
+      toast.success(
+        employee ? (repriced ? `Cambios guardados · ${repriced} fichaje${repriced === 1 ? '' : 's'} con el precio nuevo` : 'Cambios guardados') : 'Empleado creado',
+      );
       onSaved(saved);
       onClose();
     } catch (e) {

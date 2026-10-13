@@ -46,6 +46,7 @@ const EXPENSE_CATEGORIES = [
   'Otros gastos',
 ];
 const METHODS = ['efectivo', 'tarjeta', 'transferencia', 'bizum', 'otro'];
+const DEPARTMENTS = ['direccion', 'barra', 'sala', 'seguridad', 'cabina', 'relaciones', 'taquilla', 'guardarropa', 'limpieza'];
 
 const INSTRUCTIONS = `Conector de la app Vizzio (discoteca): Finanzas, Facturas y Proveedores. Todo en español.
 
@@ -65,7 +66,7 @@ FACTURAS Y PROVEEDORES
 FICHAJES (hoja de firmas)
 - Cuando el usuario pase una hoja de firmas (PDF o foto), léela: por cada persona, nombre, noche, hora de entrada, hora de salida y descanso si lo hay.
 - Usa listar_personal para emparejar cada nombre de la hoja con su ficha (pueden venir con apodo, solo nombre o con faltas de ortografía). Si dudas entre dos fichas, pregunta.
-- Quien no esté en la app NO se registra en ningún sitio: no se crea su ficha ni sus fichajes. Solo dile al usuario quiénes eran.
+- Quien no esté en la app no se registra salvo que el usuario lo pida: dile quiénes eran. Si te pide añadirlos, pregúntale antes el precio por hora de cada uno (o si lo pondrá él en la app) y dalos de alta con crear_trabajador (ficha sin cuenta: sólo nombre, puesto y precio por hora); después crea sus fichajes con corregir_fichajes.
 - Usa ver_fichajes_noche para ver lo fichado esa noche y compáralo con la hoja. La noche va de 06:00 a 06:00: una salida a las 05:30 es de la noche anterior.
 - Enséñale una tabla con las diferencias (persona, app y hoja) antes de cambiar nada, salvo que te haya dicho que corrijas directamente. Por defecto, una diferencia de 10 minutos o menos se da por buena.
 - Corrige con corregir_fichajes: modifica la entrada/salida del fichaje que está mal, crea el fichaje si la persona está en la hoja pero no fichó, y solo borra fichajes si el usuario lo pide. Las horas se indican en hora española (HH:MM) junto con la noche (AAAA-MM-DD).
@@ -723,7 +724,7 @@ const TOOLS: Tool[] = [
     },
     annotations: READ_ONLY,
     run: async ({ db }, a) => {
-      let q = db.from('employees').select('id, first_name, last_name, position, department, active, email');
+      let q = db.from('employees').select('id, first_name, last_name, position, department, active, email, user_id, hourly_rate');
       if (a.incluir_inactivos !== true) q = q.eq('active', true);
       const all = check(await q.order('first_name'), 'No se pudo leer el personal') as Record<string, unknown>[];
       const t = str(a, 'texto');
@@ -736,7 +737,65 @@ const TOOLS: Tool[] = [
           puesto: e.position,
           departamento: e.department,
           activo: e.active,
+          con_cuenta: !!e.user_id,
+          tarifa_hora: Number(e.hourly_rate ?? 0),
         })),
+      };
+    },
+  },
+
+  {
+    name: 'crear_trabajador',
+    title: 'Dar de alta un trabajador',
+    description:
+      'Da de alta a un trabajador sin cuenta en la app (no ficha desde el móvil): nombre, puesto, departamento y precio por hora. Úsalo sólo si el usuario lo pide, p. ej. para quien está en la hoja de firmas y no en la app. Comprueba antes con listar_personal que no existe.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        nombre: { type: 'string' },
+        apellidos: { type: 'string' },
+        puesto: { type: 'string', description: 'P. ej. Camarero/a, Camarero/a de bandeja, Portero/a, DJ / Técnico, Azafata, Reparto' },
+        departamento: { type: 'string', enum: DEPARTMENTS },
+        tarifa_hora: { type: 'number', minimum: 0, description: 'Precio por hora (€). 0 si lo pondrá el usuario en la app' },
+        notas: { type: 'string' },
+      },
+      required: ['nombre', 'departamento', 'tarifa_hora'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    run: async ({ db }, a) => {
+      const first = str(a, 'nombre', { required: true, max: 80 })!;
+      const last = str(a, 'apellidos', { max: 120 }) ?? '';
+      const dept = str(a, 'departamento', { required: true })!;
+      if (!DEPARTMENTS.includes(dept)) throw new UserError(`"departamento" debe ser uno de: ${DEPARTMENTS.join(', ')}`);
+      const rate = Number(a.tarifa_hora);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 1000) throw new UserError('"tarifa_hora" debe ser un importe en euros (0 o más)');
+      const same = (check(await db.from('employees').select('id, first_name, last_name'), 'No se pudo leer el personal') as Record<string, unknown>[]).find(
+        (e) => norm(`${e.first_name} ${e.last_name ?? ''}`.trim()) === norm(`${first} ${last}`.trim()),
+      );
+      if (same) throw new UserError(`Ya existe ${`${same.first_name} ${same.last_name ?? ''}`.trim()} (id ${same.id}): usa esa ficha`);
+      const e = check(
+        await db
+          .from('employees')
+          .insert({
+            first_name: first,
+            last_name: last,
+            position: str(a, 'puesto', { max: 80 }) ?? 'Extra',
+            department: dept,
+            contract_type: 'extra',
+            hourly_rate: Math.round(rate * 100) / 100,
+            notes: str(a, 'notas', { max: 500 }) ?? 'Dado de alta desde la hoja de firmas (sin cuenta)',
+            active: true,
+          })
+          .select('id, first_name, last_name, position, department, hourly_rate')
+          .single(),
+        'No se pudo dar de alta',
+      ) as Record<string, unknown>;
+      return {
+        id: e.id,
+        nombre: `${e.first_name} ${e.last_name ?? ''}`.trim(),
+        puesto: e.position,
+        departamento: e.department,
+        tarifa_hora: Number(e.hourly_rate),
       };
     },
   },
@@ -983,7 +1042,7 @@ const TOOLS: Tool[] = [
           const employeeId = str(r, 'empleado_id');
           if (!employeeId) throw new UserError('indica "fichaje_id" para modificar uno, o "empleado_id" para crearlo');
           const emp = employees.get(employeeId);
-          if (!emp) throw new UserError(`no existe ningún trabajador con id ${employeeId} (no se crean trabajadores nuevos)`);
+          if (!emp) throw new UserError(`no existe ningún trabajador con id ${employeeId} (dalo de alta antes con crear_trabajador)`);
           const night = date(r, 'noche', true)!;
           const inMs = nightTime(night, str(r, 'entrada', { required: true })!, 'entrada');
           const outMs = nightOut(night, str(r, 'salida', { required: true })!, inMs);
