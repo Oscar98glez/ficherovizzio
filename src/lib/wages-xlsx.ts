@@ -120,7 +120,7 @@ export async function renderWagesXlsx(s: WageSheet) {
       const c = row?.cells[d.date];
       const inRef = `${L(cIn(i))}${r}`;
       const outRef = `${L(cOut(i))}${r}`;
-      if (c) {
+      if (c?.clockIn) {
         cell(r, cIn(i)).value = timeOfDay(c.clockIn);
         if (c.clockOut) cell(r, cOut(i)).value = timeOfDay(c.clockOut);
       }
@@ -144,7 +144,8 @@ export async function renderWagesXlsx(s: WageSheet) {
       const amount = c?.amount ?? 0;
       week += amount;
       const t = cell(r, cTotal(i));
-      t.value = { formula: `${L(cHours(i))}${r}*24*${L(cRate(i))}${r}`, result: amount };
+      // Importe fijo (extras): va tal cual, no es horas × precio
+      t.value = c?.fixed ? amount : { formula: `${L(cHours(i))}${r}*24*${L(cRate(i))}${r}`, result: amount };
       t.numFmt = MONEY;
       t.font = { name: SERIF, size: 9 };
     });
@@ -192,29 +193,15 @@ export async function renderWagesXlsx(s: WageSheet) {
   totalRow(staffFrom, r, true, { days: sumDays(staff), week: Math.round(staff.reduce((a, x) => a + x.amount, 0) * 100) / 100 });
   r += 2;
 
-  // ---------- Gastos extras ----------
+  // ---------- Gastos extras (para rellenar a mano: lo pagado de la caja no va en los sobres) ----------
   dayHeader();
   titleRow('GASTOS EXTRAS', false);
   const extrasFrom = r + 1;
-  const extraRows = Math.max(6, s.extras.length);
-  for (let k = 0; k < extraRows; k++) {
+  for (let k = 0; k < 6; k++) {
     r++;
     boxed.add(r);
-    const x = s.extras[k];
-    if (!x) continue;
-    cell(r, 1).value = x.description;
-    font(r, 1, {});
-    const i = s.days.findIndex((d) => d.date === x.date);
-    const t = cell(r, cTotal(i));
-    t.value = x.amount;
-    t.numFmt = MONEY;
-    t.font = { name: SERIF, size: 9 };
-    const w = cell(r, cWeek);
-    w.value = { formula: `SUM(${s.days.map((_, j) => `${L(cTotal(j))}${r}`).join(',')})`, result: x.amount };
-    w.numFmt = MONEY;
-    w.font = { name: SERIF, size: 9 };
   }
-  totalRow(extrasFrom, r, false, { days: [], week: s.extrasAmount });
+  totalRow(extrasFrom, r, false, { days: [], week: 0 });
   r += 2;
 
   // ---------- Porteros ----------

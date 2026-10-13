@@ -6,7 +6,7 @@ import { kickNotifications } from './push';
 import { fmtDistance, type Position } from './geo';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate } from './types';
+import type { Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate, WageExtraEntry } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -313,6 +313,7 @@ export const api = {
   availability: repo<Availability>('availability'),
   invoices: repo<Invoice>('invoices'),
   suppliers: repo<Supplier>('suppliers'),
+  wageExtras: repo<WageExtraEntry>('wage_extras'),
   claudeConnectors: repo<ClaudeConnector>('claude_connectors'),
   vipTables: repo<VipTable>('vip_tables'),
   /** Al apuntar un reservado, la base de datos crea el aviso para los camareros de bandeja y se envía */

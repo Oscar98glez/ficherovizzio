@@ -72,10 +72,10 @@ export async function renderWagesPdf(s: WageSheet) {
     ...s.days.flatMap((d) => {
       const c = row?.cells[d.date];
       return [
-        c ? fmtTime(c.clockIn) : '',
+        c?.clockIn ? fmtTime(c.clockIn) : '',
         c?.clockOut ? fmtTime(c.clockOut) : '',
         hm(c?.hours ?? 0),
-        money(c ? c.rate : rate) + (c?.guest ? ' *' : ''),
+        c?.fixed ? 'fijo' : money(c ? c.rate : rate) + (c?.guest ? ' *' : ''),
         money(c?.amount ?? 0),
       ];
     }),
@@ -126,19 +126,7 @@ export async function renderWagesPdf(s: WageSheet) {
   body.push(totalRow(s.days.map((d) => dayAmount(staff, d.date)), s.amount - s.doormen.reduce((a, x) => a + x.amount, 0)));
   table(dayHead('PERSONAL FIJO', true), body);
 
-  // ---------- Gastos extras ----------
-  if (s.extras.length) {
-    table(dayHead('GASTOS EXTRAS', false), [
-      ...s.extras.map((x): RowInput => [
-        x.description,
-        ...s.days.flatMap((d) => ['', '', '', '', d.date === x.date ? money(x.amount) : '']),
-        money(x.amount),
-      ]),
-      totalRow(null, s.extrasAmount),
-    ]);
-  }
-
-  // ---------- Porteros (sólo si hay personal de seguridad con fichajes) ----------
+  // ---------- Porteros (sólo si hay porteros esa semana) ----------
   if (s.doormen.length) {
     const base = s.doormen.reduce((a, x) => a + x.amount, 0);
     table(dayHead('PORTEROS', false), [
