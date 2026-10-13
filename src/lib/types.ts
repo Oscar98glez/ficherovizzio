@@ -318,7 +318,7 @@ export interface ReservationOrder {
   mixers: OrderItem[];
 }
 
-export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'cancelled' | 'no_show';
+export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'left' | 'cancelled' | 'no_show';
 
 export interface Reservation {
   id: string;

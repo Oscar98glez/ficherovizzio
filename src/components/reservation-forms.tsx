@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { ChevronLeft, Minus, Plus, PlusCircle, Trash2, X } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight, Eye, Minus, Plus, PlusCircle, Trash2, UserPlus, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { hhmm } from '../lib/availability';
-import { isActiveReservation, RESERVATION_ORIGINS, RESERVATION_STATUS } from '../lib/constants';
+import { occupiesTable, RESERVATION_ORIGINS, RESERVATION_STATUS } from '../lib/constants';
 import { fmtDateFull, fmtMoneyExact, fmtTime } from '../lib/format';
 import { BOTTLE_GROUPS, menuPrice, MIXER_GROUPS, type MenuGroup } from '../lib/menu';
 import { allBottles, allMixers, extraOrdersTotal, itemsTotal, ordersOf } from '../lib/orders';
@@ -68,7 +68,7 @@ function OrdersView({ reservation, onRemove }: { reservation: Reservation; onRem
 }
 
 /** Botellas añadidas a un reservado ya apuntado: van en un pedido nuevo, con sus propios refrescos */
-function NewOrderModal({ reservation, onClose, onSaved }: { reservation: Reservation; onClose: () => void; onSaved: () => void }) {
+export function NewOrderModal({ reservation, onClose, onSaved }: { reservation: Reservation; onClose: () => void; onSaved: () => void }) {
   const { toast } = useFeedback();
   const { profile, employee } = useAuth();
   const [bottles, setBottles] = useState<OrderItem[]>([{ name: '', qty: 1 }]);
@@ -135,6 +135,86 @@ function NewOrderModal({ reservation, onClose, onSaved }: { reservation: Reserva
               <span className="tabular font-semibold">{fmtMoneyExact(total)}</span>
             </div>
           )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Qué hacer al pulsar un reservado ocupado */
+export type OccupiedChoice = 'add' | 'new' | 'edit';
+
+/**
+ * Al pulsar un reservado que ya tiene una reserva: añadir botellas al mismo cliente (pedido nuevo),
+ * apuntar a un cliente nuevo porque el anterior ya se ha ido, o ver la reserva.
+ */
+export function OccupiedTableModal({
+  table,
+  reservation,
+  onChoose,
+  onClose,
+}: {
+  table: VipTable | null;
+  reservation: Reservation | null;
+  onChoose: (choice: OccupiedChoice) => void;
+  onClose: () => void;
+}) {
+  if (!table || !reservation) return null;
+  const st = RESERVATION_STATUS[reservation.status];
+  const bottles = itemsText(allBottles(reservation));
+  const options: { choice: OccupiedChoice; icon: ReactNode; title: string; text: string; strong?: boolean }[] = [
+    {
+      choice: 'add',
+      icon: <PlusCircle />,
+      title: `Añadir botellas a ${reservation.customer_name}`,
+      text: 'Es el mismo cliente: van en un pedido nuevo, con sus refrescos.',
+      strong: true,
+    },
+    {
+      choice: 'new',
+      icon: <UserPlus />,
+      title: 'Cliente nuevo',
+      text: `${reservation.customer_name} ya se ha ido: su reserva queda como «Se ha ido» y el reservado pasa al nuevo cliente.`,
+    },
+    { choice: 'edit', icon: <Eye />, title: 'Ver o editar la reserva', text: 'Cambiar sus datos, su estado o sus pedidos.' },
+  ];
+  return (
+    <Modal open onClose={onClose} title={tableLabel(table)}>
+      <div className="space-y-4">
+        <div className="rounded-2xl bg-fill/60 px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="min-w-0 truncate text-[17px] font-semibold">{reservation.customer_name}</span>
+            <Badge tone={st.tone}>{st.label}</Badge>
+          </div>
+          <div className="mt-0.5 text-[13px] text-ink-2">
+            {[`${reservation.guests} pers.`, hhmm(reservation.arrival_time) && `llegada ${hhmm(reservation.arrival_time)}`, reservation.rrpp_name]
+              .filter(Boolean)
+              .join(' · ')}
+          </div>
+          {bottles && <div className="mt-1 text-[13px] text-ink-2">{bottles}</div>}
+        </div>
+        <div className="px-1 text-[13px] font-medium text-ink-2">Este reservado ya está ocupado. ¿Qué quieres hacer?</div>
+        <div className="space-y-2">
+          {options.map((o) => (
+            <button
+              key={o.choice}
+              type="button"
+              onClick={() => onChoose(o.choice)}
+              className={cx(
+                'flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left transition active:scale-[0.99]',
+                o.strong ? 'bg-accent/10 hover:bg-accent/15' : 'bg-fill/60 hover:bg-fill',
+              )}
+            >
+              <span className={cx('grid h-9 w-9 shrink-0 place-items-center [&>svg]:h-5 [&>svg]:w-5', o.strong ? 'text-accent' : 'text-ink-2')}>
+                {o.icon}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className={cx('block text-[15px] font-semibold', o.strong && 'text-accent')}>{o.title}</span>
+                <span className="block text-[13px] text-ink-2">{o.text}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-ink-3" />
+            </button>
+          ))}
         </div>
       </div>
     </Modal>
@@ -346,6 +426,8 @@ export function ReservationForm({
   reservations,
   reservation,
   table,
+  replaces,
+  onAddBottles,
   staff,
   canEdit,
   myEmployeeId,
@@ -361,6 +443,10 @@ export function ReservationForm({
   reservation?: Reservation | null;
   /** Reservado elegido al crear desde la lista de reservados */
   table?: VipTable | null;
+  /** Cliente nuevo en un reservado ocupado: esta reserva pasa a "Se ha ido" al crear la nueva */
+  replaces?: Reservation | null;
+  /** "Añadir botellas": preguntar antes si es el mismo cliente o uno nuevo (si no, se abre el pedido nuevo) */
+  onAddBottles?: (reservation: Reservation) => void;
   /** RRPP que se pueden elegir como "RRPP" y "RRPP que atiende" */
   staff: StaffOption[];
   canEdit: boolean;
@@ -397,8 +483,14 @@ export function ReservationForm({
   const computed = menuTotal(f);
 
   const taken = new Set(
-    f.date === date ? reservations.filter((r) => r.id !== reservation?.id && r.table_id && isActiveReservation(r)).map((r) => r.table_id!) : [],
+    f.date === date
+      ? reservations
+          .filter((r) => r.id !== reservation?.id && r.id !== replaces?.id && r.table_id && occupiesTable(r))
+          .map((r) => r.table_id!)
+      : [],
   );
+  // El cliente anterior se ha ido sólo si el nuevo se sienta en su mismo reservado esa noche
+  const leaving = !reservation && replaces && f.table_id === replaces.table_id && f.date === replaces.date ? replaces : null;
   const selected = tables.find((t) => t.id === f.table_id);
   const guests = parseInt(f.guests, 10) || 0;
 
@@ -436,8 +528,17 @@ export function ReservationForm({
         host_rrpp_id: f.host_rrpp_id || null,
       };
       if (reservation) await api.reservations.update(reservation.id, values);
-      else await api.reservations.create(values);
-      toast.success(reservation ? 'Reserva actualizada' : 'Reserva creada');
+      else if (leaving) {
+        // Primero se libera el reservado; si la nueva no se puede crear, el anterior vuelve a como estaba
+        await api.reservations.update(leaving.id, { status: 'left' });
+        try {
+          await api.reservations.create(values);
+        } catch (e) {
+          await api.reservations.update(leaving.id, { status: leaving.status }).catch(() => undefined);
+          throw e;
+        }
+      } else await api.reservations.create(values);
+      toast.success(reservation ? 'Reserva actualizada' : leaving ? `Reserva creada · ${leaving.customer_name}: se ha ido` : 'Reserva creada');
       onSaved();
       onClose();
     } catch (e) {
@@ -542,6 +643,12 @@ export function ReservationForm({
       saving={saving}
     >
       <div className="space-y-4">
+        {leaving && (
+          <p className="rounded-xl bg-fill/60 px-3.5 py-2.5 text-[14px] text-ink-2">
+            Al crearla, la reserva de <span className="font-medium text-ink">{leaving.customer_name}</span> queda como «Se ha ido» (sigue
+            contando su coste y las comisiones) y el reservado pasa a este cliente.
+          </p>
+        )}
         <Field label="Cliente">
           <Input
             value={f.customer_name}
@@ -672,13 +779,18 @@ export function ReservationForm({
                 <OrdersView reservation={{ ...reservation, bottles: [], mixers: [] }} onRemove={removeOrder} />
               </>
             )}
-            <Button variant="secondary" className="w-full" icon={<PlusCircle />} onClick={() => setAdding(true)}>
-              Añadir botellas (pedido nuevo)
+            <Button
+              variant="secondary"
+              className="w-full"
+              icon={<PlusCircle />}
+              onClick={() => (onAddBottles ? onAddBottles(reservation) : setAdding(true))}
+            >
+              Añadir botellas
             </Button>
           </div>
         )}
         <Field label="Estado">
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-3 gap-2">
             {(Object.keys(RESERVATION_STATUS) as ReservationStatus[]).map((s) => (
               <button
                 key={s}
