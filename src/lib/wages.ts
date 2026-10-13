@@ -55,6 +55,8 @@ export interface WageCell {
   guest: boolean;
   /** Importe fijo de la noche (extras): no es horas × precio */
   fixed: boolean;
+  /** Máximo por noche (lo ganado es como mucho esto) */
+  cap: number | null;
 }
 
 export interface WageRow {
@@ -121,6 +123,7 @@ function cellOf(entries: TimeEntry[], now: number): WageCell {
     simple: sorted.length === 1 && closed && !sorted[0].break_minutes,
     guest: sorted.some((x) => x.guest),
     fixed: false,
+    cap: sorted.length === 1 && sorted[0].max_amount != null ? Number(sorted[0].max_amount) : null,
   };
 }
 
@@ -165,6 +168,7 @@ function extraCell(list: WageExtraEntry[]): WageCell {
     simple: list.length === 1 && !!x.clock_in && !!x.clock_out && !fixed,
     guest: false,
     fixed,
+    cap: null,
   };
 }
 

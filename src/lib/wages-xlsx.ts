@@ -145,7 +145,9 @@ export async function renderWagesXlsx(s: WageSheet) {
       week += amount;
       const t = cell(r, cTotal(i));
       // Importe fijo (extras): va tal cual, no es horas × precio
-      t.value = c?.fixed ? amount : { formula: `${L(cHours(i))}${r}*24*${L(cRate(i))}${r}`, result: amount };
+      // Con máximo por noche: MIN(horas × precio; máximo)
+      const product = `${L(cHours(i))}${r}*24*${L(cRate(i))}${r}`;
+      t.value = c?.fixed ? amount : { formula: c?.cap != null ? `MIN(${product},${c.cap})` : product, result: amount };
       t.numFmt = MONEY;
       t.font = { name: SERIF, size: 9 };
     });

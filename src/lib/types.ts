@@ -57,6 +57,8 @@ export interface Employee {
   manages_reservations?: boolean;
   /** DJ / técnicos: tarifa (€/h) las noches que viene de invitado (null: no tiene) */
   guest_rate?: number | null;
+  /** Máximo que cobra por noche trabajada (null: sin tope) */
+  daily_cap?: number | null;
 }
 
 export interface ClubEvent {
@@ -93,6 +95,8 @@ export interface TimeEntry {
   created_at: string;
   /** DJ / técnicos: esa noche vino de invitado (su tarifa es la de invitado) */
   guest?: boolean;
+  /** Tope de lo ganado en este fichaje (copiado del máximo por noche de la ficha) */
+  max_amount?: number | null;
   /** Dónde se fichó desde la app (null: sin ubicación). distance: metros al local; outside: fuera del local */
   clock_in_lat?: number | null;
   clock_in_lng?: number | null;

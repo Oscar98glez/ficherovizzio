@@ -75,7 +75,11 @@ export function entryHours(e: Pick<TimeEntry, 'clock_in' | 'clock_out' | 'break_
   return Math.max(0, (end - Date.parse(e.clock_in)) / 3_600_000 - (e.break_minutes || 0) / 60);
 }
 
-export const entryCost = (e: TimeEntry, now = Date.now()) => entryHours(e, now) * (e.hourly_rate || 0);
+/** Lo ganado en un fichaje: horas × tarifa, con el máximo por noche si lo tiene */
+export const entryCost = (e: TimeEntry, now = Date.now()) => {
+  const cost = entryHours(e, now) * (e.hourly_rate || 0);
+  return e.max_amount != null ? Math.min(cost, Number(e.max_amount)) : cost;
+};
 
 /** Horas del turno (0 mientras no tenga salida fichada) */
 export const shiftHours = (s: Pick<Shift, 'start_at' | 'end_at'>) =>

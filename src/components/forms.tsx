@@ -51,6 +51,7 @@ interface EmployeeFormState {
   contract_type: ContractType;
   hourly_rate: string;
   guest_rate: string;
+  daily_cap: string;
   hire_date: string;
   color: string;
   active: boolean;
@@ -71,6 +72,7 @@ const toEmployeeForm = (e?: Employee | null): EmployeeFormState => ({
   contract_type: e?.contract_type ?? 'fijo_discontinuo',
   hourly_rate: e ? String(e.hourly_rate).replace('.', ',') : '',
   guest_rate: e?.guest_rate != null ? String(e.guest_rate).replace('.', ',') : '',
+  daily_cap: e?.daily_cap != null ? String(e.daily_cap).replace('.', ',') : '',
   hire_date: e?.hire_date ?? isoDate(new Date()),
   color: e?.color ?? EMPLOYEE_COLORS[Math.floor(Math.random() * EMPLOYEE_COLORS.length)],
   active: e?.active ?? true,
@@ -131,6 +133,7 @@ export function EmployeeForm({
         hourly_rate: parseAmount(f.hourly_rate),
         // Tarifa como invitado: sólo se envía si se muestra o ya tenía una
         ...(showTech || employee?.guest_rate != null ? { guest_rate: optional(f.guest_rate) } : {}),
+        daily_cap: optional(f.daily_cap),
         hire_date: f.hire_date || null,
         color: f.color,
         active: f.active,
@@ -150,9 +153,19 @@ export function EmployeeForm({
         await Promise.all(unpriced.map((x) => api.timeEntries.update(x.id, { hourly_rate: values.hourly_rate })));
         repriced = unpriced.length;
       }
-      toast.success(
-        employee ? (repriced ? `Cambios guardados · ${repriced} fichaje${repriced === 1 ? '' : 's'} con el precio nuevo` : 'Cambios guardados') : 'Empleado creado',
-      );
+      // El máximo por noche se aplica también a los fichajes que ya tiene
+      let capped = 0;
+      if (employee && (employee.daily_cap ?? null) !== values.daily_cap) {
+        const own = await api.timeEntries.list({ eq: { employee_id: employee.id } });
+        const changed = own.filter((x) => (x.max_amount ?? null) !== values.daily_cap);
+        await Promise.all(changed.map((x) => api.timeEntries.update(x.id, { max_amount: values.daily_cap })));
+        capped = changed.length;
+      }
+      const notes = [
+        repriced && `${repriced} fichaje${repriced === 1 ? '' : 's'} con el precio nuevo`,
+        capped && `máximo por noche en ${capped} fichaje${capped === 1 ? '' : 's'}`,
+      ].filter(Boolean);
+      toast.success(employee ? ['Cambios guardados', ...notes].join(' · ') : 'Empleado creado');
       onSaved(saved);
       onClose();
     } catch (e) {
@@ -265,6 +278,13 @@ export function EmployeeForm({
           </Field>
         </div>
 
+        <Field
+          label="Máximo por noche (€)"
+          hint="Opcional. Lo que cobra como mucho por noche trabajada aunque eche más horas (p. ej. 10 €/h y como mucho 40 €). Se aplica también a sus fichajes ya hechos."
+        >
+          <Input inputMode="decimal" placeholder="Sin máximo" value={f.daily_cap} onChange={(e) => set('daily_cap', e.target.value)} />
+        </Field>
+
         {showTech && (
           <Field
             label="Coste por hora · invitado (€)"
@@ -369,8 +389,11 @@ export function EntryForm({
       break_minutes: Number(f.break_minutes) || 0,
     };
     const h = entryHours(draft);
-    return { h, cost: h * parseAmount(f.hourly_rate) };
-  }, [f]);
+    // Con el máximo por noche del fichaje (o, si es nuevo, el de la ficha)
+    const cap = entry ? entry.max_amount : employees.find((e) => e.id === f.employee_id)?.daily_cap;
+    const cost = h * parseAmount(f.hourly_rate);
+    return { h, cost: cap != null ? Math.min(cost, Number(cap)) : cost };
+  }, [f, entry, employees]);
 
   async function submit() {
     if (!f.employee_id) return toast.error('Selecciona un empleado');
