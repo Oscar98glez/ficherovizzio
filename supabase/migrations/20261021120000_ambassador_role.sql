@@ -3,7 +3,7 @@
 --  · Nuevo tipo de trabajador. Hacen lo mismo que los camareros de barra
 --    (fichar, horas, turnos, disponibilidad...).
 --  · Se puede elegir al registrarse; su ficha se crea en el departamento
---    nuevo "Embajadoras" con el puesto "Embajador/a".
+--    nuevo "Embajadoras" con el puesto "Embajadora".
 --  · En los sobres de Sueldos van en la sección EMBAJADORAS.
 -- =====================================================================
 
@@ -60,7 +60,7 @@ begin
     insert into public.employees (user_id, first_name, last_name, email, position, department, contract_type, hourly_rate, active)
     values (
       new.id, v_first, v_last, lower(new.email),
-      case v_role when 'rrpp' then 'Relaciones públicas' when 'tech' then 'DJ / Técnico' when 'tray' then 'Camarero/a de bandeja' when 'ambassador' then 'Embajador/a' else 'Camarero/a' end,
+      case v_role when 'rrpp' then 'Relaciones públicas' when 'tech' then 'DJ / Técnico' when 'tray' then 'Camarero/a de bandeja' when 'ambassador' then 'Embajadora' else 'Camarero/a' end,
       case v_role when 'rrpp' then 'relaciones' when 'tech' then 'cabina' when 'tray' then 'sala' when 'ambassador' then 'embajadoras' else 'barra' end,
       'extra', 0, true
     );
@@ -126,7 +126,7 @@ begin
   insert into public.employees (user_id, first_name, last_name, email, position, department, contract_type, hourly_rate, active)
   values (
     auth.uid(), v_first, v_last, lower(v_email),
-    case v_role when 'rrpp' then 'Relaciones públicas' when 'tech' then 'DJ / Técnico' when 'tray' then 'Camarero/a de bandeja' when 'ambassador' then 'Embajador/a' else 'Camarero/a' end,
+    case v_role when 'rrpp' then 'Relaciones públicas' when 'tech' then 'DJ / Técnico' when 'tray' then 'Camarero/a de bandeja' when 'ambassador' then 'Embajadora' else 'Camarero/a' end,
     case v_role when 'rrpp' then 'relaciones' when 'tech' then 'cabina' when 'tray' then 'sala' when 'ambassador' then 'embajadoras' else 'barra' end,
     'extra', 0, true
   )

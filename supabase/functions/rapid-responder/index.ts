@@ -851,7 +851,7 @@ const TOOLS: Tool[] = [
       properties: {
         nombre: { type: 'string' },
         apellidos: { type: 'string' },
-        puesto: { type: 'string', description: 'P. ej. Camarero/a, Camarero/a de bandeja, Portero/a, DJ / Técnico, Embajador/a, Azafata, Reparto' },
+        puesto: { type: 'string', description: 'P. ej. Camarero/a, Camarero/a de bandeja, Portero/a, DJ / Técnico, Embajadora, Azafata, Reparto' },
         departamento: { type: 'string', enum: DEPARTMENTS },
         tarifa_hora: { type: 'number', minimum: 0, description: 'Precio por hora (€). 0 si lo pondrá el usuario en la app' },
         notas: { type: 'string' },
