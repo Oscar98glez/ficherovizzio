@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ConciergeBell, Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
+import { ConciergeBell, Crown, Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
 import { useAuth } from '../auth';
 import { Logo } from '../components/AppShell';
 import { useFeedback } from '../components/overlay';
@@ -98,6 +98,12 @@ export default function Login() {
             title="DJ / Técnico"
             text="Lo mismo que un camarero: fichar, horas, turnos y disponibilidad."
             onClick={() => demo('tech')}
+          />
+          <DemoOption
+            icon={<Crown className="h-6 w-6" />}
+            title="Embajadora"
+            text="Lo mismo que un camarero: fichar, horas, turnos y disponibilidad."
+            onClick={() => demo('ambassador')}
           />
           <DemoOption
             icon={<Sofa className="h-6 w-6" />}

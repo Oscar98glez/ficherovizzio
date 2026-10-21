@@ -17,6 +17,7 @@ const GROUPS: { value: Role; label: string }[] = [
   { value: 'tray', label: 'Bandejas' },
   { value: 'tech', label: 'DJ / Técnicos' },
   { value: 'rrpp', label: 'RRPP' },
+  { value: 'ambassador', label: 'Embajadoras' },
 ];
 
 const when = (iso: string) => `${fmtDate(iso)}, ${fmtTime(iso)}`;

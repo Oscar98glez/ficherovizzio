@@ -47,7 +47,7 @@ const EXPENSE_CATEGORIES = [
 ];
 const METHODS = ['efectivo', 'tarjeta', 'transferencia', 'bizum', 'otro'];
 const WAGE_SECTIONS = ['camareras', 'bandejas', 'dj', 'embajadoras', 'otros', 'porteros'];
-const DEPARTMENTS = ['direccion', 'barra', 'sala', 'seguridad', 'cabina', 'relaciones', 'taquilla', 'guardarropa', 'limpieza'];
+const DEPARTMENTS = ['direccion', 'barra', 'sala', 'seguridad', 'cabina', 'relaciones', 'embajadoras', 'taquilla', 'guardarropa', 'limpieza'];
 
 const INSTRUCTIONS = `Conector de la app Vizzio (discoteca): Finanzas, Facturas y Proveedores. Todo en español.
 
@@ -851,7 +851,7 @@ const TOOLS: Tool[] = [
       properties: {
         nombre: { type: 'string' },
         apellidos: { type: 'string' },
-        puesto: { type: 'string', description: 'P. ej. Camarero/a, Camarero/a de bandeja, Portero/a, DJ / Técnico, Azafata, Reparto' },
+        puesto: { type: 'string', description: 'P. ej. Camarero/a, Camarero/a de bandeja, Portero/a, DJ / Técnico, Embajadora, Azafata, Reparto' },
         departamento: { type: 'string', enum: DEPARTMENTS },
         tarifa_hora: { type: 'number', minimum: 0, description: 'Precio por hora (€). 0 si lo pondrá el usuario en la app' },
         notas: { type: 'string' },

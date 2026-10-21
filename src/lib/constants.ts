@@ -19,6 +19,7 @@ export const ROLES: Record<Role, string> = {
   tray: 'Camarero de bandeja',
   rrpp: 'RRPP',
   tech: 'DJ / Técnico',
+  ambassador: 'Embajadora',
   admin: 'Administrador',
 };
 
@@ -29,6 +30,7 @@ export const DEPARTMENTS: Record<Department, { label: string; tone: Tone }> = {
   seguridad: { label: 'Seguridad', tone: 'gray' },
   cabina: { label: 'Cabina / DJ', tone: 'pink' },
   relaciones: { label: 'Relaciones públicas', tone: 'orange' },
+  embajadoras: { label: 'Embajadoras', tone: 'purple' },
   taquilla: { label: 'Taquilla', tone: 'indigo' },
   guardarropa: { label: 'Guardarropa', tone: 'teal' },
   limpieza: { label: 'Limpieza', tone: 'green' },
@@ -45,6 +47,7 @@ export const POSITION_GROUPS: { department: Department; positions: string[] }[] 
   { department: 'seguridad', positions: ['Jefe/a de seguridad', 'Portero/a', 'Vigilante de seguridad', 'Control de acceso', 'Auxiliar de seguridad'] },
   { department: 'cabina', positions: ['DJ / Técnico', 'DJ residente', 'DJ invitado', 'Técnico/a de sonido', 'Técnico/a de iluminación', 'VJ / Técnico/a de vídeo'] },
   { department: 'relaciones', positions: ['Relaciones públicas', 'Jefe/a de relaciones públicas', 'Promotor/a', 'Fotógrafo/a', 'Community manager'] },
+  { department: 'embajadoras', positions: ['Embajadora'] },
   { department: 'taquilla', positions: ['Taquillero/a', 'Cajero/a'] },
   { department: 'guardarropa', positions: ['Guardarropa'] },
   { department: 'limpieza', positions: ['Limpieza', 'Encargado/a de aseos', 'Mantenimiento'] },

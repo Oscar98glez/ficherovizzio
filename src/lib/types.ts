@@ -1,5 +1,8 @@
-/** admin = administrador · worker = camarero/trabajador · rrpp = relaciones públicas (ficha y gestiona reservados) · tech = DJ / técnico (como los camareros) */
-export type Role = 'admin' | 'worker' | 'rrpp' | 'tech' | 'tray';
+/**
+ * admin = administrador · worker = camarero/trabajador · rrpp = relaciones públicas (ficha y gestiona reservados) ·
+ * tech = DJ / técnico y ambassador = embajadora (como los camareros)
+ */
+export type Role = 'admin' | 'worker' | 'rrpp' | 'tech' | 'tray' | 'ambassador';
 export type Department =
   | 'direccion'
   | 'barra'
@@ -7,6 +10,7 @@ export type Department =
   | 'seguridad'
   | 'cabina'
   | 'relaciones'
+  | 'embajadoras'
   | 'taquilla'
   | 'guardarropa'
   | 'limpieza';

@@ -108,8 +108,8 @@ export function downloadBlob(filename: string, blob: Blob) {
 
 /**
  * Tipo de usuario: el rol de su cuenta; sin cuenta, por su departamento (relaciones públicas → RRPP,
- * cabina → DJ / técnico, sala → camarero de bandeja)
+ * cabina → DJ / técnico, sala → camarero de bandeja, embajadoras → embajadora)
  */
 export const staffKind = (e: Employee, roles: Map<string, Role>): Role =>
   (e.user_id && roles.get(e.user_id)) ||
-  (e.department === 'relaciones' ? 'rrpp' : e.department === 'cabina' ? 'tech' : e.department === 'sala' ? 'tray' : 'worker');
+  (e.department === 'relaciones' ? 'rrpp' : e.department === 'cabina' ? 'tech' : e.department === 'sala' ? 'tray' : e.department === 'embajadoras' ? 'ambassador' : 'worker');
