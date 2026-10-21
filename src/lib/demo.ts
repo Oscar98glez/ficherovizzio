@@ -487,7 +487,7 @@ function seed(): DB {
     ['Irene', 'Castro', 'Limpieza', 'limpieza', 'fijo_discontinuo', 12, '#34c759', 29.5, 4],
     ['Hugo', 'Morales', 'Camarero', 'barra', 'extra', 12, '#ff3b30', 23.5, 6.5],
     ['Rocío', 'Vega', 'Camarera de bandeja', 'sala', 'fijo_discontinuo', 12.5, '#ff9500', 23.5, 6.5, DEMO_USERS.tray],
-    ['Alba', 'Romero', 'Embajadora', 'embajadoras', 'extra', 12, '#af52de', 23.5, 5, DEMO_USERS.ambassador],
+    ['Alba', 'Romero', 'Embajador/a', 'embajadoras', 'extra', 12, '#af52de', 23.5, 5, DEMO_USERS.ambassador],
   ];
 
   const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
