@@ -24,7 +24,7 @@ interface AuthContext extends AuthState {
   /** Camarero/a de bandeja: como un camarero, y además ve los reservados (sin cambiarlos) */
   isTray: boolean;
   signIn(email: string, password: string): Promise<void>;
-  /** Registro de un trabajador: camarero/a de barra ('worker') o de bandeja ('tray'), RRPP ('rrpp') o DJ / técnico ('tech') */
+  /** Registro de un trabajador: camarero/a de barra ('worker') o de bandeja ('tray'), RRPP ('rrpp'), DJ / técnico ('tech') o embajador/a ('ambassador') */
   signUp(name: string, email: string, password: string, role: Exclude<Role, 'admin'>): Promise<{ needsConfirmation: boolean }>;
   signOut(): Promise<void>;
   demoSignIn(role: Role): Promise<void>;

@@ -262,6 +262,7 @@ export default function EmployeeDetail() {
                       <option value="tray">Camarero de bandeja</option>
                       <option value="tech">DJ / Técnico</option>
                       <option value="rrpp">RRPP</option>
+                      <option value="ambassador">Embajador/a</option>
                       <option value="admin">Administrador</option>
                     </Select>
                   )}

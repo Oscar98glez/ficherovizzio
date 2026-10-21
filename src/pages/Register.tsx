@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ConciergeBell, GlassWater, Headphones, MailCheck, Sofa, type LucideIcon } from 'lucide-react';
+import { ConciergeBell, Crown, GlassWater, Headphones, MailCheck, Sofa, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../auth';
 import { useFeedback } from '../components/overlay';
 import { Button, Field, Input } from '../components/ui';
@@ -8,13 +8,14 @@ import { errorMessage } from '../lib/api';
 import { cx } from '../lib/utils';
 import { AuthLayout } from './Login';
 
-type WorkerRole = 'worker' | 'tray' | 'rrpp' | 'tech';
+type WorkerRole = 'worker' | 'tray' | 'rrpp' | 'tech' | 'ambassador';
 
 const ROLE_OPTIONS: { value: WorkerRole; title: string; text: string; icon: LucideIcon }[] = [
   { value: 'worker', title: 'Camarero/a de barra', text: 'Fichar, horas, turnos y disponibilidad', icon: GlassWater },
   { value: 'tray', title: 'Camarero/a de bandeja', text: 'Lo mismo y, además, ver los reservados', icon: ConciergeBell },
   { value: 'tech', title: 'DJ / Técnico', text: 'Fichar, horas, turnos y disponibilidad', icon: Headphones },
   { value: 'rrpp', title: 'RRPP', text: 'Fichar y gestionar los reservados', icon: Sofa },
+  { value: 'ambassador', title: 'Embajador/a', text: 'Fichar, horas, turnos y disponibilidad', icon: Crown },
 ];
 
 export default function Register() {
@@ -30,7 +31,7 @@ export default function Register() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!role) return toast.error('Elige tu puesto: camarero/a de barra o de bandeja, DJ / técnico o RRPP');
+    if (!role) return toast.error('Elige tu puesto: camarero/a de barra o de bandeja, DJ / técnico, RRPP o embajador/a');
     if (password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
     setLoading(true);
     try {
@@ -64,7 +65,7 @@ export default function Register() {
       <form onSubmit={submit} className="card space-y-4 p-6">
         <div>
           <span className="mb-1.5 block text-[13px] font-medium text-ink-2">¿Cuál es tu puesto?</span>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Puesto">
+          <div className="grid grid-cols-2 gap-2 min-[440px]:grid-cols-3" role="radiogroup" aria-label="Puesto">
             {ROLE_OPTIONS.map((o) => {
               const active = role === o.value;
               return (
@@ -75,7 +76,7 @@ export default function Register() {
                   aria-checked={active}
                   onClick={() => setRole(o.value)}
                   className={cx(
-                    'flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition',
+                    'flex min-w-0 flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition',
                     active ? 'border-accent bg-accent/10 ring-2 ring-accent/30' : 'border-line bg-fill/50 hover:bg-fill',
                   )}
                 >
