@@ -101,7 +101,7 @@ export default function Login() {
           />
           <DemoOption
             icon={<Crown className="h-6 w-6" />}
-            title="Embajadora"
+            title="Embajador/a"
             text="Lo mismo que un camarero: fichar, horas, turnos y disponibilidad."
             onClick={() => demo('ambassador')}
           />

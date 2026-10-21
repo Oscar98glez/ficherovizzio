@@ -15,7 +15,7 @@ const ROLE_OPTIONS: { value: WorkerRole; title: string; text: string; icon: Luci
   { value: 'tray', title: 'Camarero/a de bandeja', text: 'Lo mismo y, además, ver los reservados', icon: ConciergeBell },
   { value: 'tech', title: 'DJ / Técnico', text: 'Fichar, horas, turnos y disponibilidad', icon: Headphones },
   { value: 'rrpp', title: 'RRPP', text: 'Fichar y gestionar los reservados', icon: Sofa },
-  { value: 'ambassador', title: 'Embajadora', text: 'Fichar, horas, turnos y disponibilidad', icon: Crown },
+  { value: 'ambassador', title: 'Embajador/a', text: 'Fichar, horas, turnos y disponibilidad', icon: Crown },
 ];
 
 export default function Register() {
@@ -31,7 +31,7 @@ export default function Register() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!role) return toast.error('Elige tu puesto: camarero/a de barra o de bandeja, DJ / técnico, RRPP o embajadora');
+    if (!role) return toast.error('Elige tu puesto: camarero/a de barra o de bandeja, DJ / técnico, RRPP o embajador/a');
     if (password.length < 6) return toast.error('La contraseña debe tener al menos 6 caracteres');
     setLoading(true);
     try {
