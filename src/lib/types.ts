@@ -466,6 +466,30 @@ export interface FourvenuesUser {
 /** Secciones de los sobres de Sueldos */
 export type WageSectionKey = 'camareras' | 'bandejas' | 'dj' | 'embajadoras' | 'otros' | 'porteros';
 
+/** Hoja de caja de Administración: una noche, con su importe por columna (src/lib/ledger.ts) */
+export interface AdminLedgerDay {
+  id: string;
+  date: string;
+  /** { columna: importe }, y los textos de definición */
+  data: Record<string, number | string>;
+  updated_at?: string;
+  created_at?: string;
+}
+
+/** Hoja de caja de Administración: arrastres del mes anterior y ajustes del mes */
+export interface AdminLedgerMonth {
+  id: string;
+  /** Día 1 del mes (YYYY-MM-01) */
+  month: string;
+  cash_carry: number | null;
+  bank_carry: number | null;
+  cash_adjust: number | null;
+  bank_adjust: number | null;
+  note: string | null;
+  updated_at?: string;
+  created_at?: string;
+}
+
 /** Extra de los sobres: alguien sin ficha ni cuenta que trabajó una noche */
 export interface WageExtraEntry {
   id: string;
