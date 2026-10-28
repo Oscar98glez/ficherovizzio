@@ -6,7 +6,7 @@ import { kickNotifications } from './push';
 import { fmtDistance, type Position } from './geo';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate, WageExtraEntry } from './types';
+import type { AdminLedgerDay, AdminLedgerMonth, Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate, WageExtraEntry } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -72,6 +72,7 @@ const ERRORS: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/Bucket not found|set_my_photo|photo_url/i, 'Falta aplicar en Supabase la última migración (fotos de perfil).'],
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
+  [/admin_ledger/i, 'Falta aplicar en Supabase la migración de la hoja de caja de Administración (20261028130000_admin_ledger.sql).'],
   [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
   [/fourvenues_rrpp_names/i, 'Falta aplicar en Supabase la migración de nombres de RRPP (20261009130000_fourvenues_rrpp_names.sql).'],
   [/fourvenues_rrpp_nights/i, 'Falta aplicar en Supabase la migración del desglose por RRPP (20261008180000_fourvenues_rrpp_nights.sql).'],
@@ -314,6 +315,8 @@ export const api = {
   invoices: repo<Invoice>('invoices'),
   suppliers: repo<Supplier>('suppliers'),
   wageExtras: repo<WageExtraEntry>('wage_extras'),
+  ledgerDays: repo<AdminLedgerDay>('admin_ledger_days'),
+  ledgerMonths: repo<AdminLedgerMonth>('admin_ledger_months'),
   claudeConnectors: repo<ClaudeConnector>('claude_connectors'),
   vipTables: repo<VipTable>('vip_tables'),
   /** Al apuntar un reservado, la base de datos crea el aviso para los camareros de bandeja y se envía */
