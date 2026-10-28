@@ -59,7 +59,8 @@ export type TableName =
   | 'message_replies'
   | 'venue_location'
   | 'admin_ledger_days'
-  | 'admin_ledger_months';
+  | 'admin_ledger_months'
+  | 'admin_ledger_years';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 

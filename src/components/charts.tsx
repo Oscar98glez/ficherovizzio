@@ -114,3 +114,83 @@ export function HBarList({
     </div>
   );
 }
+
+/** Anillo con el reparto de un total; al pasar el ratón por un trozo se ve su importe en el centro. */
+export function Donut({
+  items,
+  format = fmtMoney0,
+  size = 168,
+  empty,
+}: {
+  items: { label: string; value: number; color: string }[];
+  format?: (n: number) => string;
+  size?: number;
+  empty?: ReactNode;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const total = items.reduce((a, i) => a + Math.max(0, i.value), 0);
+  if (!total) return <div className="py-6 text-center text-[14px] text-ink-3">{empty ?? 'Sin datos'}</div>;
+  const stroke = 22;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  // 2 px de hueco entre trozos (sólo si hay más de uno)
+  const gap = items.filter((i) => i.value > 0).length > 1 ? 2 : 0;
+  let offset = 0;
+  const active = hover !== null ? items[hover] : null;
+  const pct = (v: number) => `${(Math.round((v / total) * 1000) / 10).toLocaleString('es-ES')} %`;
+  return (
+    <div className="flex flex-col items-center gap-5">
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          {items.map((it, i) => {
+            const len = (Math.max(0, it.value) / total) * c;
+            const seg = (
+              <circle
+                key={it.label}
+                cx={size / 2}
+                cy={size / 2}
+                r={r}
+                fill="none"
+                stroke={it.color}
+                strokeWidth={stroke}
+                strokeDasharray={`${Math.max(0, len - gap)} ${c}`}
+                strokeDashoffset={-offset}
+                opacity={hover === null || hover === i ? 1 : 0.35}
+                className="cursor-default transition-opacity"
+                onMouseEnter={() => setHover(i)}
+                onMouseLeave={() => setHover(null)}
+                onClick={() => setHover(hover === i ? null : i)}
+              />
+            );
+            offset += len;
+            return it.value > 0 ? seg : null;
+          })}
+        </svg>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          <span className="text-[12px] text-ink-2">{active ? active.label : 'Total'}</span>
+          <span className="tabular text-[15px] font-semibold">{format(active ? active.value : total)}</span>
+          {active && <span className="tabular text-[12px] text-ink-2">{pct(active.value)}</span>}
+        </div>
+      </div>
+      <div className="w-full space-y-2.5">
+        {items.map((it, i) => (
+          <div
+            key={it.label}
+            className={cx('flex items-center justify-between gap-4 text-[14px] transition-opacity', hover !== null && hover !== i && 'opacity-50')}
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+          >
+            <span className="flex items-center gap-2">
+              <i className="h-2.5 w-2.5 rounded-full" style={{ background: it.color }} />
+              {it.label}
+            </span>
+            <span className="tabular text-ink-2">
+              <span className="font-semibold text-ink">{format(it.value)}</span>
+              <span className="ml-2 text-[12px]">{pct(it.value)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
