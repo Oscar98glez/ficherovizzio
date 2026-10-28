@@ -75,7 +75,7 @@ function RequireAdmin() {
   return isAdmin ? <Outlet /> : <Navigate to={isOffice ? '/administracion' : '/fichar'} replace />;
 }
 
-/** Administración: los administrativos (y el administrador, para verla) */
+/** Administración y Facturas: los administrativos (y el administrador) */
 function RequireOffice() {
   const { isAdmin, isOffice } = useAuth();
   return isAdmin || isOffice ? <Outlet /> : <Navigate to="/fichar" replace />;
@@ -125,7 +125,6 @@ export default function App() {
                 <Route path="noches" element={<Events />} />
                 <Route path="noches/:id" element={<EventDetail />} />
                 <Route path="finanzas" element={<Finance />} />
-                <Route path="facturas" element={<Invoices />} />
                 <Route path="nominas" element={<Payroll />} />
                 <Route path="sueldos" element={<Wages />} />
                 <Route path="solicitudes" element={<Requests />} />
@@ -133,6 +132,7 @@ export default function App() {
               </Route>
               <Route element={<RequireOffice />}>
                 <Route path="administracion" element={<Administration />} />
+                <Route path="facturas" element={<Invoices />} />
               </Route>
               <Route element={<RequireReservations />}>
                 <Route path="reservados" element={<Reservations />} />

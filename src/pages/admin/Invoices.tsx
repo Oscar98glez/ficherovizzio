@@ -36,6 +36,7 @@ import {
   Switch,
   Textarea,
 } from '../../components/ui';
+import { useAuth } from '../../auth';
 import { useLoad } from '../../hooks';
 import { api, errorMessage, files } from '../../lib/api';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../../lib/constants';
@@ -109,6 +110,8 @@ function InvoiceForm({
   defaultSupplierId?: string;
 }) {
   const { toast } = useFeedback();
+  // Los administrativos no tienen Finanzas: sus facturas no crean movimiento
+  const { isAdmin } = useAuth();
   const [saving, setSaving] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -204,7 +207,7 @@ function InvoiceForm({
         // Si se ha sustituido el archivo, se borra el anterior
         if (file && hasFile(invoice)) await files.remove(invoice.file_path).catch(() => {});
       } else {
-        if (f.addMovement && amount > 0) {
+        if (isAdmin && f.addMovement && amount > 0) {
           const tx = await api.transactions.create({
             kind: f.kind === 'received' ? 'expense' : 'income',
             category: f.category,
@@ -217,7 +220,7 @@ function InvoiceForm({
         }
         await api.invoices.create(values);
       }
-      toast.success(invoice ? 'Factura actualizada' : f.addMovement ? 'Factura guardada y registrada en Finanzas' : 'Factura guardada');
+      toast.success(invoice ? 'Factura actualizada' : isAdmin && f.addMovement ? 'Factura guardada y registrada en Finanzas' : 'Factura guardada');
       onSaved();
       onClose();
     } catch (e) {
@@ -363,7 +366,7 @@ function InvoiceForm({
           <Textarea value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} placeholder="Opcional" className="min-h-[64px]" />
         </Field>
 
-        {!invoice && (
+        {!invoice && isAdmin && (
           <div className="rounded-xl bg-fill/60 p-4">
             <Switch
               checked={f.addMovement}

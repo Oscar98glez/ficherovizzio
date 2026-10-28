@@ -51,11 +51,12 @@ export const SHIFTS_CHANGED = 'vizzio:shifts-changed';
 /** Evento para avisar al menú de que el trabajador ha leído o respondido un mensaje */
 export const MESSAGES_CHANGED = 'vizzio:messages-changed';
 
-/** Los administrativos sólo tienen su apartado y su perfil */
+/** Los administrativos tienen su apartado, las facturas y su perfil */
 const OFFICE_NAV: NavSection[] = [
   {
     items: [
       { to: '/administracion', label: 'Administración', icon: Briefcase },
+      { to: '/facturas', label: 'Facturas', icon: FileText },
       { to: '/perfil', label: 'Perfil', icon: User },
     ],
   },
