@@ -203,7 +203,46 @@ export function parseLedgerAmount(text: string): number | null {
 const num = new Intl.NumberFormat('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: 'always' as unknown as boolean });
 /** Importe como en la hoja: "1.234,56" (vacío si no hay) */
 export const fmtAmount = (n: number | null | undefined) => (n ? num.format(n) : '');
-/** Como fmtAmount, pero con 0 */
-export const fmtTotal = (n: number) => num.format(n);
 /** Porcentaje sobre los ingresos ("—" si no hay ingresos, donde el Excel daba #DIV/0!) */
 export const fmtShare = (part: number, whole: number) => (whole ? `${(Math.round((part / whole) * 1000) / 10).toLocaleString('es-ES')} %` : '—');
+
+// ---------- Resumen del año (la hoja INICIO del Excel) ----------
+
+export interface LedgerMonthTotals {
+  /** YYYY-MM-01 */
+  month: string;
+  income: number;
+  expenses: number;
+  result: number;
+  efectivo: number;
+  banco: number;
+  /** Plataforma + rappel */
+  plataformaRappel: number;
+  /** Gastos de cada grupo, por su key */
+  groups: Record<string, number>;
+}
+
+/** Totales de cada mes del año (enero a diciembre), con los días guardados */
+export function yearTotals(year: number, days: AdminLedgerDay[]): LedgerMonthTotals[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const month = `${year}-${String(i + 1).padStart(2, '0')}-01`;
+    const own = days.filter((d) => d.date.slice(0, 7) === month.slice(0, 7));
+    const income = sum(own, INCOME_AMOUNTS);
+    const expenses = sum(own, EXPENSE_COLUMNS);
+    return {
+      month,
+      income,
+      expenses,
+      result: income - expenses,
+      efectivo: sum(own, INCOME_AMOUNTS.filter((c) => c.key === 'efectivo')),
+      banco: sum(own, INCOME_AMOUNTS.filter((c) => c.key === 'banco')),
+      plataformaRappel: sum(own, INCOME_AMOUNTS.filter((c) => c.key === 'plataforma' || c.key === 'rappel')),
+      groups: Object.fromEntries(EXPENSE_GROUPS.map((g) => [g.key, sum(own, g.columns.filter((c) => !c.text))])),
+    };
+  });
+}
+
+/** Gastos de un grupo en un día (para la columna recogida) */
+export const dayGroup = (d: AdminLedgerDay | undefined, g: LedgerGroup) => sum([d], g.columns.filter((c) => !c.text));
+/** Gastos de un día */
+export const dayExpenses = (d: AdminLedgerDay | undefined) => sum([d], EXPENSE_COLUMNS);

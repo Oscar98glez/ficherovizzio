@@ -490,6 +490,15 @@ export interface AdminLedgerMonth {
   created_at?: string;
 }
 
+/** Hoja de caja de Administración: el reparto del año */
+export interface AdminLedgerYear {
+  id: string;
+  year: number;
+  reparto: number | null;
+  updated_at?: string;
+  created_at?: string;
+}
+
 /** Extra de los sobres: alguien sin ficha ni cuenta que trabajó una noche */
 export interface WageExtraEntry {
   id: string;
