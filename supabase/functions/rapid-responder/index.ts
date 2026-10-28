@@ -73,6 +73,9 @@ FICHAJES (hoja de firmas)
 - Enséñale una tabla con las diferencias (persona, app y hoja) antes de cambiar nada, salvo que te haya dicho que corrijas directamente. Por defecto, una diferencia de 10 minutos o menos se da por buena.
 - Corrige con corregir_fichajes: modifica la entrada/salida del fichaje que está mal, crea el fichaje si la persona está en la hoja pero no fichó, y solo borra fichajes si el usuario lo pide. Las horas se indican en hora española (HH:MM) junto con la noche (AAAA-MM-DD).
 
+HORARIOS
+- ver_disponibilidad enseña, por día, quién ha dicho que puede trabajar (y en qué horario), quién no y quién no ha contestado, con su tipo (barra, bandeja, puerta…). Úsalo para proponer el horario de la semana con las personas que pida el usuario para cada día; pregunta si falta gente o alguien imprescindible no ha dado disponibilidad.
+
 RESERVADOS
 - ver_reservados_noche enseña los reservados de una noche en la app y las reservas de Fourvenues (por RRPP) para cotejarlos. Es sólo de lectura y lleva datos de clientes: úsalo sólo cuando el usuario lo pida.
 
@@ -960,6 +963,92 @@ const TOOLS: Tool[] = [
         .filter((s) => !fichado.has(`${s.noche}|${s.empleado_id}`))
         .map((s) => ({ ...s, empleado: names.get(s.empleado_id) ?? '¿?' }));
       return { desde: from, hasta: to, cantidad: fichajes.length, fichajes, turno_sin_fichar: sinFichar };
+    },
+  },
+
+  {
+    name: 'ver_disponibilidad',
+    title: 'Ver disponibilidad',
+    description:
+      'Disponibilidad que ha dado el personal (apartado Disponibilidad) para unos días: por cada día, quién puede (con horario y nota), quién no puede y quién no ha contestado, con su puesto, departamento y tipo (barra, bandeja, puerta…), y los turnos que ya hay. Sirve para preparar el horario. Sólo lectura.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fecha: { ...DATE, description: 'Primer día (AAAA-MM-DD)' },
+        hasta: { ...DATE, description: 'Último día (máx. 31)' },
+      },
+      required: ['fecha'],
+    },
+    annotations: READ_ONLY,
+    run: async ({ db }, a) => {
+      const from = date(a, 'fecha', true)!;
+      const to = date(a, 'hasta') ?? from;
+      if (to < from) throw new UserError('"hasta" debe ser igual o posterior a "fecha"');
+      if (Date.parse(to) - Date.parse(from) > 31 * 24 * HOUR_MS) throw new UserError('Como mucho 31 días por consulta');
+      const [start] = nightRange(from);
+      const [, end] = nightRange(to);
+      const [empRes, profRes, avRes, shRes] = await Promise.all([
+        db.from('employees').select('id, first_name, last_name, position, department, user_id').eq('active', true).order('first_name'),
+        db.from('profiles').select('id, role'),
+        db.from('availability').select('employee_id, date, available, start_time, end_time, note').gte('date', from).lte('date', to),
+        db.from('shifts').select('employee_id, start_at, end_at, status').gte('start_at', start).lt('start_at', end).neq('status', 'cancelled'),
+      ]);
+      const roles = new Map((check(profRes, 'No se pudieron leer los perfiles') as Record<string, unknown>[]).map((p) => [p.id, p.role as string]));
+      const employees = (check(empRes, 'No se pudo leer el personal') as Record<string, unknown>[]).filter((e) => roles.get(e.user_id) !== 'admin' || e.department !== 'direccion');
+      const availability = check(avRes, 'No se pudo leer la disponibilidad') as Record<string, unknown>[];
+      const shifts = check(shRes, 'No se pudieron leer los turnos') as Record<string, unknown>[];
+      const kind = (e: Record<string, unknown>) => {
+        const role = roles.get(e.user_id);
+        if (e.department === 'taquilla' || /taquill|puerta/i.test(String(e.position ?? ''))) return 'puerta';
+        if (role === 'tray' || e.department === 'sala') return 'bandeja';
+        if (role === 'rrpp' || e.department === 'relaciones') return 'rrpp';
+        if (role === 'tech' || e.department === 'cabina') return 'dj / técnico';
+        if (e.department === 'barra' || /camarer/i.test(String(e.position ?? ''))) return 'barra';
+        return String(e.department ?? 'otro');
+      };
+      const person = (e: Record<string, unknown>) => ({
+        empleado_id: e.id,
+        nombre: `${e.first_name} ${e.last_name ?? ''}`.trim(),
+        tipo: kind(e),
+        puesto: e.position,
+        departamento: e.department,
+      });
+      const hhmm = (t: unknown) => (t ? String(t).slice(0, 5) : null);
+      const days: string[] = [];
+      for (let d = Date.parse(`${from}T12:00:00Z`); d <= Date.parse(`${to}T12:00:00Z`); d += 24 * HOUR_MS) days.push(new Date(d).toISOString().slice(0, 10));
+      const weekday = (d: string) => ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'][new Date(`${d}T12:00:00Z`).getUTCDay()];
+      return {
+        desde: from,
+        hasta: to,
+        dias: days.map((d) => {
+          const byEmp = new Map(availability.filter((r) => r.date === d).map((r) => [r.employee_id, r]));
+          const shiftsOf = shifts.filter((s) => nightOf(Date.parse(s.start_at as string)) === d);
+          const puede: unknown[] = [];
+          const no_puede: unknown[] = [];
+          const sin_contestar: unknown[] = [];
+          for (const e of employees) {
+            const r = byEmp.get(e.id);
+            if (!r) sin_contestar.push(person(e));
+            else if (r.available === false) no_puede.push({ ...person(e), nota: r.note ?? null });
+            else puede.push({ ...person(e), desde: hhmm(r.start_time), hasta: hhmm(r.end_time), nota: r.note ?? null });
+          }
+          return {
+            dia: d,
+            dia_semana: weekday(d),
+            puede,
+            no_puede,
+            sin_contestar,
+            turnos_ya_puestos: shiftsOf.map((s) => {
+              const e = employees.find((x) => x.id === s.employee_id);
+              return {
+                empleado: e ? person(e).nombre : '¿?',
+                entrada: toMadrid(Date.parse(s.start_at as string)).time,
+                salida: s.end_at ? toMadrid(Date.parse(s.end_at as string)).time : null,
+              };
+            }),
+          };
+        }),
+      };
     },
   },
 
