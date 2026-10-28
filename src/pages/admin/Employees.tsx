@@ -24,6 +24,7 @@ const KINDS: { value: Kind; label: string }[] = [
   { value: 'tech', label: 'DJ / Técnicos' },
   { value: 'rrpp', label: 'RRPP' },
   { value: 'ambassador', label: 'Embajadoras' },
+  { value: 'office', label: 'Administrativos' },
   { value: 'admin', label: 'Administración' },
 ];
 
@@ -31,7 +32,7 @@ const KIND_KEY = 'vizzio.personal.kind';
 const savedKind = (): Kind => {
   try {
     const v = localStorage.getItem(KIND_KEY);
-    return v === 'rrpp' || v === 'admin' || v === 'tech' || v === 'tray' || v === 'ambassador' ? v : 'worker';
+    return v === 'rrpp' || v === 'admin' || v === 'tech' || v === 'tray' || v === 'ambassador' || v === 'office' ? v : 'worker';
   } catch {
     return 'worker';
   }

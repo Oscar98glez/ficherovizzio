@@ -20,6 +20,7 @@ export const ROLES: Record<Role, string> = {
   rrpp: 'RRPP',
   tech: 'DJ / Técnico',
   ambassador: 'Embajador/a',
+  office: 'Administrativo/a',
   admin: 'Administrador',
 };
 

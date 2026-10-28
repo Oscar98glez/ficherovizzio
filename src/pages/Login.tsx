@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ConciergeBell, Crown, Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
+import { Briefcase, ConciergeBell, Crown, Headphones, ShieldCheck, Sofa, UserRound } from 'lucide-react';
 import { useAuth } from '../auth';
 import { Logo } from '../components/AppShell';
 import { useFeedback } from '../components/overlay';
@@ -110,6 +110,12 @@ export default function Login() {
             title="RRPP"
             text="Fichar entrada y salida y gestionar los reservados."
             onClick={() => demo('rrpp')}
+          />
+          <DemoOption
+            icon={<Briefcase className="h-6 w-6" />}
+            title="Administrativo/a"
+            text="Su apartado de Administración."
+            onClick={() => demo('office')}
           />
         </div>
         <p className="mt-6 text-center text-[13px] text-ink-2">

@@ -24,6 +24,7 @@ import Login from './pages/Login';
 import NewPassword from './pages/NewPassword';
 import Register from './pages/Register';
 import Reservations from './pages/Reservations';
+import Administration from './pages/office/Administration';
 import Clock from './pages/worker/Clock';
 import MyAvailability from './pages/worker/MyAvailability';
 import MyHours from './pages/worker/MyHours';
@@ -70,8 +71,20 @@ function PublicOnly({ children }: { children: ReactNode }) {
 }
 
 function RequireAdmin() {
-  const { isAdmin } = useAuth();
-  return isAdmin ? <Outlet /> : <Navigate to="/fichar" replace />;
+  const { isAdmin, isOffice } = useAuth();
+  return isAdmin ? <Outlet /> : <Navigate to={isOffice ? '/administracion' : '/fichar'} replace />;
+}
+
+/** Administración: los administrativos (y el administrador, para verla) */
+function RequireOffice() {
+  const { isAdmin, isOffice } = useAuth();
+  return isAdmin || isOffice ? <Outlet /> : <Navigate to="/fichar" replace />;
+}
+
+/** Fichar, horas, turnos...: no aplican a los administrativos */
+function NotOffice() {
+  const { isOffice } = useAuth();
+  return isOffice ? <Navigate to="/administracion" replace /> : <Outlet />;
 }
 
 /** Reservados: administradores y RRPP (y los camareros de bandeja, para verlos) */
@@ -87,8 +100,8 @@ function NotRrpp() {
 }
 
 function Home() {
-  const { isAdmin } = useAuth();
-  return <Navigate to={isAdmin ? '/resumen' : '/fichar'} replace />;
+  const { isAdmin, isOffice } = useAuth();
+  return <Navigate to={isAdmin ? '/resumen' : isOffice ? '/administracion' : '/fichar'} replace />;
 }
 
 export default function App() {
@@ -118,16 +131,21 @@ export default function App() {
                 <Route path="solicitudes" element={<Requests />} />
                 <Route path="ajustes" element={<Settings />} />
               </Route>
+              <Route element={<RequireOffice />}>
+                <Route path="administracion" element={<Administration />} />
+              </Route>
               <Route element={<RequireReservations />}>
                 <Route path="reservados" element={<Reservations />} />
               </Route>
-              <Route path="fichar" element={<Clock />} />
-              <Route path="mis-horas" element={<MyHours />} />
-              <Route path="mis-mensajes" element={<MyMessages />} />
-              <Route element={<NotRrpp />}>
-                <Route path="mis-turnos" element={<MyShifts />} />
-                <Route path="mi-disponibilidad" element={<MyAvailability />} />
-                <Route path="mis-solicitudes" element={<MyRequests />} />
+              <Route element={<NotOffice />}>
+                <Route path="fichar" element={<Clock />} />
+                <Route path="mis-horas" element={<MyHours />} />
+                <Route path="mis-mensajes" element={<MyMessages />} />
+                <Route element={<NotRrpp />}>
+                  <Route path="mis-turnos" element={<MyShifts />} />
+                  <Route path="mi-disponibilidad" element={<MyAvailability />} />
+                  <Route path="mis-solicitudes" element={<MyRequests />} />
+                </Route>
               </Route>
               <Route path="perfil" element={<Profile />} />
             </Route>

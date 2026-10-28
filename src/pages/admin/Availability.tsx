@@ -33,7 +33,7 @@ const groupOf = (e: Employee, roles: Map<string, Role>): Exclude<Group, 'all'> =
   if (e.department === 'taquilla' || /taquill|puerta/i.test(e.position ?? '')) return 'door';
   if (e.department === 'seguridad') return 'security';
   const kind = staffKind(e, roles);
-  return kind === 'admin' ? 'other' : kind;
+  return kind === 'admin' || kind === 'office' ? 'other' : kind;
 };
 
 const GROUP_KEY = 'vizzio.disponibilidad.puesto';

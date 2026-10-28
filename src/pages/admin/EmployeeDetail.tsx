@@ -263,10 +263,11 @@ export default function EmployeeDetail() {
                       <option value="tech">DJ / Técnico</option>
                       <option value="rrpp">RRPP</option>
                       <option value="ambassador">Embajador/a</option>
+                      <option value="office">Administrativo/a</option>
                       <option value="admin">Administrador</option>
                     </Select>
                   )}
-                  {data.profile && data.profile.role !== 'admin' && (
+                  {data.profile && data.profile.role !== 'admin' && data.profile.role !== 'office' && (
                     <div className="mt-4">
                       <Switch
                         checked={!!e.manages_reservations}

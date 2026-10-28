@@ -61,7 +61,7 @@ export type TableName =
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v29';
+const DB_KEY = 'vizzio.demo.db.v30';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -71,6 +71,7 @@ export const DEMO_USERS = {
   tech: 'demo-tech',
   tray: 'demo-tray',
   ambassador: 'demo-ambassador',
+  office: 'demo-office',
 } as const;
 
 // ---------- Sesión demo ----------
@@ -520,6 +521,7 @@ function seed(): DB {
     { id: DEMO_USERS.tech, email: 'nacho.vidal@vizzio.club', full_name: 'Nacho Vidal', role: 'tech', created_at: stamp },
     { id: DEMO_USERS.tray, email: 'rocio.vega@vizzio.club', full_name: 'Rocío Vega', role: 'tray', created_at: stamp },
     { id: DEMO_USERS.ambassador, email: 'alba.romero@vizzio.club', full_name: 'Alba Romero', role: 'ambassador', created_at: stamp },
+    { id: DEMO_USERS.office, email: 'elena.ruiz@vizzio.club', full_name: 'Elena Ruiz', role: 'office', created_at: stamp },
   ];
 
   const events: ClubEvent[] = [];
