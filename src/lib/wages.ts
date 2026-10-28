@@ -103,7 +103,7 @@ const sectionOf = (e: Employee, role: Role): WageSectionKey => {
   if (role === 'tray') return 'bandejas';
   if (role === 'tech') return 'dj';
   if (role === 'rrpp' || role === 'ambassador') return 'embajadoras';
-  if (role === 'admin' || ['direccion', 'taquilla', 'guardarropa', 'limpieza'].includes(e.department)) return 'otros';
+  if (role === 'admin' || role === 'office' || ['direccion', 'taquilla', 'guardarropa', 'limpieza'].includes(e.department)) return 'otros';
   return 'camareras';
 };
 

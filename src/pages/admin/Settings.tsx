@@ -129,6 +129,7 @@ export default function Settings() {
                         <option value="tech">DJ / Técnico</option>
                         <option value="rrpp">RRPP</option>
                         <option value="ambassador">Embajador/a</option>
+                        <option value="office">Administrativo/a</option>
                         <option value="admin">Administrador</option>
                       </Select>
                     )

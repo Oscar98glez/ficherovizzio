@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Banknote,
+  Briefcase,
   CalendarCheck,
   CalendarDays,
   Clock,
@@ -50,8 +51,18 @@ export const SHIFTS_CHANGED = 'vizzio:shifts-changed';
 /** Evento para avisar al menú de que el trabajador ha leído o respondido un mensaje */
 export const MESSAGES_CHANGED = 'vizzio:messages-changed';
 
+/** Los administrativos sólo tienen su apartado y su perfil */
+const OFFICE_NAV: NavSection[] = [
+  {
+    items: [
+      { to: '/administracion', label: 'Administración', icon: Briefcase },
+      { to: '/perfil', label: 'Perfil', icon: User },
+    ],
+  },
+];
+
 export function AppShell() {
-  const { profile, employee, isAdmin, isRrpp, isTray, signOut } = useAuth();
+  const { profile, employee, isAdmin, isRrpp, isTray, isOffice, signOut } = useAuth();
   const [pending, setPending] = useState(0);
   const [unanswered, setUnanswered] = useState(0);
   const [shiftsTick, setShiftsTick] = useState(0);
@@ -120,59 +131,62 @@ export function AppShell() {
     return () => document.documentElement.classList.remove('theme-dark');
   }, []);
 
-  const sections: NavSection[] = isAdmin
-    ? [
-        { items: [{ to: '/resumen', label: 'Resumen', icon: LayoutGrid }] },
-        {
-          title: 'Equipo',
-          items: [
-            { to: '/personal', label: 'Personal', icon: Users },
-            { to: '/fichajes', label: 'Fichajes', icon: Clock },
-            { to: '/turnos', label: 'Turnos', icon: CalendarDays },
-            { to: '/mensajes', label: 'Mensajes', icon: MessageSquare, badge: staffReplies },
-            { to: '/disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
-            { to: '/solicitudes', label: 'Solicitudes', icon: Inbox, badge: pending },
-          ],
-        },
-        {
-          title: 'Negocio',
-          items: [
-            { to: '/noches', label: 'Noches', icon: PartyPopper },
-            { to: '/reservados', label: 'Reservados', icon: Sofa },
-            { to: '/finanzas', label: 'Finanzas', icon: Wallet },
-            { to: '/facturas', label: 'Facturas', icon: FileText },
-            { to: '/sueldos', label: 'Sueldos', icon: Banknote },
-            { to: '/nominas', label: 'Nóminas', icon: Receipt },
-          ],
-        },
-        {
-          title: 'Cuenta',
-          items: [
-            ...(employee ? [{ to: '/fichar', label: 'Mi fichaje', icon: Fingerprint }] : []),
-            { to: '/ajustes', label: 'Ajustes', icon: Settings },
-          ],
-        },
-      ]
-    : [
-        {
-          items: [
-            { to: '/fichar', label: 'Fichar', icon: Fingerprint },
-            ...(isRrpp || isTray || employee?.manages_reservations ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
-            { to: '/mis-horas', label: 'Mis horas', icon: Clock },
-            ...(isRrpp ? [{ to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox }] : []),
-            // Los RRPP no tienen turnos, disponibilidad ni solicitudes
-            ...(isRrpp
-              ? []
-              : [
-                  { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays, badge: unanswered },
-                  { to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox },
-                  { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
-                  { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
-                ]),
-            { to: '/perfil', label: 'Perfil', icon: User },
-          ],
-        },
-      ];
+  const sections: NavSection[] = isOffice
+    ? OFFICE_NAV
+    : isAdmin
+      ? [
+          { items: [{ to: '/resumen', label: 'Resumen', icon: LayoutGrid }] },
+          {
+            title: 'Equipo',
+            items: [
+              { to: '/personal', label: 'Personal', icon: Users },
+              { to: '/fichajes', label: 'Fichajes', icon: Clock },
+              { to: '/turnos', label: 'Turnos', icon: CalendarDays },
+              { to: '/mensajes', label: 'Mensajes', icon: MessageSquare, badge: staffReplies },
+              { to: '/disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
+              { to: '/solicitudes', label: 'Solicitudes', icon: Inbox, badge: pending },
+            ],
+          },
+          {
+            title: 'Negocio',
+            items: [
+              { to: '/noches', label: 'Noches', icon: PartyPopper },
+              { to: '/reservados', label: 'Reservados', icon: Sofa },
+              { to: '/finanzas', label: 'Finanzas', icon: Wallet },
+              { to: '/facturas', label: 'Facturas', icon: FileText },
+              { to: '/sueldos', label: 'Sueldos', icon: Banknote },
+              { to: '/nominas', label: 'Nóminas', icon: Receipt },
+              { to: '/administracion', label: 'Administración', icon: Briefcase },
+            ],
+          },
+          {
+            title: 'Cuenta',
+            items: [
+              ...(employee ? [{ to: '/fichar', label: 'Mi fichaje', icon: Fingerprint }] : []),
+              { to: '/ajustes', label: 'Ajustes', icon: Settings },
+            ],
+          },
+        ]
+      : [
+          {
+            items: [
+              { to: '/fichar', label: 'Fichar', icon: Fingerprint },
+              ...(isRrpp || isTray || employee?.manages_reservations ? [{ to: '/reservados', label: 'Reservados', icon: Sofa }] : []),
+              { to: '/mis-horas', label: 'Mis horas', icon: Clock },
+              ...(isRrpp ? [{ to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox }] : []),
+              // Los RRPP no tienen turnos, disponibilidad ni solicitudes
+              ...(isRrpp
+                ? []
+                : [
+                    { to: '/mis-turnos', label: 'Mis turnos', icon: CalendarDays, badge: unanswered },
+                    { to: '/mis-mensajes', label: 'Mensajes', icon: MessageSquare, badge: inbox },
+                    { to: '/mi-disponibilidad', label: 'Disponibilidad', icon: CalendarCheck },
+                    { to: '/mis-solicitudes', label: 'Solicitudes', icon: Inbox },
+                  ]),
+              { to: '/perfil', label: 'Perfil', icon: User },
+            ],
+          },
+        ];
 
   const all = sections.flatMap((s) => s.items);
   const tabs: NavItem[] = isAdmin
@@ -245,7 +259,7 @@ export function AppShell() {
             <Avatar name={displayName} color={employee?.color ?? '#8e8e93'} src={employee?.photo_url} size={34} />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="truncate text-[14px] font-medium">{displayName}</div>
-              <div className="truncate text-[12px] text-ink-2">{isAdmin ? 'Administrador' : employee?.position ?? (isRrpp ? 'RRPP' : 'Trabajador')}</div>
+              <div className="truncate text-[12px] text-ink-2">{isAdmin ? 'Administrador' : isOffice ? 'Administrativo/a' : employee?.position ?? (isRrpp ? 'RRPP' : 'Trabajador')}</div>
             </div>
             <button
               onClick={async () => {
