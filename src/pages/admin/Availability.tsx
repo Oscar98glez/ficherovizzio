@@ -3,33 +3,77 @@ import { useNavigate } from 'react-router-dom';
 import { CalendarDays, Check, X } from 'lucide-react';
 import { ShiftForm } from '../../components/forms';
 import { PeriodPicker } from '../../components/PeriodPicker';
-import { Avatar, Badge, Button, Card, EmptyState, ErrorBox, Loading, PageHeader, StatCard } from '../../components/ui';
+import { Avatar, Badge, Button, Card, EmptyState, ErrorBox, Loading, PageHeader, Segmented, StatCard } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api } from '../../lib/api';
 import { availabilityHours } from '../../lib/availability';
 import { addDays, businessDate, businessToday, daysBetween, isoDate, makePeriod, periodRange } from '../../lib/dates';
 import { fmtWeekday, fmtShiftTimes } from '../../lib/format';
-import type { Availability as AvailabilityRow, Shift } from '../../lib/types';
-import { cx, fullName } from '../../lib/utils';
+import type { Availability as AvailabilityRow, Employee, Role, Shift } from '../../lib/types';
+import { cx, fullName, staffKind } from '../../lib/utils';
 
 type Modal = { shift: Shift | null; date: string; employeeIds?: string[] } | null;
+
+/** Puesto de trabajo por el que se filtra: el tipo de su cuenta, salvo puerta y seguridad, que van por su ficha */
+type Group = 'all' | 'worker' | 'tray' | 'door' | 'security' | 'tech' | 'rrpp' | 'ambassador' | 'other';
+
+const GROUPS: { value: Group; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'worker', label: 'Camareras' },
+  { value: 'tray', label: 'Bandejas' },
+  { value: 'door', label: 'Puerta' },
+  { value: 'security', label: 'Seguridad' },
+  { value: 'tech', label: 'DJ / Técnicos' },
+  { value: 'rrpp', label: 'RRPP' },
+  { value: 'ambassador', label: 'Embajadoras' },
+  { value: 'other', label: 'Otros' },
+];
+
+const groupOf = (e: Employee, roles: Map<string, Role>): Exclude<Group, 'all'> => {
+  if (e.department === 'taquilla' || /taquill|puerta/i.test(e.position ?? '')) return 'door';
+  if (e.department === 'seguridad') return 'security';
+  const kind = staffKind(e, roles);
+  return kind === 'admin' ? 'other' : kind;
+};
+
+const GROUP_KEY = 'vizzio.disponibilidad.puesto';
+const savedGroup = (): Group => {
+  try {
+    const v = localStorage.getItem(GROUP_KEY);
+    return GROUPS.some((g) => g.value === v) ? (v as Group) : 'all';
+  } catch {
+    return 'all';
+  }
+};
 
 export default function Availability() {
   const navigate = useNavigate();
   // Por defecto la semana que viene, que es la que se planifica
   const [period, setPeriod] = useState(() => makePeriod('week', addDays(businessToday(), 7)));
   const [modal, setModal] = useState<Modal>(null);
+  const [group, setGroupState] = useState<Group>(savedGroup);
+  const setGroup = (g: Group) => {
+    setGroupState(g);
+    try {
+      localStorage.setItem(GROUP_KEY, g);
+    } catch {
+      /* sin almacenamiento */
+    }
+  };
   const days = useMemo(() => daysBetween(period.from, period.to), [period]);
 
   const { data, loading, error, reload } = useLoad(async () => {
     const { start, end } = periodRange(period);
-    const [employees, availability, shifts, events] = await Promise.all([
+    const [employees, availability, shifts, events, profiles] = await Promise.all([
       api.employees.list({ eq: { active: true }, order: ['first_name', 'asc'] }),
       api.availability.list({ gte: ['date', period.from], lt: ['date', period.to] }),
       api.shifts.list({ gte: ['start_at', start], lt: ['start_at', end] }),
       api.events.list({ gte: ['date', period.from], lt: ['date', period.to] }),
+      api.profiles.list(),
     ]);
-    return { employees, availability, shifts: shifts.filter((s) => s.status !== 'cancelled'), events };
+    const roles = new Map(profiles.map((p) => [p.id, p.role]));
+    const groups = new Map(employees.map((e) => [e.id, groupOf(e, roles)]));
+    return { employees, groups, availability, shifts: shifts.filter((s) => s.status !== 'cancelled'), events };
   }, [period]);
 
   const index = useMemo(() => {
@@ -44,11 +88,16 @@ export default function Availability() {
   if (error && !data) return <ErrorBox message={error} onRetry={reload} />;
   if (!data) return null;
 
-  const responded = data.employees.filter((e) => days.some((d) => index.avail.has(`${e.id}|${d}`))).length;
-  const pending = data.employees.length - responded;
+  const count = (g: Group) => (g === 'all' ? data.employees.length : data.employees.filter((e) => data.groups.get(e.id) === g).length);
+  // Sólo los puestos que tienen a alguien (y el elegido, aunque se quede vacío)
+  const groups = GROUPS.filter((g) => g.value === 'all' || g.value === group || count(g.value) > 0);
+  const employees = group === 'all' ? data.employees : data.employees.filter((e) => data.groups.get(e.id) === group);
+  const responded = employees.filter((e) => days.some((d) => index.avail.has(`${e.id}|${d}`))).length;
+  const pending = employees.length - responded;
   const today = isoDate(businessToday());
-  const availableOn = (d: string) => data.employees.filter((e) => index.avail.get(`${e.id}|${d}`)?.available).length;
-  const shiftsOn = (d: string) => data.employees.filter((e) => index.shifts.has(`${e.id}|${d}`)).length;
+  const availableOn = (d: string) => employees.filter((e) => index.avail.get(`${e.id}|${d}`)?.available).length;
+  const shiftsOn = (d: string) => employees.filter((e) => index.shifts.has(`${e.id}|${d}`)).length;
+  const groupLabel = GROUPS.find((g) => g.value === group)!.label.toLowerCase();
 
   return (
     <>
@@ -66,13 +115,17 @@ export default function Availability() {
         <PeriodPicker period={period} onChange={setPeriod} units={['week']} />
       </div>
 
-      <div className="mb-5 grid grid-cols-3 gap-3 lg:gap-4">
-        <StatCard label="Han respondido" value={`${responded} / ${data.employees.length}`} />
-        <StatCard label="Sin responder" value={<span className={pending ? 'text-orange' : ''}>{pending}</span>} />
-        <StatCard label="Turnos asignados" value={data.shifts.length} />
+      <div className="mb-4 overflow-x-auto">
+        <Segmented value={group} onChange={setGroup} options={groups.map((g) => ({ value: g.value, label: `${g.label} · ${count(g.value)}` }))} />
       </div>
 
-      {data.employees.length ? (
+      <div className="mb-5 grid grid-cols-3 gap-3 lg:gap-4">
+        <StatCard label="Han respondido" value={`${responded} / ${employees.length}`} />
+        <StatCard label="Sin responder" value={<span className={pending ? 'text-orange' : ''}>{pending}</span>} />
+        <StatCard label="Turnos asignados" value={employees.reduce((n, e) => n + days.filter((d) => index.shifts.has(`${e.id}|${d}`)).length, 0)} />
+      </div>
+
+      {employees.length ? (
         <Card className="overflow-x-auto">
           <div className="min-w-[860px]">
             {/* Cabecera con los días */}
@@ -99,7 +152,7 @@ export default function Availability() {
 
             {/* Filas por persona */}
             <div className="divide-y divide-line">
-              {data.employees.map((e) => {
+              {employees.map((e) => {
                 const answered = days.some((d) => index.avail.has(`${e.id}|${d}`));
                 return (
                   <div key={e.id} className="grid grid-cols-[minmax(180px,1.3fr)_repeat(7,minmax(88px,1fr))] items-stretch">
@@ -169,7 +222,11 @@ export default function Availability() {
         </Card>
       ) : (
         <Card>
-          <EmptyState title="No hay personal activo" message="Da de alta a tu equipo en Personal para ver su disponibilidad." />
+          {data.employees.length ? (
+            <EmptyState title={`No hay ${groupLabel} activos`} message="Elige otro puesto o da de alta a quien falte en Personal." />
+          ) : (
+            <EmptyState title="No hay personal activo" message="Da de alta a tu equipo en Personal para ver su disponibilidad." />
+          )}
         </Card>
       )}
 
