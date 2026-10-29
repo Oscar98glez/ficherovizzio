@@ -232,6 +232,9 @@ export function LedgerWeek({
 
         <div className="mt-7">
           <h3 className="text-[24px] font-semibold tracking-[-0.02em] sm:text-[26px]">¿Cuánto entró el {nightName(night)}?</h3>
+          {!!day?.finance && Object.keys(day.finance).length > 0 && (
+            <p className="mt-1.5 text-[14px] text-ink-2">Ya viene con lo apuntado en Finanzas (el cierre de caja de esa noche).</p>
+          )}
           {closed ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-fill px-5 py-4">
               <p className="text-[16px] text-ink-2">Esta noche está apuntada como cerrada: no se abrió.</p>
@@ -306,6 +309,7 @@ export function LedgerWeek({
                     </span>
                     <span className="block text-[13px] text-ink-2">
                       {group.title} · {e.method === 'cash' ? 'en efectivo' : 'por el banco'} · {nightShort(e.date)}
+                      {e.transaction_id && <span className="text-accent"> · de Finanzas</span>}
                     </span>
                   </span>
                   <span className="tabular text-[16px] font-medium">{fmtEuros2(Number(e.amount))}</span>

@@ -472,6 +472,8 @@ export interface AdminLedgerDay {
   date: string;
   /** { columna: importe }, y el texto del rappel */
   data: Record<string, number | string>;
+  /** Lo que viene de los ingresos de Finanzas (ya sumado en data); lo mantiene la base de datos */
+  finance?: Record<string, number>;
   updated_at?: string;
   created_at?: string;
 }
@@ -488,6 +490,8 @@ export interface AdminLedgerExpense {
   amount: number;
   method: LedgerMethod;
   note: string | null;
+  /** Gasto que viene de Finanzas (se cambia solo al cambiar el movimiento) */
+  transaction_id?: string | null;
   updated_at?: string;
   created_at?: string;
 }
