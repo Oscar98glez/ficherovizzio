@@ -466,12 +466,28 @@ export interface FourvenuesUser {
 /** Secciones de los sobres de Sueldos */
 export type WageSectionKey = 'camareras' | 'bandejas' | 'dj' | 'embajadoras' | 'otros' | 'porteros';
 
-/** Hoja de caja de Administración: una noche, con su importe por columna (src/lib/ledger.ts) */
+/** Hoja de caja de Administración: lo que entró una noche, por columna de ingresos (src/lib/ledger.ts) */
 export interface AdminLedgerDay {
   id: string;
   date: string;
-  /** { columna: importe }, y los textos de definición */
+  /** { columna: importe }, y el texto del rappel */
   data: Record<string, number | string>;
+  updated_at?: string;
+  created_at?: string;
+}
+
+/** Cómo se paga un gasto de la hoja de caja */
+export type LedgerMethod = 'cash' | 'bank';
+
+/** Hoja de caja de Administración: un pago (sueldos, RRPP, un proveedor...) apuntado en un día */
+export interface AdminLedgerExpense {
+  id: string;
+  date: string;
+  /** Columna de gastos de src/lib/ledger.ts (porteros, cocacola, alquiler...) */
+  concept: string;
+  amount: number;
+  method: LedgerMethod;
+  note: string | null;
   updated_at?: string;
   created_at?: string;
 }

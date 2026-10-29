@@ -126,11 +126,12 @@ export function AppShell() {
 
   useEffect(() => setMoreOpen(false), [location.pathname]);
 
-  // Dentro de la app el tema es siempre oscuro, a juego con la foto de fondo
+  // Dentro de la app el tema es siempre oscuro, a juego con la foto de fondo; los administrativos lo tienen claro
+  const theme = isOffice ? 'theme-light' : 'theme-dark';
   useEffect(() => {
-    document.documentElement.classList.add('theme-dark');
-    return () => document.documentElement.classList.remove('theme-dark');
-  }, []);
+    document.documentElement.classList.add(theme);
+    return () => document.documentElement.classList.remove(theme);
+  }, [theme]);
 
   const sections: NavSection[] = isOffice
     ? OFFICE_NAV
@@ -229,13 +230,13 @@ export function AppShell() {
                   className={({ isActive }) =>
                     cx(
                       'group flex h-9 items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium transition',
-                      isActive ? 'bg-accent text-on-accent shadow-sm' : 'text-ink hover:bg-fill',
+                      isActive ? (isOffice ? 'bg-fill-2 font-semibold text-ink' : 'bg-accent text-on-accent shadow-sm') : 'text-ink hover:bg-fill',
                     )
                   }
                 >
                   {({ isActive }) => (
                     <>
-                      <item.icon className={cx('h-[18px] w-[18px]', isActive ? 'text-on-accent' : 'text-accent')} strokeWidth={2} />
+                      <item.icon className={cx('h-[18px] w-[18px]', isActive && !isOffice ? 'text-on-accent' : 'text-accent')} strokeWidth={2} />
                       <span className="flex-1">{item.label}</span>
                       {!!item.badge && (
                         <span className={cx('tabular rounded-full px-1.5 text-[12px] font-semibold', isActive ? 'bg-on-accent/20' : 'bg-red text-white')}>
@@ -278,8 +279,8 @@ export function AppShell() {
       </aside>
 
       {/* Contenido */}
-      <div className="app-bg" aria-hidden />
-      <main className="app-glass lg:pl-[260px]">
+      {!isOffice && <div className="app-bg" aria-hidden />}
+      <main className={cx('lg:pl-[260px]', !isOffice && 'app-glass')}>
         {IS_DEMO && (
           <div className="bg-orange/15 px-4 pb-1.5 pt-[calc(env(safe-area-inset-top)+6px)] text-center text-[12px] font-medium text-orange lg:hidden">
             Modo demo · conecta Supabase para usar datos reales

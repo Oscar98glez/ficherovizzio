@@ -13,11 +13,13 @@ import { cx, initials } from '../lib/utils';
 
 // ---------- Botones ----------
 
-type Variant = 'primary' | 'secondary' | 'tinted' | 'ghost' | 'danger' | 'danger-tinted' | 'success';
+type Variant = 'primary' | 'solid' | 'secondary' | 'tinted' | 'ghost' | 'danger' | 'danger-tinted' | 'success';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
   primary: 'bg-accent text-on-accent hover:brightness-110 shadow-sm',
+  /** Negro sobre claro (blanco sobre oscuro), para la acción principal de las pantallas claras */
+  solid: 'bg-ink text-surface hover:opacity-90',
   secondary: 'bg-fill text-ink hover:bg-fill-2',
   tinted: 'bg-accent/10 text-accent hover:bg-accent/15',
   ghost: 'text-accent hover:bg-accent/10',

@@ -6,9 +6,13 @@ import type { Query, Repo } from './api';
 import { CLUB_TABLES } from './club-map';
 import { occupiesTable, PAYROLL_CATEGORY } from './constants';
 import { distanceM, isOutside, type Position } from './geo';
+import { ledgerMonthOf, monthWeeks, shiftMonth } from './ledger';
 import { menuPrice } from './menu';
 import { addDays, addMonths, businessDate, businessToday, isoDate, monthKey, startOfDay, startOfMonth, startOfWeek } from './dates';
 import type {
+  AdminLedgerDay,
+  AdminLedgerExpense,
+  AdminLedgerMonth,
   Availability,
   ClubEvent,
   CommissionRate,
@@ -59,12 +63,13 @@ export type TableName =
   | 'message_replies'
   | 'venue_location'
   | 'admin_ledger_days'
+  | 'admin_ledger_expenses'
   | 'admin_ledger_months'
   | 'admin_ledger_years';
 
 type DB = Record<TableName, Record<string, unknown>[]>;
 
-const DB_KEY = 'vizzio.demo.db.v30';
+const DB_KEY = 'vizzio.demo.db.v31';
 const SESSION_KEY = 'vizzio.demo.session';
 
 export const DEMO_USERS = {
@@ -957,7 +962,68 @@ function seed(): DB {
     reply('rpl-3', 'rcp-3', false, 'El lunes por la tarde puedo pasarme a revisarlas si os viene bien.', 39, false),
   ];
 
+  // Hoja de caja de Administración: los últimos meses, hasta ayer (como si la administrativa fuera al día)
+  const ledgerDays: AdminLedgerDay[] = [];
+  const ledgerExpenses: AdminLedgerExpense[] = [];
+  const todayIso = isoDate(businessToday());
+  const firstLedgerMonth = shiftMonth(ledgerMonthOf(todayIso), -3);
+  const ledgerMonths: AdminLedgerMonth[] = [
+    { id: 'ledm-1', month: firstLedgerMonth, cash_carry: 19180, bank_carry: 4940, cash_adjust: null, bank_adjust: null, note: null, created_at: stamp },
+  ];
+  const pay = (date: string, concept: string, amount: number, method: 'cash' | 'bank', note: string | null = null) =>
+    ledgerExpenses.push({ id: `lede-${ledgerExpenses.length + 1}`, date, concept, amount: Math.round(amount * 100) / 100, method, note, created_at: stamp });
+  const cents = (a: number, b: number) => Math.round(between(a, b) * 100) / 100;
+  const suppliers3 = ['cocacola', 'albariza', 'vinafiel', 'montanera', 'hielo', 'dundalk', 'merino', 'nosvemos'];
+  const extras = ['Parking', 'Cena del equipo', 'Amazon', 'Ferretería', 'Varios'];
+  for (let m = firstLedgerMonth; m <= ledgerMonthOf(todayIso); m = shiftMonth(m, 1)) {
+    monthWeeks(m).forEach((w, wi) => {
+      const sunday = r() < 0.35;
+      for (const date of sunday ? [...w.nights, w.dates[6]] : w.nights) {
+        if (date >= todayIso) continue;
+        const wd = new Date(`${date}T12:00:00`).getDay();
+        const size = wd === 3 ? 0.25 : wd === 4 ? 0.8 : wd === 0 ? 0.7 : 1.2;
+        const data: Record<string, number | string> = {
+          efectivo: Math.round(between(1000, 2600) * size * 2) / 2,
+          banco: cents(4200, 9500) * size,
+        };
+        if (wd >= 5 && r() < 0.5) data.plataforma = cents(300, 1600);
+        if (r() < 0.06) Object.assign(data, { rappel: round(between(200, 700)), rappel_def: r() < 0.5 ? 'Legendario' : 'Dundalk' });
+        data.banco = Math.round((data.banco as number) * 100) / 100;
+        ledgerDays.push({ id: `ledd-${ledgerDays.length + 1}`, date, data, created_at: stamp });
+      }
+      const payday = w.nights[0];
+      if (payday >= todayIso) return;
+      pay(payday, 'porteros', round(between(1500, 1850)), r() < 0.7 ? 'bank' : 'cash');
+      pay(payday, 'limpieza', round(between(450, 620)), 'cash');
+      pay(payday, 'camareros', round(between(2000, 2900)), 'cash');
+      pay(payday, 'rrpp', round(between(1900, 2600)), 'cash');
+      if (r() < 0.6) pay(payday, 'encargado', round(between(300, 450)), 'cash');
+      for (const s of [...suppliers3].sort(() => r() - 0.5).slice(0, int(2, 4))) {
+        const d = w.nights[int(0, 2)];
+        pay(d < todayIso ? d : payday, s, cents(400, 6000), 'bank');
+      }
+      if (r() < 0.5) pay(payday, 'dla', cents(180, 900), 'bank');
+      if (r() < 0.7) pay(payday, 'gastos_extra', cents(25, 320), r() < 0.7 ? 'cash' : 'bank', extras[int(0, extras.length - 1)]);
+      if (wi === 0) {
+        pay(payday, 'alquiler', 3380, 'bank');
+        pay(payday, 'comunidad', 180, 'bank');
+        pay(payday, 'numier', 103.35, 'bank');
+        pay(payday, 'telefonia', cents(25, 90), 'bank');
+      }
+      if (wi === 1) {
+        pay(payday, 'seguros_sociales', cents(1700, 2100), 'bank');
+        pay(payday, 'luz', cents(420, 680), 'bank');
+        pay(payday, 'gestoria', 290, 'bank');
+      }
+      if (wi === 2 && r() < 0.5) pay(payday, 'impuestos', cents(800, 2200), 'bank');
+      if (wi === 2) pay(payday, 'agua', cents(40, 90), 'bank');
+    });
+  }
+
   return {
+    admin_ledger_days: ledgerDays,
+    admin_ledger_expenses: ledgerExpenses,
+    admin_ledger_months: ledgerMonths,
     profiles,
     employees,
     events,
