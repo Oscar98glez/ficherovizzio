@@ -76,6 +76,8 @@ export const EXPENSE_GROUPS: LedgerGroup[] = [
       bank('albariza', 'Albariza'),
       bank('vinafiel', 'Viñafiel'),
       bank('merino', 'Distri. Merino'),
+      // Los proveedores de bebida de Finanzas que no tienen columna propia
+      bank('otros_proveedores', 'Otros proveedores'),
     ],
   },
   { key: 'suministros', label: 'Suministros', title: 'Luz, agua y teléfono', hint: 'Butasol, luz, telefonía, agua', columns: [bank('butasol', 'Butasol'), bank('luz', 'Luz'), bank('telefonia', 'Telefonía'), bank('agua', 'Agua')] },
