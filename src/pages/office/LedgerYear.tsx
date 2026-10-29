@@ -1,267 +1,227 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
-import { BarChart, Donut, HBarList } from '../../components/charts';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useFeedback } from '../../components/overlay';
-import { Card, CardHeader, ErrorBox, Loading, StatCard } from '../../components/ui';
+import { Button, ErrorBox, Loading } from '../../components/ui';
 import { useLoad } from '../../hooks';
 import { api, errorMessage } from '../../lib/api';
-import { capitalize, parseDate, type Period } from '../../lib/dates';
-import { fmtMoney } from '../../lib/format';
-import { EXPENSE_GROUPS, fmtAmount, fmtShare, parseLedgerAmount, yearTotals } from '../../lib/ledger';
+import { businessToday } from '../../lib/dates';
+import { EXPENSE_GROUPS, fmtEuros, fmtShare, monthTitle, parseLedgerAmount, yearSpan, yearTotals } from '../../lib/ledger';
 import type { AdminLedgerYear } from '../../lib/types';
 import { cx } from '../../lib/utils';
+import { amountText, Bar, MoneyInput, Panel, PanelTitle } from './ledger-ui';
 
-/** Colores de los gráficos, comprobados para distinguirse (también con daltonismo) sobre el fondo oscuro */
-const C = { income: '#3a8fd6', expenses: '#c9741f', efectivo: '#2e9e57', banco: '#3a8fd6', plataforma: '#c9741f' };
+const monthShort = (m: string) => monthTitle(m).slice(0, 3);
+const per100 = (part: number, whole: number) => (whole ? `${(Math.round((part / whole) * 1000) / 10).toLocaleString('es-ES')} €` : '—');
 
-const monthName = (m: string) => capitalize(parseDate(m).toLocaleDateString('es-ES', { month: 'long' }));
-const monthShort = (m: string) => parseDate(m).toLocaleDateString('es-ES', { month: 'short' }).replace('.', '');
-const total = (n: number) => (n ? fmtAmount(n) : '—');
-
-export function LedgerYear({ period, onOpenMonth }: { period: Period; onOpenMonth: (month: string) => void }) {
+/** Resumen del año (la hoja INICIO del Excel): cada mes, los ingresos por tipo, los gastos por grupo y el reparto */
+export function LedgerYear({ year, onOpenMonth, onYear }: { year: number; onOpenMonth: (month: string) => void; onYear: (year: number) => void }) {
   const { toast } = useFeedback();
-  const year = Number(period.from.slice(0, 4));
-  const [reparto, setReparto] = useState<AdminLedgerYear | null>(null);
-  const [repartoText, setRepartoText] = useState<string | null>(null);
-
+  const span = useMemo(() => yearSpan(year), [year]);
   const { data, loading, error, reload } = useLoad(async () => {
-    const [days, years] = await Promise.all([
-      api.ledgerDays.list({ gte: ['date', period.from], lt: ['date', period.to] }),
+    const [days, expenses, years] = await Promise.all([
+      api.ledgerDays.list({ gte: ['date', span.from], lt: ['date', span.to] }),
+      api.ledgerExpenses.list({ gte: ['date', span.from], lt: ['date', span.to] }),
       api.ledgerYears.list({ eq: { year } }),
     ]);
-    return { days, year: years[0] ?? null };
-  }, [period]);
+    return { days, expenses, year: years[0] ?? null };
+  }, [year]);
 
+  const [row, setRow] = useState<AdminLedgerYear | null>(null);
+  const [reparto, setReparto] = useState('');
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
-    if (data) setReparto(data.year);
+    if (!data) return;
+    setRow(data.year);
+    setReparto(amountText(data.year?.reparto ?? null));
   }, [data]);
 
-  const months = useMemo(() => yearTotals(year, data?.days ?? []), [year, data]);
+  const months = useMemo(() => yearTotals(year, data?.days ?? [], data?.expenses ?? []), [year, data]);
 
   if (loading && !data) return <Loading />;
   if (error && !data) return <ErrorBox message={error} onRetry={reload} />;
 
-  const sumOf = (f: (m: (typeof months)[number]) => number) => months.reduce((n, m) => n + f(m), 0);
-  const income = sumOf((m) => m.income);
-  const expenses = sumOf((m) => m.expenses);
+  const sum = (f: (m: (typeof months)[number]) => number) => months.reduce((n, m) => n + f(m), 0);
+  const income = sum((m) => m.income);
+  const expenses = sum((m) => m.expenses);
   const result = income - expenses;
-  const repartoValue = reparto?.reparto ?? null;
+  const isNow = businessToday().getFullYear() === year;
+  const maxMonth = Math.max(1, ...months.map((m) => Math.max(m.income, m.expenses)));
+  const used = months.filter((m) => m.income || m.expenses);
+  const incomeBy = (k: string) => sum((m) => m.incomeBy[k] ?? 0);
+  const kinds = [
+    { label: 'Efectivo', v: incomeBy('efectivo'), color: 'bg-green' },
+    { label: 'Banco', v: incomeBy('banco'), color: 'bg-accent' },
+    { label: 'Plataforma y rappel', v: incomeBy('plataforma') + incomeBy('rappel'), color: 'bg-ink-3' },
+  ];
+  const groups = EXPENSE_GROUPS.map((g) => ({ g, v: sum((m) => m.groups[g.key] ?? 0) }))
+    .filter((x) => x.v > 0)
+    .sort((a, b) => b.v - a.v);
+  const repartoValue = parseLedgerAmount(reparto);
 
-  async function saveReparto(text: string) {
-    const value = parseLedgerAmount(text);
-    setRepartoText(null);
-    if ((value ?? 0) === (repartoValue ?? 0)) return;
+  async function saveReparto() {
+    if (reparto.trim() && repartoValue === null) return toast.error('Revisa el importe: escribe sólo números, por ejemplo 100000');
+    setSaving(true);
     try {
-      const res = reparto?.id ? await api.ledgerYears.update(reparto.id, { reparto: value }) : await api.ledgerYears.create({ year, reparto: value });
-      setReparto(res);
+      const res = row ? await api.ledgerYears.update(row.id, { reparto: repartoValue }) : await api.ledgerYears.create({ year, reparto: repartoValue });
+      setRow(res);
+      toast.success('Reparto guardado');
     } catch (e) {
       toast.error(errorMessage(e));
+    } finally {
+      setSaving(false);
     }
   }
 
-  const th = 'whitespace-nowrap px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-3';
-  const num = 'tabular whitespace-nowrap px-3 py-2 text-right text-[14px]';
-  // Columna fija al deslizar la tabla a los lados
-  const stickyCol = 'sticky left-0 z-[1] border-r border-r-line bg-[rgb(var(--surface)/0.97)]';
-  const monthCell = (m: string) => (
-    <td className={cx(stickyCol, 'p-0')}>
-      <button type="button" onClick={() => onOpenMonth(m)} className="flex w-full items-center gap-1 px-3 py-2 text-left text-[14px] font-medium transition hover:text-accent">
-        {monthName(m)}
-        <ChevronRight className="h-3.5 w-3.5 text-ink-3" />
-      </button>
-    </td>
-  );
-
   return (
-    <>
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4 lg:gap-4">
-        <StatCard label="Total ingresos" value={fmtMoney(income)} />
-        <StatCard label="Total gastos" value={fmtMoney(expenses)} sub={income ? `${fmtShare(expenses, income)} de los ingresos` : undefined} />
-        <StatCard label="Resultado" value={<span className={result >= 0 ? 'text-green' : 'text-red'}>{fmtMoney(result)}</span>} sub={income ? `Margen ${fmtShare(result, income)}` : undefined} />
-        <Card className="p-4 sm:p-5">
-          <span className="text-[13px] font-medium text-ink-2">Reparto</span>
-          <input
-            inputMode="decimal"
-            value={repartoText ?? (repartoValue ? fmtMoney(repartoValue) : '')}
-            placeholder="0,00 €"
-            onFocus={() => setRepartoText(repartoValue ? String(repartoValue).replace('.', ',') : '')}
-            onChange={(e) => setRepartoText(e.target.value)}
-            onBlur={() => saveReparto(repartoText ?? '')}
-            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-            aria-label="Reparto del año"
-            className="tabular mt-1 w-full rounded-lg bg-transparent text-[22px] font-semibold tracking-tight outline-none placeholder:text-ink-3 hover:bg-fill focus:bg-fill focus:ring-2 focus:ring-accent/60"
-          />
-          <div className="mt-1 text-[12px] text-ink-2">{repartoValue && income ? `${fmtShare(repartoValue, income)} de los ingresos` : 'Importe que se reparte en el año'}</div>
-        </Card>
+    <div className="flex flex-col gap-4 sm:gap-5">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[15px] text-ink-2">Todo el año</p>
+          <h2 className="text-[30px] font-bold leading-tight tracking-[-0.03em] sm:text-[34px]">
+            {isNow ? 'Así va' : 'Así fue'} {year}
+          </h2>
+        </div>
+        <div className="flex gap-1.5">
+          <button type="button" aria-label="Año anterior" onClick={() => onYear(year - 1)} className="grid h-10 w-10 place-items-center rounded-full bg-fill transition hover:bg-fill-2">
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <button type="button" aria-label="Año siguiente" onClick={() => onYear(year + 1)} className="grid h-10 w-10 place-items-center rounded-full bg-fill transition hover:bg-fill-2">
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+      </header>
+
+      <Panel className="flex flex-wrap items-center justify-between gap-x-12 gap-y-7">
+        <div className="min-w-0 flex-[1_1_300px]">
+          <p className="text-[17px] text-ink-2">{result >= 0 ? (isNow ? 'De momento se ha ganado' : 'Se ganó') : isNow ? 'De momento se ha perdido' : 'Se perdió'}</p>
+          <p className={cx('tabular mt-2 whitespace-nowrap text-[clamp(40px,5vw,60px)] font-bold leading-none tracking-[-0.04em]', result < 0 && 'text-red')}>{fmtEuros(result, true)}</p>
+          {income > 0 && <p className="mt-3 text-[15px] text-ink-2">Margen del {fmtShare(result, income)} · {used.length} {used.length === 1 ? 'mes' : 'meses'} con datos</p>}
+        </div>
+        <div className="tabular min-w-0 flex-[1_1_280px] space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between text-[15px]">
+              <span>Ha entrado</span>
+              <strong className="font-semibold">{fmtEuros(income)}</strong>
+            </div>
+            <Bar value={income} max={Math.max(income, expenses)} className="h-3" color="bg-green" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-[15px]">
+              <span>Ha salido</span>
+              <strong className="font-semibold">{fmtEuros(expenses)}</strong>
+            </div>
+            <Bar value={expenses} max={Math.max(income, expenses)} className="h-3" color="bg-ink-3" />
+          </div>
+        </div>
+      </Panel>
+
+      <Panel>
+        <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+          <h3 className="text-[21px] font-semibold tracking-[-0.02em]">Mes a mes</h3>
+          <span className="flex gap-4 text-[13px] text-ink-2">
+            <span className="inline-flex items-center gap-1.5">
+              <i className="h-2.5 w-2.5 rounded-[3px] bg-green" /> Entra
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <i className="h-2.5 w-2.5 rounded-[3px] bg-ink-3" /> Sale
+            </span>
+          </span>
+        </div>
+        <div className="grid grid-cols-12 gap-0.5 sm:gap-2">
+          {months.map((m) => (
+            <button key={m.month} type="button" onClick={() => onOpenMonth(m.month)} aria-label={`Abrir ${monthTitle(m.month)}`} className="flex flex-col items-center gap-2 rounded-xl pt-1 transition hover:bg-fill/60">
+              <span className="flex h-[150px] items-end gap-[2px] border-b border-line sm:gap-1">
+                <span className="w-[7px] rounded-t bg-green sm:w-3" style={{ height: `${Math.max(m.income ? 3 : 0, (m.income / maxMonth) * 150)}px` }} />
+                <span className="w-[7px] rounded-t bg-ink-3/60 sm:w-3" style={{ height: `${Math.max(m.expenses ? 3 : 0, (m.expenses / maxMonth) * 150)}px` }} />
+              </span>
+              <span className="pb-2 text-[11px] font-medium text-ink-2 sm:text-[13px]">{monthShort(m.month)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="tabular mt-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(0,1fr))] gap-3 pb-2 text-[12.5px] font-medium text-ink-2 sm:grid-cols-[minmax(0,1.2fr)_repeat(4,minmax(0,1fr))]">
+            <span>Mes</span>
+            <span className="text-right">Entró</span>
+            <span className="text-right">Salió</span>
+            <span className="text-right">Resultado</span>
+            <span className="hidden text-right sm:block">Frente al anterior</span>
+          </div>
+          {months.map((m, i) => {
+            const prev = months[i - 1];
+            const change = prev?.income && m.income ? (m.income - prev.income) / prev.income : null;
+            const has = m.income || m.expenses;
+            return (
+              <button
+                key={m.month}
+                type="button"
+                onClick={() => onOpenMonth(m.month)}
+                className="grid w-full grid-cols-[minmax(0,1fr)_repeat(3,minmax(0,1fr))] items-center gap-3 border-t border-line py-3 text-left text-[15px] transition hover:bg-fill/40 sm:grid-cols-[minmax(0,1.2fr)_repeat(4,minmax(0,1fr))]"
+              >
+                <span className="flex items-center gap-1 font-medium">
+                  {monthTitle(m.month)} <ChevronRight className="h-3.5 w-3.5 text-ink-3" />
+                </span>
+                <span className={cx('text-right', !has && 'text-ink-3')}>{has ? fmtEuros(m.income) : '—'}</span>
+                <span className={cx('text-right', !has && 'text-ink-3')}>{has ? fmtEuros(m.expenses) : '—'}</span>
+                <span className={cx('text-right font-semibold', !has ? 'font-normal text-ink-3' : m.result < 0 && 'text-red')}>{has ? fmtEuros(m.result, true) : '—'}</span>
+                <span className={cx('hidden text-right text-[14px] sm:block', change === null ? 'text-ink-3' : change >= 0 ? 'text-green' : 'text-red')}>
+                  {change === null ? '—' : `${change >= 0 ? '↑' : '↓'} ${fmtShare(Math.abs(change), 1)}`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Panel>
+
+      <div className="grid gap-4 sm:gap-5 xl:grid-cols-2">
+        <Panel>
+          <PanelTitle title="Cómo ha entrado" />
+          {kinds.map((k) => (
+            <div key={k.label} className="tabular border-t border-line py-3">
+              <div className="mb-2 flex justify-between text-[15px]">
+                <span>{k.label}</span>
+                <span>
+                  <strong className="font-semibold">{fmtEuros(k.v)}</strong>
+                  <span className="ml-2 text-ink-2">{fmtShare(k.v, income)}</span>
+                </span>
+              </div>
+              <Bar value={k.v} max={income} color={k.color} />
+            </div>
+          ))}
+        </Panel>
+
+        <Panel>
+          <PanelTitle title="Reparto del año" />
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="min-w-0 flex-[1_1_220px]">
+              <MoneyInput size="md" label="Lo que se reparte" value={reparto} onChange={setReparto} hint={repartoValue && income ? `Es el ${fmtShare(repartoValue, income)} de lo que ha entrado` : 'Escríbelo cuando se decida'} />
+            </div>
+            {(repartoValue ?? null) !== (row?.reparto ?? null) && (
+              <Button variant="solid" size="lg" className="mb-7" loading={saving} onClick={saveReparto}>
+                Guardar
+              </Button>
+            )}
+          </div>
+        </Panel>
       </div>
 
-      {/* Resumen anual de ingresos y gastos */}
-      <Card className="mt-4 overflow-hidden lg:mt-5">
-        <CardHeader title="Ingresos y gastos" subtitle="Por meses. Pulsa un mes para abrir su hoja." />
-        <div className="px-5 pb-2">
-          <BarChart
-            format={fmtMoney}
-            data={months.map((m) => ({ label: monthShort(m.month), detail: monthName(m.month), values: [m.income, m.expenses] }))}
-            series={[
-              { name: 'Ingresos', color: C.income },
-              { name: 'Gastos', color: C.expenses },
-            ]}
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0">
-            <thead>
-              <tr>
-                {['Mes', 'Ingresos', 'Gastos', 'Resultado', 'Margen'].map((t, i) => (
-                  <th key={t} className={cx(th, 'border-y border-line', i === 0 ? cx(stickyCol, 'text-left') : 'text-right')}>
-                    {t}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {months.map((m) => (
-                <tr key={m.month} className="[&>td]:border-b [&>td]:border-line">
-                  {monthCell(m.month)}
-                  <td className={num}>{total(m.income)}</td>
-                  <td className={num}>{total(m.expenses)}</td>
-                  <td className={cx(num, 'font-semibold', m.result < 0 ? 'text-red' : m.result > 0 && 'text-green')}>{total(m.result)}</td>
-                  <td className={cx(num, 'text-ink-2')}>{fmtShare(m.result, m.income)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-fill [&>td]:font-semibold">
-                <td className={cx(stickyCol, 'bg-fill px-3 py-2 text-[14px]')}>Total</td>
-                <td className={num}>{total(income)}</td>
-                <td className={num}>{total(expenses)}</td>
-                <td className={cx(num, result < 0 ? 'text-red' : result > 0 && 'text-green')}>{total(result)}</td>
-                <td className={num}>{fmtShare(result, income)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Card>
-
-      {/* Resumen anual de ingresos */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:mt-5 lg:grid-cols-3 lg:gap-5">
-        <Card className="overflow-hidden lg:col-span-2">
-          <CardHeader title="Ingresos" subtitle="Efectivo, banco y plataforma / rappel de cada mes." />
-          <div className="px-5 pb-2">
-            <BarChart
-              format={fmtMoney}
-              data={months.map((m) => ({ label: monthShort(m.month), detail: monthName(m.month), values: [m.efectivo, m.banco, m.plataformaRappel] }))}
-              series={[
-                { name: 'Efectivo', color: C.efectivo },
-                { name: 'Banco', color: C.banco },
-                { name: 'Plataforma / rappel', color: C.plataforma },
-              ]}
-            />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full border-separate border-spacing-0">
-              <thead>
-                <tr>
-                  {['Mes', 'Efectivo', 'Banco', 'Plataforma / rappel', 'Total'].map((t, i) => (
-                    <th key={t} className={cx(th, 'border-y border-line', i === 0 ? cx(stickyCol, 'text-left') : 'text-right')}>
-                      {t}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {months.map((m) => (
-                  <tr key={m.month} className="[&>td]:border-b [&>td]:border-line">
-                    {monthCell(m.month)}
-                    <td className={num}>{total(m.efectivo)}</td>
-                    <td className={num}>{total(m.banco)}</td>
-                    <td className={num}>{total(m.plataformaRappel)}</td>
-                    <td className={cx(num, 'font-semibold')}>{total(m.income)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="bg-fill [&>td]:font-semibold">
-                  <td className={cx(stickyCol, 'bg-fill px-3 py-2 text-[14px]')}>Total</td>
-                  <td className={num}>{total(sumOf((m) => m.efectivo))}</td>
-                  <td className={num}>{total(sumOf((m) => m.banco))}</td>
-                  <td className={num}>{total(sumOf((m) => m.plataformaRappel))}</td>
-                  <td className={num}>{total(income)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </Card>
-        <div className="space-y-4 lg:space-y-5">
-          <Card className="p-5">
-            <h3 className="mb-4 text-[17px] font-semibold">Reparto de ingresos</h3>
-            <Donut
-              format={fmtMoney}
-              empty="Aún no hay ingresos este año"
-              items={[
-                { label: 'Efectivo', value: sumOf((m) => m.efectivo), color: C.efectivo },
-                { label: 'Banco', value: sumOf((m) => m.banco), color: C.banco },
-                { label: 'Plataforma / rappel', value: sumOf((m) => m.plataformaRappel), color: C.plataforma },
-              ]}
-            />
-          </Card>
-          <Card className="p-5">
-            <h3 className="mb-4 text-[17px] font-semibold">Gastos por grupo</h3>
-            <HBarList
-              format={fmtMoney}
-              color={C.expenses}
-              empty="Aún no hay gastos este año"
-              items={EXPENSE_GROUPS.map((g) => ({ label: g.label, value: sumOf((m) => m.groups[g.key] ?? 0) }))
-                .filter((i) => i.value > 0)
-                .sort((a, b) => b.value - a.value)}
-            />
-          </Card>
-        </div>
-      </div>
-
-      {/* Resumen anual de gastos */}
-      <Card className="mt-4 overflow-hidden lg:mt-5">
-        <CardHeader title="Gastos" subtitle="Cada grupo de gastos, mes a mes." />
-        <div className="overflow-x-auto">
-          <table className="w-full border-separate border-spacing-0">
-            <thead>
-              <tr>
-                <th className={cx(th, stickyCol, 'border-y border-line text-left')}>Mes</th>
-                {EXPENSE_GROUPS.map((g) => (
-                  <th key={g.key} className={cx(th, 'border-y border-line text-right')}>
-                    {g.label}
-                  </th>
-                ))}
-                <th className={cx(th, 'border-y border-line text-right')}>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {months.map((m) => (
-                <tr key={m.month} className="[&>td]:border-b [&>td]:border-line">
-                  {monthCell(m.month)}
-                  {EXPENSE_GROUPS.map((g) => (
-                    <td key={g.key} className={num}>
-                      {total(m.groups[g.key] ?? 0)}
-                    </td>
-                  ))}
-                  <td className={cx(num, 'font-semibold')}>{total(m.expenses)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-fill [&>td]:font-semibold">
-                <td className={cx(stickyCol, 'bg-fill px-3 py-2 text-[14px]')}>Total</td>
-                {EXPENSE_GROUPS.map((g) => (
-                  <td key={g.key} className={num}>
-                    {total(sumOf((m) => m.groups[g.key] ?? 0))}
-                  </td>
-                ))}
-                <td className={num}>{total(expenses)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Card>
-    </>
+      <Panel>
+        <PanelTitle title="En qué se ha gastado" aside={income ? 'De cada 100 € que entran' : undefined} />
+        {groups.length ? (
+          groups.map(({ g, v }) => (
+            <div key={g.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5 border-t border-line py-3 sm:grid-cols-[200px_minmax(0,1fr)_110px_64px]">
+              <span className="min-w-0">
+                <span className="block text-[16px]">{g.title}</span>
+                <span className="block truncate text-[12.5px] text-ink-2">{fmtShare(v, expenses)} de los gastos</span>
+              </span>
+              <Bar value={v} max={groups[0].v} className="order-last col-span-2 sm:order-none sm:col-span-1" />
+              <span className="tabular text-right text-[15px] font-medium">{fmtEuros(v)}</span>
+              <span className="tabular hidden text-right text-[15px] text-ink-2 sm:block">{per100(v, income)}</span>
+            </div>
+          ))
+        ) : (
+          <p className="border-t border-line pt-4 text-[15px] text-ink-2">Aún no hay pagos apuntados este año.</p>
+        )}
+      </Panel>
+    </div>
   );
 }

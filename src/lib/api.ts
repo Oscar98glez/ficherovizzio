@@ -6,7 +6,7 @@ import { kickNotifications } from './push';
 import { fmtDistance, type Position } from './geo';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { AdminLedgerDay, AdminLedgerMonth, AdminLedgerYear, Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate, WageExtraEntry } from './types';
+import type { AdminLedgerDay, AdminLedgerExpense, AdminLedgerMonth, AdminLedgerYear, Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate, WageExtraEntry } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -72,6 +72,7 @@ const ERRORS: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/Bucket not found|set_my_photo|photo_url/i, 'Falta aplicar en Supabase la última migración (fotos de perfil).'],
   [/exceeded the maximum allowed size|Payload too large/i, 'El archivo es demasiado grande (máximo 15 MB).'],
   [/mime type .* is not supported/i, 'Tipo de archivo no permitido. Sube un PDF o una imagen (JPG, PNG, WEBP o HEIC).'],
+  [/admin_ledger_expenses/i, 'Falta aplicar en Supabase la migración de los pagos de Administración (20261029120000_admin_ledger_expenses.sql).'],
   [/admin_ledger_years/i, 'Falta aplicar en Supabase la migración del resumen anual de Administración (20261028140000_admin_ledger_years.sql).'],
   [/admin_ledger/i, 'Falta aplicar en Supabase la migración de la hoja de caja de Administración (20261028130000_admin_ledger.sql).'],
   [/reservations_table_night/i, 'Ese reservado ya tiene una reserva esa noche. Elige otro o deja la reserva sin reservado asignado.'],
@@ -317,6 +318,7 @@ export const api = {
   suppliers: repo<Supplier>('suppliers'),
   wageExtras: repo<WageExtraEntry>('wage_extras'),
   ledgerDays: repo<AdminLedgerDay>('admin_ledger_days'),
+  ledgerExpenses: repo<AdminLedgerExpense>('admin_ledger_expenses'),
   ledgerMonths: repo<AdminLedgerMonth>('admin_ledger_months'),
   ledgerYears: repo<AdminLedgerYear>('admin_ledger_years'),
   claudeConnectors: repo<ClaudeConnector>('claude_connectors'),

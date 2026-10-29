@@ -77,6 +77,31 @@
   --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1);
 }
 
+/* Administrativos: tema claro, sin la foto de fondo (sea cual sea el tema del sistema) */
+.theme-light {
+  color-scheme: light;
+  --bg: 245 245 247;
+  --surface: 255 255 255;
+  --elevated: 255 255 255;
+  --ink: 29 29 31;
+  --ink-2: 110 110 115;
+  --ink-3: 134 134 139;
+  --accent: 160 124 28;
+  --on-accent: 255 255 255;
+  --green: 31 143 63;
+  --red: 215 0 21;
+  --orange: 194 94 0;
+  --purple: 160 70 210;
+  --teal: 0 125 155;
+  --pink: 215 25 80;
+  --indigo: 88 86 214;
+  --line: rgba(0, 0, 0, 0.08);
+  --fill: rgba(120, 120, 128, 0.1);
+  --fill-2: rgba(120, 120, 128, 0.18);
+  --shadow-card: 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+  --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
 .auth-bg {
   background-color: #000;
   background-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, rgba(0, 0, 0, 0.35) 45%, rgba(0, 0, 0, 0.8) 100%), url('/login-bg.jpg');
