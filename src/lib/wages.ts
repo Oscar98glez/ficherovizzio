@@ -150,8 +150,11 @@ export function hoursBetween(from: string, to: string) {
 }
 
 /** Lo que cobra un extra una noche: el importe fijo o horas × precio */
-export const extraAmount = (x: Pick<WageExtraEntry, 'amount' | 'hours' | 'rate'>) =>
-  round2(x.amount != null ? Number(x.amount) : Number(x.hours) * Number(x.rate));
+export const extraAmount = (x: Pick<WageExtraEntry, 'amount' | 'hours' | 'rate' | 'max_amount'>) => {
+  if (x.amount != null) return round2(Number(x.amount));
+  const byHours = Number(x.hours) * Number(x.rate);
+  return round2(x.max_amount != null ? Math.min(byHours, Number(x.max_amount)) : byHours);
+};
 
 function extraCell(list: WageExtraEntry[]): WageCell {
   const x = list[0];
@@ -168,7 +171,7 @@ function extraCell(list: WageExtraEntry[]): WageCell {
     simple: list.length === 1 && !!x.clock_in && !!x.clock_out && !fixed,
     guest: false,
     fixed,
-    cap: null,
+    cap: list.length === 1 && !fixed && x.max_amount != null ? Number(x.max_amount) : null,
   };
 }
 

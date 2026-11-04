@@ -955,6 +955,15 @@ const TOOLS: Tool[] = [
           origen: e.source === 'manual' ? 'manual' : 'app',
           notas: e.notes ?? null,
           ...(outMs ? {} : { aviso: 'Fichaje abierto (sin salida)' }),
+          // El camarero corrigió las horas desde la app: lo que fichó al principio
+          ...(e.corrected_at
+            ? {
+                corregido_por_el_trabajador: {
+                  entrada_fichada: e.original_clock_in ? toMadrid(Date.parse(e.original_clock_in as string)).time : null,
+                  salida_fichada: e.original_clock_out ? toMadrid(Date.parse(e.original_clock_out as string)).time : null,
+                },
+              }
+            : {}),
         };
       });
       const fichado = new Set(fichajes.map((f) => `${f.noche}|${f.empleado_id}`));

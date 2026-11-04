@@ -113,6 +113,10 @@ export interface TimeEntry {
   clock_out_accuracy?: number | null;
   clock_out_distance?: number | null;
   clock_out_outside?: boolean | null;
+  /** Si el trabajador corrigió las horas: lo que fichó al principio y cuándo lo corrigió */
+  original_clock_in?: string | null;
+  original_clock_out?: string | null;
+  corrected_at?: string | null;
 }
 
 /** Ubicación del local para comprobar dónde se ficha */
@@ -534,6 +538,8 @@ export interface WageExtraEntry {
   rate: number;
   /** Importe fijo de la noche, en lugar de horas × precio */
   amount: number | null;
+  /** Lo máximo que cobra esa noche con horas × precio (embajadoras: 20 €) */
+  max_amount?: number | null;
   notes: string | null;
   created_at: string;
 }

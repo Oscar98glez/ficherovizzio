@@ -385,6 +385,34 @@ export async function demoClockOut(pos?: Position | null, notes?: string): Promi
   return clone(open) as unknown as TimeEntry;
 }
 
+/** Como correct_my_time_entry de Supabase: el camarero corrige las horas de un fichaje suyo */
+export async function demoCorrectMyTimeEntry(id: string, clockIn: string, clockOut: string | null): Promise<null> {
+  const emp = currentEmployee();
+  const e = getDb().time_entries.find((t) => t.id === id && t.employee_id === emp.id) as unknown as TimeEntry | undefined;
+  if (!e) throw new Error('CORRECTION_NOT_FOUND');
+  const first = Date.parse(e.original_clock_in ?? e.clock_in);
+  const inMs = Date.parse(clockIn);
+  const outMs = clockOut ? Date.parse(clockOut) : null;
+  const now = Date.now() + 5 * 60e3;
+  if (first < Date.now() - 3 * 86400e3) throw new Error('CORRECTION_TOO_LATE');
+  if (inMs > now || (outMs != null && outMs > now)) throw new Error('CORRECTION_FUTURE');
+  if (e.clock_out && outMs == null) throw new Error('CORRECTION_NEEDS_OUT');
+  if (outMs != null && outMs <= inMs) throw new Error('CORRECTION_ORDER');
+  if (outMs != null && outMs - inMs > 14 * 3600e3) throw new Error('CORRECTION_TOO_LONG');
+  if (Math.abs(inMs - first) > 12 * 3600e3) throw new Error('CORRECTION_TOO_FAR');
+  if (e.corrected_at == null) {
+    e.original_clock_in = e.clock_in;
+    e.original_clock_out = e.clock_out;
+  }
+  e.clock_in = clockIn;
+  e.clock_out = clockOut;
+  e.corrected_at = new Date().toISOString();
+  syncShiftEnd(e);
+  persist();
+  await wait();
+  return null;
+}
+
 /** Como mark_message_read de Supabase: el trabajador marca como leído un mensaje suyo */
 export async function demoMarkMessageRead(recipientId: string): Promise<void> {
   const emp = currentEmployee();
