@@ -1,6 +1,6 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoFiles, demoGetVenue, demoSaveVenue, demoSetRrppName, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoClockIn, demoClockOut, demoCorrectMyTimeEntry, demoFiles, demoGetVenue, demoSaveVenue, demoSetRrppName, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
 import { kickNotifications } from './push';
 import { fmtDistance, type Position } from './geo';
@@ -35,6 +35,15 @@ const ERRORS: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/Database error saving new user/i, 'No se ha podido crear la cuenta. Inténtalo de nuevo o avisa al administrador.'],
   [/ALREADY_CLOCKED_IN|time_entries_one_open/i, 'Ya hay un fichaje abierto para este empleado.'],
   [/NOT_CLOCKED_IN/i, 'No tienes ningún fichaje abierto.'],
+  [/CORRECTION_NOT_ALLOWED/i, 'Sólo los camareros pueden corregir sus fichajes. Pide al encargado que lo cambie.'],
+  [/CORRECTION_NOT_FOUND/i, 'No se ha encontrado ese fichaje.'],
+  [/CORRECTION_TOO_LATE/i, 'Sólo puedes corregir los fichajes de los últimos 3 días. Para uno más antiguo, pídeselo al encargado.'],
+  [/CORRECTION_FUTURE/i, 'La hora no puede ser posterior a ahora.'],
+  [/CORRECTION_NEEDS_OUT/i, 'Pon también la hora de salida.'],
+  [/CORRECTION_ORDER/i, 'La salida tiene que ser después de la entrada.'],
+  [/CORRECTION_TOO_LONG/i, 'El turno no puede pasar de 14 horas. Revisa las horas.'],
+  [/CORRECTION_TOO_FAR/i, 'La hora está muy lejos de cuando fichaste (más de 12 horas). Revisa la hora o pídeselo al encargado.'],
+  [/CORRECTION_OVERLAP/i, 'Esas horas se pisan con otro fichaje tuyo.'],
   [/LOCATION_REQUIRED/i, 'Para fichar la entrada hace falta tu ubicación. Activa la ubicación del móvil y da permiso a la app.'],
   [
     /OUTSIDE_VENUE(?::(\d+))?/i,
@@ -338,6 +347,12 @@ export const api = {
   /** Fichar entrada del usuario conectado (hora del servidor), con su ubicación si la hay. */
   clockIn: (pos?: Position | null, notes?: string) =>
     IS_DEMO ? demoClockIn(pos, notes) : sbRpc<TimeEntry>('clock_in', { p_notes: notes ?? null, ...locationArgs(pos) }),
+
+  /** Los camareros corrigen la entrada y la salida de un fichaje suyo de los últimos días */
+  correctMyTimeEntry: (id: string, clockIn: string, clockOut: string | null) =>
+    IS_DEMO
+      ? demoCorrectMyTimeEntry(id, clockIn, clockOut)
+      : sbRpc<null>('correct_my_time_entry', { p_id: id, p_clock_in: clockIn, p_clock_out: clockOut }),
 
   /** Fichar salida del usuario conectado (hora del servidor), con su ubicación si la hay. */
   clockOut: (pos?: Position | null, notes?: string) =>
