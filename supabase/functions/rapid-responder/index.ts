@@ -73,8 +73,11 @@ FICHAJES (hoja de firmas)
 - Enséñale una tabla con las diferencias (persona, app y hoja) antes de cambiar nada, salvo que te haya dicho que corrijas directamente. Por defecto, una diferencia de 10 minutos o menos se da por buena.
 - Corrige con corregir_fichajes: modifica la entrada/salida del fichaje que está mal, crea el fichaje si la persona está en la hoja pero no fichó, y solo borra fichajes si el usuario lo pide. Las horas se indican en hora española (HH:MM) junto con la noche (AAAA-MM-DD).
 
-HORARIOS
+HORARIOS Y TURNOS
 - ver_disponibilidad enseña, por día, quién ha dicho que puede trabajar (y en qué horario), quién no y quién no ha contestado, con su tipo (barra, bandeja, puerta…). Úsalo para proponer el horario de la semana con las personas que pida el usuario para cada día; pregunta si falta gente o alguien imprescindible no ha dado disponibilidad.
+- Reparte con las reglas que te dé el usuario (cuántas personas de cada tipo por noche, quién va siempre en puerta, quién trabaja todos los días que pueda, más días a quien da más disponibilidad…).
+- crear_turnos pone los turnos en la app (apartado Turnos) y a cada trabajador le llega el aviso al móvil. Enséñale antes el horario y créalo cuando te lo confirme, salvo que te haya dicho que lo crees directamente. Usa la hora de entrada que diga el usuario; si no la dice, pregúntala.
+- ver_turnos enseña los turnos ya puestos (y si el trabajador lo ha aceptado o rechazado); cancelar_turnos los cancela (al trabajador le llega el aviso).
 
 RESERVADOS
 - ver_reservados_noche enseña los reservados de una noche en la app y las reservas de Fourvenues (por RRPP) para cotejarlos. Es sólo de lectura y lleva datos de clientes: úsalo sólo cuando el usuario lo pida.
@@ -955,6 +958,8 @@ const TOOLS: Tool[] = [
           origen: e.source === 'manual' ? 'manual' : 'app',
           notas: e.notes ?? null,
           ...(outMs ? {} : { aviso: 'Fichaje abierto (sin salida)' }),
+          // El camarero lo añadió desde la app porque se le olvidó fichar
+          ...(e.added_by_worker ? { añadido_por_el_trabajador: true } : {}),
           // El camarero corrigió las horas desde la app: lo que fichó al principio
           ...(e.corrected_at
             ? {
@@ -1058,6 +1063,175 @@ const TOOLS: Tool[] = [
           };
         }),
       };
+    },
+  },
+
+  {
+    name: 'ver_turnos',
+    title: 'Ver turnos',
+    description:
+      'Turnos puestos en la app (apartado Turnos) entre dos noches: persona, puesto, noche, hora de entrada (y de salida si la tiene), estado y si el trabajador lo ha aceptado o rechazado. Sólo lectura.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fecha: { ...DATE, description: 'Primera noche (AAAA-MM-DD)' },
+        hasta: { ...DATE, description: 'Última noche (máx. 31)' },
+        incluir_cancelados: { type: 'boolean', default: false },
+      },
+      required: ['fecha'],
+    },
+    annotations: READ_ONLY,
+    run: async ({ db }, a) => {
+      const from = date(a, 'fecha', true)!;
+      const to = date(a, 'hasta') ?? from;
+      if (to < from) throw new UserError('"hasta" debe ser igual o posterior a "fecha"');
+      if (Date.parse(to) - Date.parse(from) > 31 * 24 * HOUR_MS) throw new UserError('Como mucho 31 noches por consulta');
+      const [start] = nightRange(from);
+      const [, end] = nightRange(to);
+      let q = db.from('shifts').select('id, employee_id, start_at, end_at, position, status, notes, response, response_note').gte('start_at', start).lt('start_at', end);
+      if (a.incluir_cancelados !== true) q = q.neq('status', 'cancelled');
+      const [shiftsRes, employeesRes] = await Promise.all([q.order('start_at'), db.from('employees').select('id, first_name, last_name')]);
+      const names = new Map((check(employeesRes, 'No se pudo leer el personal') as Record<string, unknown>[]).map((e) => [e.id, `${e.first_name} ${e.last_name ?? ''}`.trim()]));
+      const shifts = check(shiftsRes, 'No se pudieron leer los turnos') as Record<string, unknown>[];
+      return {
+        desde: from,
+        hasta: to,
+        cantidad: shifts.length,
+        turnos: shifts.map((t) => ({
+          id: t.id,
+          noche: nightOf(Date.parse(t.start_at as string)),
+          empleado_id: t.employee_id,
+          empleado: names.get(t.employee_id) ?? '¿?',
+          puesto: t.position,
+          entrada: toMadrid(Date.parse(t.start_at as string)).time,
+          salida: t.end_at ? toMadrid(Date.parse(t.end_at as string)).time : null,
+          estado: t.status === 'cancelled' ? 'cancelado' : t.status === 'confirmed' ? 'confirmado' : 'previsto',
+          respuesta: t.response === 'accepted' ? 'aceptado' : t.response === 'declined' ? 'rechazado' : 'sin responder',
+          motivo_rechazo: t.response_note ?? null,
+          notas: t.notes ?? null,
+        })),
+      };
+    },
+  },
+
+  {
+    name: 'crear_turnos',
+    title: 'Crear turnos',
+    description:
+      'Pone turnos en la app (apartado Turnos), uno por persona y noche, con la hora de entrada (hora española HH:MM; antes de las 06:00 es del día siguiente). Al trabajador le llega el aviso al móvil (avisar=false para no avisar). Si esa persona ya tiene turno esa noche, no se duplica: se omite, o se cambia la hora con cambiar_existentes=true. Empleados de listar_personal o ver_disponibilidad.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        turnos: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 200,
+          items: {
+            type: 'object',
+            properties: {
+              empleado_id: { type: 'string' },
+              noche: { ...DATE, description: 'La noche (AAAA-MM-DD)' },
+              entrada: { type: 'string', description: 'HH:MM' },
+              salida: { type: 'string', description: 'HH:MM (opcional; si no, se rellena sola al fichar la salida)' },
+              puesto: { type: 'string', description: 'Por defecto el de su ficha (p. ej. Camarero/a, Puerta)' },
+              notas: { type: 'string' },
+            },
+            required: ['empleado_id', 'noche', 'entrada'],
+          },
+        },
+        avisar: { type: 'boolean', default: true, description: 'Mandar el aviso al móvil de cada trabajador' },
+        cambiar_existentes: { type: 'boolean', default: false, description: 'Si ya tiene turno esa noche, cambiarle la hora (y el puesto)' },
+      },
+      required: ['turnos'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    run: async ({ db }, a) => {
+      const list = Array.isArray(a.turnos) ? (a.turnos as Args[]) : [];
+      if (!list.length) throw new UserError('Falta "turnos"');
+      const notify = a.avisar !== false;
+      const nights = list.map((t, i) => date(t, 'noche', true) ?? (() => { throw new UserError(`Turno ${i + 1}: falta la noche`); })());
+      const first = [...nights].sort()[0];
+      const last = [...nights].sort().reverse()[0];
+      const [start] = nightRange(first);
+      const [, end] = nightRange(last);
+      const ids = [...new Set(list.map((t) => str(t, 'empleado_id', { required: true })!))];
+      const [empRes, shiftRes, evRes] = await Promise.all([
+        db.from('employees').select('id, first_name, last_name, position, active').in('id', ids),
+        db.from('shifts').select('id, employee_id, start_at, status').in('employee_id', ids).gte('start_at', start).lt('start_at', end).neq('status', 'cancelled'),
+        db.from('events').select('id, date').gte('date', first).lte('date', last),
+      ]);
+      const employees = new Map((check(empRes, 'No se pudo leer el personal') as Record<string, unknown>[]).map((e) => [e.id as string, e]));
+      const existing = check(shiftRes, 'No se pudieron leer los turnos') as Record<string, unknown>[];
+      const events = new Map((check(evRes, 'No se pudieron leer las noches') as Record<string, unknown>[]).map((e) => [e.date as string, e.id as string]));
+      const name = (e: Record<string, unknown>) => `${e.first_name} ${e.last_name ?? ''}`.trim();
+
+      // Se comprueba todo antes de guardar nada
+      type Plan = { kind: 'new' | 'update' | 'skip'; emp: Record<string, unknown>; night: string; startMs: number; endMs: number | null; position: string; notes: string | null; existingId?: string };
+      const plans: Plan[] = list.map((t, i) => {
+        const emp = employees.get(str(t, 'empleado_id', { required: true })!);
+        if (!emp) throw new UserError(`Turno ${i + 1}: no existe ningún trabajador con id ${t.empleado_id}`);
+        if (!emp.active) throw new UserError(`Turno ${i + 1}: ${name(emp)} está de baja en la app`);
+        const night = nights[i];
+        const startMs = nightTime(night, str(t, 'entrada', { required: true })!, 'entrada');
+        const out = str(t, 'salida');
+        const endMs = out ? nightOut(night, out, startMs) : null;
+        const prev = existing.find((x) => x.employee_id === emp.id && nightOf(Date.parse(x.start_at as string)) === night);
+        const position = str(t, 'puesto', { max: 80 }) ?? (emp.position as string) ?? 'Camarero/a';
+        return { kind: prev ? (a.cambiar_existentes === true ? 'update' : 'skip') : 'new', emp, night, startMs, endMs, position, notes: str(t, 'notas', { max: 500 }), existingId: prev?.id as string | undefined };
+      });
+      const dup = plans.find((p, i) => plans.findIndex((q) => q.emp.id === p.emp.id && q.night === p.night) !== i);
+      if (dup) throw new UserError(`${name(dup.emp)} sale dos veces la noche ${dup.night}`);
+
+      const rows = plans.filter((p) => p.kind === 'new').map((p) => ({
+        employee_id: p.emp.id,
+        start_at: new Date(p.startMs).toISOString(),
+        end_at: p.endMs ? new Date(p.endMs).toISOString() : null,
+        position: p.position,
+        status: 'planned',
+        event_id: events.get(p.night) ?? null,
+        notes: p.notes,
+      }));
+      const created = rows.length ? (check(await db.from('shifts').insert(rows).select('id, employee_id, start_at'), 'No se pudieron crear los turnos') as Record<string, unknown>[]) : [];
+      const updated: string[] = [];
+      for (const p of plans.filter((x) => x.kind === 'update')) {
+        check(
+          await db.from('shifts').update({ start_at: new Date(p.startMs).toISOString(), end_at: p.endMs ? new Date(p.endMs).toISOString() : null, position: p.position, ...(p.notes ? { notes: p.notes } : {}) }).eq('id', p.existingId!),
+          `No se pudo cambiar el turno de ${name(p.emp)}`,
+        );
+        updated.push(p.existingId!);
+      }
+      const touched = [...created.map((c) => c.id as string), ...updated];
+      const avisados = touched.length ? await deliverShiftNotices(db, touched, notify) : 0;
+
+      const line = (p: Plan) => ({ empleado: name(p.emp), noche: p.night, entrada: toMadrid(p.startMs).time, puesto: p.position });
+      return {
+        creados: plans.filter((p) => p.kind === 'new').map(line),
+        cambiados: plans.filter((p) => p.kind === 'update').map(line),
+        omitidos_porque_ya_tenian_turno: plans.filter((p) => p.kind === 'skip').map(line),
+        avisos: notify ? `${avisados} aviso(s) enviados al móvil` : 'Sin aviso (avisar = false)',
+      };
+    },
+  },
+
+  {
+    name: 'cancelar_turnos',
+    title: 'Cancelar turnos',
+    description: 'Cancela turnos de la app (por su id, de ver_turnos). Al trabajador le llega el aviso al móvil (avisar=false para no avisar).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        turno_ids: { type: 'array', minItems: 1, maxItems: 200, items: { type: 'string' } },
+        avisar: { type: 'boolean', default: true },
+      },
+      required: ['turno_ids'],
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    run: async ({ db }, a) => {
+      const ids = Array.isArray(a.turno_ids) ? (a.turno_ids as unknown[]).map(String) : [];
+      if (!ids.length) throw new UserError('Falta "turno_ids"');
+      const rows = check(await db.from('shifts').update({ status: 'cancelled' }).in('id', ids).neq('status', 'cancelled').select('id, employee_id, start_at'), 'No se pudieron cancelar los turnos') as Record<string, unknown>[];
+      const avisados = rows.length ? await deliverShiftNotices(db, rows.map((r) => r.id as string), a.avisar !== false) : 0;
+      return { cancelados: rows.length, ya_estaban_cancelados_o_no_existen: ids.length - rows.length, avisos: a.avisar !== false ? `${avisados} aviso(s) enviados al móvil` : 'Sin aviso' };
     },
   },
 
@@ -1618,6 +1792,31 @@ export async function handler(req: Request, db: SupabaseClient | null): Promise<
 
   if (!responses.length) return new Response(null, { status: 202, headers: CORS });
   return json(Array.isArray(body) ? responses : responses[0]);
+}
+
+/**
+ * Avisos de unos turnos: la base de datos los apunta sola al crear o cambiar un turno; aquí se
+ * mandan al momento con la función notify (como hace la app) o, con avisar=false, se dan por
+ * enviados para que no lleguen. Devuelve cuántos había.
+ */
+async function deliverShiftNotices(db: SupabaseClient, shiftIds: string[], send: boolean): Promise<number> {
+  const pending = check(await db.from('notifications').select('id').in('ref_id', shiftIds).is('sent_at', null), 'No se pudieron leer los avisos') as Record<string, unknown>[];
+  if (!pending.length) return 0;
+  if (!send) {
+    check(await db.from('notifications').update({ sent_at: new Date().toISOString() }).in('id', pending.map((p) => p.id as string)), 'No se pudieron quitar los avisos');
+    return 0;
+  }
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = serviceKey();
+  if (url && key) {
+    // Si falla, se mandan con el siguiente cambio que se haga en la app
+    await fetch(`${url}/functions/v1/notify`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, apikey: key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'send' }),
+    }).catch(() => null);
+  }
+  return pending.length;
 }
 
 /**

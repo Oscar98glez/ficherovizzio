@@ -176,10 +176,16 @@ export default function TimeEntries() {
                               {emp?.position}
                             </div>
                             <LocationTag entry={e} className="max-w-full" />
-                            {e.corrected_at && (
-                              <div className="mt-0.5 truncate text-[12px] font-medium text-orange" title="Lo corrigió el trabajador desde la app">
-                                Corregido por el trabajador · fichó {e.original_clock_in ? fmtTime(e.original_clock_in) : '?'} – {e.original_clock_out ? fmtTime(e.original_clock_out) : 'sin salida'}
+                            {e.added_by_worker ? (
+                              <div className="mt-0.5 truncate text-[12px] font-medium text-orange" title="Se le olvidó fichar y lo añadió el trabajador desde la app">
+                                Añadido por el trabajador (no fichó)
                               </div>
+                            ) : (
+                              e.corrected_at && (
+                                <div className="mt-0.5 truncate text-[12px] font-medium text-orange" title="Lo corrigió el trabajador desde la app">
+                                  Corregido por el trabajador · fichó {e.original_clock_in ? fmtTime(e.original_clock_in) : '?'} – {e.original_clock_out ? fmtTime(e.original_clock_out) : 'sin salida'}
+                                </div>
+                              )
                             )}
                           </div>
                         </div>
