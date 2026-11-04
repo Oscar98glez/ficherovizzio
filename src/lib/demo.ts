@@ -413,6 +413,39 @@ export async function demoCorrectMyTimeEntry(id: string, clockIn: string, clockO
   return null;
 }
 
+/** Como add_my_time_entry de Supabase: el camarero añade una noche en la que se le olvidó fichar */
+export async function demoAddMyTimeEntry(clockIn: string, clockOut: string): Promise<null> {
+  const emp = currentEmployee();
+  const inMs = Date.parse(clockIn);
+  const outMs = Date.parse(clockOut);
+  const now = Date.now() + 5 * 60e3;
+  if (inMs < Date.now() - 3 * 86400e3) throw new Error('CORRECTION_TOO_LATE');
+  if (inMs > now || outMs > now) throw new Error('CORRECTION_FUTURE');
+  if (outMs <= inMs) throw new Error('CORRECTION_ORDER');
+  if (outMs - inMs > 14 * 3600e3) throw new Error('CORRECTION_TOO_LONG');
+  const mine = (getDb().time_entries as unknown as TimeEntry[]).filter((t) => t.employee_id === emp.id);
+  if (mine.some((t) => Date.parse(t.clock_in) < outMs && (t.clock_out ? Date.parse(t.clock_out) : Infinity) > inMs)) throw new Error('CORRECTION_OVERLAP');
+  const entry = {
+    id: uid(),
+    employee_id: emp.id,
+    clock_in: clockIn,
+    clock_out: clockOut,
+    break_minutes: 0,
+    hourly_rate: emp.hourly_rate,
+    max_amount: emp.daily_cap ?? null,
+    event_id: null,
+    source: 'manual',
+    notes: 'Añadido por el trabajador (se le olvidó fichar)',
+    added_by_worker: true,
+    created_at: new Date().toISOString(),
+  };
+  getDb().time_entries.push(entry as unknown as Record<string, unknown>);
+  syncShiftEnd(entry as unknown as TimeEntry);
+  persist();
+  await wait();
+  return null;
+}
+
 /** Como mark_message_read de Supabase: el trabajador marca como leído un mensaje suyo */
 export async function demoMarkMessageRead(recipientId: string): Promise<void> {
   const emp = currentEmployee();

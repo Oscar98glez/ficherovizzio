@@ -284,12 +284,21 @@ async function handler(req: Request, db: SupabaseClient | null) {
   if (req.method !== 'POST') return json({ error: 'Método no permitido' }, 405);
   if (!db) return json({ error: 'Falta la configuración de Supabase en la función' }, 500);
 
-  // Sólo usuarios con sesión en la app
+  // Sólo usuarios con sesión en la app, o el conector de Claude con la clave de servicio (sólo para enviar)
   const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const { action } = (await req.json().catch(() => ({}))) as { action?: string };
+  const key = serviceKey();
+  if (token && key && token === key && (action ?? 'send') === 'send') {
+    try {
+      return json(await sendPending(db, await ensureKeys(db), subjectFor(req)));
+    } catch (e) {
+      console.error(e);
+      return json({ error: e instanceof Error ? e.message : String(e) }, 500);
+    }
+  }
   const { data: auth } = token ? await db.auth.getUser(token) : { data: { user: null } };
   if (!auth?.user) return json({ error: 'Inicia sesión en la app' }, 401);
 
-  const { action } = (await req.json().catch(() => ({}))) as { action?: string };
   try {
     const keys = await ensureKeys(db);
     if (action === 'public_key') return json({ publicKey: keys.public_key });

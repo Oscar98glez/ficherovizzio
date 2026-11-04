@@ -117,6 +117,8 @@ export interface TimeEntry {
   original_clock_in?: string | null;
   original_clock_out?: string | null;
   corrected_at?: string | null;
+  /** Lo añadió el propio trabajador porque se le olvidó fichar */
+  added_by_worker?: boolean;
 }
 
 /** Ubicación del local para comprobar dónde se ficha */

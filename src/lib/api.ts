@@ -1,6 +1,6 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoClockIn, demoClockOut, demoCorrectMyTimeEntry, demoFiles, demoGetVenue, demoSaveVenue, demoSetRrppName, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoAddMyTimeEntry, demoClockIn, demoClockOut, demoCorrectMyTimeEntry, demoFiles, demoGetVenue, demoSaveVenue, demoSetRrppName, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
 import { blobToDataUrl } from './image';
 import { kickNotifications } from './push';
 import { fmtDistance, type Position } from './geo';
@@ -353,6 +353,10 @@ export const api = {
     IS_DEMO
       ? demoCorrectMyTimeEntry(id, clockIn, clockOut)
       : sbRpc<null>('correct_my_time_entry', { p_id: id, p_clock_in: clockIn, p_clock_out: clockOut }),
+
+  /** Los camareros añaden el fichaje de una noche en la que se les olvidó fichar */
+  addMyTimeEntry: (clockIn: string, clockOut: string) =>
+    IS_DEMO ? demoAddMyTimeEntry(clockIn, clockOut) : sbRpc<null>('add_my_time_entry', { p_clock_in: clockIn, p_clock_out: clockOut }),
 
   /** Fichar salida del usuario conectado (hora del servidor), con su ubicación si la hay. */
   clockOut: (pos?: Position | null, notes?: string) =>
