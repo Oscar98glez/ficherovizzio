@@ -90,7 +90,7 @@ export default function Login() {
           <DemoOption
             icon={<ConciergeBell className="h-6 w-6" />}
             title="Camarero/a de bandeja"
-            text="Lo mismo que un camarero y, además, ver los reservados y recibir aviso de los nuevos."
+            text="Lo mismo que un camarero y, además, ver los reservados y recibir aviso cuando llega cada uno."
             onClick={() => demo('tray')}
           />
           <DemoOption
