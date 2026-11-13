@@ -91,7 +91,11 @@ export function NewOrderModal({ reservation, onClose, onSaved }: { reservation: 
         extra_orders: [...(latest.extra_orders ?? []), { id: uid(), at: new Date().toISOString(), by, bottles: b, mixers: m }],
         total_amount: round2(before + orderTotal),
       });
-      toast.success('Pedido añadido: les llega un aviso a los camareros de bandeja');
+      toast.success(
+        latest.status === 'arrived'
+          ? 'Pedido añadido: les llega un aviso a los camareros de bandeja'
+          : 'Pedido añadido: los camareros de bandeja lo verán en el aviso cuando llegue el reservado',
+      );
       onSaved();
     } catch (e) {
       toast.error(errorMessage(e));

@@ -273,7 +273,7 @@ export default function EmployeeDetail() {
                         checked={!!e.manages_reservations}
                         onChange={setManager}
                         label="Gestiona todos los reservados"
-                        description="Como el hoster: puede modificar cualquier reserva aunque no la haya creado y le llegan los avisos de reservados y pedidos nuevos."
+                        description="Como el hoster: puede modificar cualquier reserva aunque no la haya creado y le llegan los avisos cuando llega un reservado y de sus pedidos nuevos."
                       />
                     </div>
                   )}
