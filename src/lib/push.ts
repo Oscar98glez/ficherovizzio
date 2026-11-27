@@ -1,6 +1,6 @@
 // Notificaciones al móvil (Web Push): activar/desactivar en este dispositivo y avisar al
 // servidor para que envíe los avisos pendientes (supabase/functions/notify).
-import { IS_DEMO } from './config';
+import { IS_DEMO, SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 import { supabase } from './supabase';
 
 export const NOTIFY_FUNCTION = 'notify';
@@ -107,16 +107,67 @@ export async function disablePush(): Promise<PushState> {
 /** Aviso de prueba a los dispositivos de este usuario */
 export const testPush = () => invoke<{ devices: number; sent: number }>({ action: 'test' });
 
-/**
- * Pide al servidor que envíe los avisos pendientes (turnos, mensajes...). Se llama tras
- * los cambios del administrador; si falla no pasa nada: se enviarán en el siguiente cambio.
- */
+// ---------- Envío de los avisos pendientes ----------
+//  Los avisos los apunta la base de datos; esta función le pide al servidor que los mande.
+//  · Se llama justo después de cada cambio (reservado, pedido, turno, mensaje...).
+//  · Va con "keepalive": aunque se cierre la app o se bloquee el móvil justo después de
+//    guardar, la petición sale igual.
+//  · Si falla (sin cobertura, servidor ocupado), se reintenta unas cuantas veces.
+//  · Además, cada vez que alguien abre la app o vuelve a ella se mandan los que se
+//    hubieran quedado pendientes.
+
+/** Sesión actual (se guarda aquí para poder enviar al instante al cerrar la app) */
+let accessToken: string | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
+let pending = false;
+const RETRY_MS = [3000, 10000, 30000, 90000];
+
+function sendNow(keepalive: boolean): Promise<void> {
+  pending = false;
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !accessToken) return Promise.resolve();
+  const request = (k: boolean) =>
+    fetch(`${SUPABASE_URL}/functions/v1/${NOTIFY_FUNCTION}`, {
+      method: 'POST',
+      keepalive: k,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}`, apikey: SUPABASE_ANON_KEY! },
+      body: JSON.stringify({ action: 'send' }),
+    });
+  // Algún navegador no admite "keepalive" en esta petición: entonces va normal
+  return (keepalive ? request(true).catch(() => request(false)) : request(false)).then((res) => {
+    if (!res.ok) throw new Error(`notify ${res.status}`);
+  });
+}
+
+/** Envía ya; si falla, lo vuelve a intentar al rato */
+function flush(attempt = 0, keepalive = false) {
+  clearTimeout(timer);
+  sendNow(keepalive).catch(() => {
+    if (attempt >= RETRY_MS.length) return;
+    pending = true;
+    timer = setTimeout(() => flush(attempt + 1), RETRY_MS[attempt]);
+  });
+}
+
+/** Pide al servidor que envíe los avisos pendientes. Los cambios seguidos van en un solo envío. */
 export function kickNotifications() {
   if (IS_DEMO || !supabase) return;
+  pending = true;
   clearTimeout(timer);
-  // Se agrupan los cambios seguidos (p. ej. varios turnos a la vez) en un solo envío
-  timer = setTimeout(() => {
-    invoke({ action: 'send' }).catch(() => {});
-  }, 800);
+  timer = setTimeout(() => flush(), 400);
+}
+
+if (!IS_DEMO && supabase && typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange((_event, session) => {
+    const had = !!accessToken;
+    accessToken = session?.access_token ?? null;
+    // Al abrir la app con sesión: lo que hubiera quedado pendiente
+    if (accessToken && !had) kickNotifications();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      // Se va a segundo plano con un envío a punto de salir: sale ya
+      if (pending) flush(0, true);
+    } else if (accessToken) kickNotifications();
+  });
+  window.addEventListener('pagehide', () => pending && flush(0, true));
 }

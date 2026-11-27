@@ -179,7 +179,7 @@ async function ensureKeys(db: SupabaseClient): Promise<Keys> {
 //  Envío
 // ---------------------------------------------------------------------
 
-async function sendPending(db: SupabaseClient, keys: Keys, subject: string) {
+export async function sendPending(db: SupabaseClient, keys: Keys, subject: string) {
   const now = new Date();
   const cutoff = new Date(now.getTime() - MAX_AGE_MS).toISOString();
 
@@ -213,30 +213,47 @@ async function sendPending(db: SupabaseClient, keys: Keys, subject: string) {
   let sent = 0;
   let failed = 0;
   const gone: string[] = [];
+  // Avisos que no han llegado a ningún dispositivo por un fallo pasajero: se vuelven a intentar
+  const retry: string[] = [];
 
   const jobs: Promise<void>[] = [];
   for (const [userId, list] of byUser) {
     const devices = (subs ?? []).filter((s) => s.user_id === userId);
     if (!devices.length) continue;
     const body = JSON.stringify(payloadFor(list));
-    for (const s of devices) {
-      jobs.push(
-        webpush
-          .sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, options)
-          .then(() => void sent++)
-          .catch((e: { statusCode?: number; body?: string; message?: string }) => {
-            failed++;
-            // 404 / 410: el dispositivo ya no existe (se desinstaló o se quitaron los permisos)
-            if (e.statusCode === 404 || e.statusCode === 410) gone.push(s.id);
-            else console.error('push', e.statusCode, e.body ?? e.message);
-          }),
-      );
-    }
+    let delivered = 0;
+    let transient = 0;
+    const tries = devices.map((s) =>
+      webpush
+        .sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, body, options)
+        .then(() => {
+          sent++;
+          delivered++;
+        })
+        .catch((e: { statusCode?: number; body?: string; message?: string }) => {
+          failed++;
+          // 404 / 410: el dispositivo ya no existe (se desinstaló o se quitaron los permisos)
+          if (e.statusCode === 404 || e.statusCode === 410) gone.push(s.id);
+          else {
+            if (isTransient(e.statusCode)) transient++;
+            console.error('push', e.statusCode, e.body ?? e.message);
+          }
+        }),
+    );
+    jobs.push(
+      Promise.all(tries).then(() => {
+        if (!delivered && transient) retry.push(...list.map((n) => n.id));
+      }),
+    );
   }
   await Promise.all(jobs);
   if (gone.length) await db.from('push_subscriptions').delete().in('id', gone);
-  return { notifications: pending.length, sent, failed, removed: gone.length };
+  if (retry.length) await db.from('notifications').update({ sent_at: null }).in('id', retry);
+  return { notifications: pending.length, sent, failed, removed: gone.length, retry: retry.length };
 }
+
+/** Fallo del servicio de avisos que se arregla solo (sin conexión, saturado, caído un momento) */
+export const isTransient = (status?: number) => status == null || status === 408 || status === 429 || status >= 500;
 
 /** Aviso de prueba a los dispositivos del usuario que lo pide */
 async function sendTest(db: SupabaseClient, keys: Keys, subject: string, userId: string) {
