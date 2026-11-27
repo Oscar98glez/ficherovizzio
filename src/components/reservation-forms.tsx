@@ -2,10 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Eye, Minus, Plus, PlusCircle, Trash2, UserPlus, X } from 'lucide-react';
 import { api, errorMessage } from '../lib/api';
 import { hhmm } from '../lib/availability';
-import { occupiesTable, RESERVATION_ORIGINS, RESERVATION_STATUS } from '../lib/constants';
+import { occupiesTable, ORDER_SERVICE, RESERVATION_ORIGINS, RESERVATION_STATUS } from '../lib/constants';
 import { fmtDateFull, fmtMoneyExact, fmtTime } from '../lib/format';
 import { BOTTLE_GROUPS, menuPrice, MIXER_GROUPS, type MenuGroup } from '../lib/menu';
-import { allBottles, allMixers, extraOrdersTotal, itemsTotal, ordersOf } from '../lib/orders';
+import { allBottles, allMixers, extraOrdersTotal, itemsTotal, ordersOf, serviceOf } from '../lib/orders';
 import type { OrderItem, Reservation, ReservationOrigin, ReservationStatus, StaffOption, VipTable } from '../lib/types';
 import { cx, parseAmount, uid } from '../lib/utils';
 import { useAuth } from '../auth';
@@ -30,39 +30,53 @@ function OrdersView({ reservation, onRemove }: { reservation: Reservation; onRem
   const orders = ordersOf(reservation).filter((o, i) => i > 0 || o.bottles.length || o.mixers.length);
   if (!orders.length) return null;
   const several = (reservation.extra_orders ?? []).length > 0;
+  // Cómo va cada pedido, desde que el reservado ha llegado (o si un bandeja ya lo ha tocado)
+  const showService = reservation.status === 'arrived' || reservation.status === 'left' || Object.keys(reservation.service ?? {}).length > 0;
   return (
     <div className="space-y-2">
-      {orders.map((o) => (
-        <div key={o.n} className="rounded-xl bg-fill/60 px-3.5 py-2.5">
-          {several && (
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="text-[12px] font-semibold uppercase tracking-wide text-ink-3">
-                Pedido {o.n}
-                {o.n > 1 && o.at ? ` · ${fmtTime(o.at)}` : ''}
-                {o.n > 1 && o.by ? ` · ${o.by}` : ''}
-              </span>
-              {onRemove && o.n > 1 && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(o.n - 2)}
-                  className="grid h-7 w-7 place-items-center rounded-full text-ink-3 hover:bg-fill hover:text-red"
-                  aria-label={`Quitar el pedido ${o.n}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              )}
+      {orders.map((o) => {
+        const sv = serviceOf(reservation, o.key);
+        const badge = showService && (
+          <Badge tone={ORDER_SERVICE[sv.status].tone}>
+            {ORDER_SERVICE[sv.status].label}
+            {sv.by && sv.status !== 'pending' ? ` · ${sv.by}` : ''}
+          </Badge>
+        );
+        return (
+          <div key={o.n} className="rounded-xl bg-fill/60 px-3.5 py-2.5">
+            {(several || badge) && (
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-[12px] font-semibold uppercase tracking-wide text-ink-3">
+                  {several && `Pedido ${o.n}`}
+                  {o.n > 1 && o.at ? ` · ${fmtTime(o.at)}` : ''}
+                  {o.n > 1 && o.by ? ` · ${o.by}` : ''}
+                </span>
+                <span className="flex items-center gap-1">
+                  {badge}
+                  {onRemove && o.n > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => onRemove(o.n - 2)}
+                      className="grid h-7 w-7 place-items-center rounded-full text-ink-3 hover:bg-fill hover:text-red"
+                      aria-label={`Quitar el pedido ${o.n}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </span>
+              </div>
+            )}
+            <div className="text-[14px]">
+              <span className="text-ink-2">Botellas: </span>
+              {itemsText(o.bottles) || '—'}
             </div>
-          )}
-          <div className="text-[14px]">
-            <span className="text-ink-2">Botellas: </span>
-            {itemsText(o.bottles) || '—'}
+            <div className="text-[14px]">
+              <span className="text-ink-2">Refrescos: </span>
+              {itemsText(o.mixers) || '—'}
+            </div>
           </div>
-          <div className="text-[14px]">
-            <span className="text-ink-2">Refrescos: </span>
-            {itemsText(o.mixers) || '—'}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -342,7 +356,20 @@ function ItemsEditor({
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="tabular w-6 text-center text-[15px] font-semibold">{it.qty}</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={it.qty > 0 ? String(it.qty) : ''}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 3);
+                  set(i, { qty: digits ? parseInt(digits, 10) : 0 });
+                }}
+                onFocus={(e) => e.target.select()}
+                onBlur={() => it.qty < 1 && set(i, { qty: 1 })}
+                className="tabular h-10 w-9 bg-transparent text-center text-[15px] font-semibold outline-none focus:rounded-md focus:bg-surface"
+                aria-label="Cantidad"
+              />
               <button
                 type="button"
                 onClick={() => set(i, { qty: it.qty + 1 })}

@@ -1,12 +1,12 @@
 import { IS_DEMO } from './config';
 import { normalizeCategory } from './constants';
-import { demoAddMyTimeEntry, demoClockIn, demoClockOut, demoCorrectMyTimeEntry, demoFiles, demoGetVenue, demoSaveVenue, demoSetRrppName, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, type TableName } from './demo';
+import { demoAddMyTimeEntry, demoClockIn, demoClockOut, demoCorrectMyTimeEntry, demoFiles, demoGetVenue, demoSaveVenue, demoSetRrppName, demoMarkMessageRead, demoMarkRepliesRead, demoReplyMessage, demoRespondShift, demoRespondTask, demoRepo, demoReservationStaff, demoSession, demoSetReservationService, type TableName } from './demo';
 import { blobToDataUrl } from './image';
 import { kickNotifications } from './push';
 import { fmtDistance, type Position } from './geo';
 import { entryCost, uid } from './utils';
 import { supabase } from './supabase';
-import type { AdminLedgerDay, AdminLedgerExpense, AdminLedgerMonth, AdminLedgerYear, Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate, WageExtraEntry } from './types';
+import type { AdminLedgerDay, AdminLedgerExpense, AdminLedgerMonth, AdminLedgerYear, Availability, ClaudeConnector, ClubEvent, Employee, FourvenuesRrppNight, Invoice, LeaveRequest, Message, MessageRecipient, MessageReply, MyTimeEntry, OrderService, OrderServiceStatus, Profile, Reservation, Shift, ShiftResponse, StaffOption, Supplier, TicketSale, TimeEntry, Transaction, VenueLocation, VipTable, CommissionRate, WageExtraEntry } from './types';
 
 type Scalar = string | number | boolean | null;
 
@@ -35,6 +35,9 @@ const ERRORS: [RegExp, string | ((m: RegExpMatchArray) => string)][] = [
   [/Database error saving new user/i, 'No se ha podido crear la cuenta. Inténtalo de nuevo o avisa al administrador.'],
   [/ALREADY_CLOCKED_IN|time_entries_one_open/i, 'Ya hay un fichaje abierto para este empleado.'],
   [/NOT_CLOCKED_IN/i, 'No tienes ningún fichaje abierto.'],
+  [/SERVICE_NOT_ALLOWED/i, 'Sólo los camareros de bandeja, el hoster y el administrador pueden marcar cómo va un pedido.'],
+  [/SERVICE_NOT_FOUND/i, 'Ese pedido ya no existe: puede que lo hayan quitado. Actualiza la página.'],
+  [/set_reservation_service|reservations\.service/i, 'Falta aplicar en Supabase la migración del estado de los pedidos (20261127120000_reservation_service.sql).'],
   [/CORRECTION_NOT_ALLOWED/i, 'Sólo los camareros pueden corregir sus fichajes. Pide al encargado que lo cambie.'],
   [/CORRECTION_NOT_FOUND/i, 'No se ha encontrado ese fichaje.'],
   [/CORRECTION_TOO_LATE/i, 'Sólo puedes corregir los fichajes de los últimos 3 días. Para uno más antiguo, pídeselo al encargado.'],
@@ -357,6 +360,12 @@ export const api = {
   /** Los camareros añaden el fichaje de una noche en la que se les olvidó fichar */
   addMyTimeEntry: (clockIn: string, clockOut: string) =>
     IS_DEMO ? demoAddMyTimeEntry(clockIn, clockOut) : sbRpc<null>('add_my_time_entry', { p_clock_in: clockIn, p_clock_out: clockOut }),
+
+  /** Los camareros de bandeja aceptan un pedido de un reservado y dicen cómo va ("main" = el pedido 1) */
+  setReservationService: (reservationId: string, order: string, status: OrderServiceStatus) =>
+    IS_DEMO
+      ? demoSetReservationService(reservationId, order, status)
+      : sbRpc<Record<string, OrderService>>('set_reservation_service', { p_id: reservationId, p_order: order, p_status: status }),
 
   /** Fichar salida del usuario conectado (hora del servidor), con su ubicación si la hay. */
   clockOut: (pos?: Position | null, notes?: string) =>
