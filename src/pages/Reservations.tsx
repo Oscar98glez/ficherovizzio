@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Coins, Plus, Settings2, Sofa, Users } from 'lucide-react';
 import { useAuth } from '../auth';
 import { ClubMap } from '../components/ClubMap';
+import { TrayOrders } from '../components/tray-orders';
 import {
   allBottles,
   itemsText,
@@ -28,7 +29,7 @@ import {
   Segmented,
   StatCard,
 } from '../components/ui';
-import { useLoad } from '../hooks';
+import { useInterval, useLoad } from '../hooks';
 import { api } from '../lib/api';
 import { hhmm } from '../lib/availability';
 import { isActiveReservation, occupiesTable, RESERVATION_STATUS } from '../lib/constants';
@@ -53,6 +54,8 @@ export default function Reservations() {
   const { isAdmin, isRrpp, isTray, employee, userId } = useAuth();
   // Los camareros de bandeja sólo consultan los reservados: no apuntan ni cambian reservas
   const readOnly = isTray && !isAdmin && !isRrpp && !employee?.manages_reservations;
+  // Aceptan los pedidos de los reservados y dicen cómo van: los bandejas, el hoster y el administrador
+  const canServe = isTray || isAdmin || !!employee?.manages_reservations;
   const today = isoDate(businessToday());
   // Al abrir el aviso de un reservado nuevo se va a su noche (?d=AAAA-MM-DD)
   const [params] = useSearchParams();
@@ -73,7 +76,7 @@ export default function Reservations() {
   const [ordering, setOrdering] = useState<Reservation | null>(null);
   const [managing, setManaging] = useState(false);
 
-  const { data, loading, error, reload } = useLoad(async () => {
+  const { data, loading, error, reload, refresh } = useLoad(async () => {
     // RRPP que se pueden elegir como "RRPP" y "RRPP que atiende"
     const [tables, reservations, events, staff] = await Promise.all([
       api.vipTables.list(),
@@ -88,6 +91,8 @@ export default function Reservations() {
       staff,
     };
   }, [date]);
+  // Esta noche se actualiza sola (reservados que llegan y pedidos que aceptan los compañeros)
+  useInterval(() => date === today && refresh(), 20000);
 
   const view = useMemo(() => {
     if (!data) return null;
@@ -204,6 +209,7 @@ export default function Reservations() {
       </Card>
 
       <div className={cx('transition-opacity', loading && 'opacity-50')}>
+        {canServe && <TrayOrders reservations={data.reservations} tables={view.tablesById} onChanged={refresh} />}
         <div className="mb-2 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard label="Reservas" value={view.active.length} icon={<CalendarDays />} tone="blue" />
           <StatCard label="Personas" value={sumBy(view.active, (r) => r.guests)} icon={<Users />} tone="purple" />

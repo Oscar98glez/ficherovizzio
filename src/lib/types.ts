@@ -339,6 +339,17 @@ export interface ReservationOrder {
 
 export type ReservationStatus = 'pending' | 'confirmed' | 'arrived' | 'left' | 'cancelled' | 'no_show';
 
+/** Cómo va un pedido de un reservado: lo acepta un camarero de bandeja y lo marca en preparación o servido */
+export type OrderServiceStatus = 'pending' | 'accepted' | 'preparing' | 'served';
+
+export interface OrderService {
+  status: Exclude<OrderServiceStatus, 'pending'>;
+  /** Quién lo cambió por última vez */
+  by?: string | null;
+  /** Cuándo (ISO) */
+  at?: string | null;
+}
+
 export interface Reservation {
   id: string;
   /** YYYY-MM-DD: la noche */
@@ -362,6 +373,8 @@ export interface Reservation {
   /** Importe total del reservado */
   total_amount: number | null;
   status: ReservationStatus;
+  /** Cómo va cada pedido ("main" = el pedido 1; el resto, por el id del pedido añadido) */
+  service?: Record<string, OrderService> | null;
   notes: string | null;
   /** RRPP de la reserva (quien la trae) */
   rrpp_id: string | null;

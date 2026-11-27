@@ -6,6 +6,8 @@ export interface LoadState<T> {
   loading: boolean;
   error: string | null;
   reload: () => void;
+  /** Vuelve a pedir los datos sin marcar la carga (para refrescos automáticos) */
+  refresh: () => void;
 }
 
 /** Carga datos asíncronos y los vuelve a pedir cuando cambian las dependencias. */
@@ -16,10 +18,12 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): LoadState<T> 
   const [tick, setTick] = useState(0);
   const fnRef = useRef(fn);
   fnRef.current = fn;
+  const quiet = useRef(false);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    if (!quiet.current) setLoading(true);
+    quiet.current = false;
     fnRef
       .current()
       .then((d) => alive && (setData(d), setError(null)))
@@ -32,7 +36,11 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): LoadState<T> 
   }, [...deps, tick]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
-  return { data, loading, error, reload };
+  const refresh = useCallback(() => {
+    quiet.current = true;
+    setTick((t) => t + 1);
+  }, []);
+  return { data, loading, error, reload, refresh };
 }
 
 /** Marca de tiempo que se actualiza cada `ms` milisegundos. */

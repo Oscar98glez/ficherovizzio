@@ -2,6 +2,7 @@ import type {
   ContractType,
   Department,
   EventKind,
+  OrderServiceStatus,
   PaymentMethod,
   RequestKind,
   RequestStatus,
@@ -187,6 +188,14 @@ export const RESERVATION_STATUS: Record<ReservationStatus, { label: string; tone
   left: { label: 'Se ha ido', tone: 'teal' },
   cancelled: { label: 'Cancelada', tone: 'gray' },
   no_show: { label: 'No vino', tone: 'red' },
+};
+
+/** Cómo va cada pedido de un reservado (lo marcan los camareros de bandeja) */
+export const ORDER_SERVICE: Record<OrderServiceStatus, { label: string; tone: Tone }> = {
+  pending: { label: 'Sin aceptar', tone: 'orange' },
+  accepted: { label: 'Aceptado', tone: 'blue' },
+  preparing: { label: 'En preparación', tone: 'purple' },
+  served: { label: 'Servido', tone: 'green' },
 };
 
 export const isActiveReservation = (r: { status: ReservationStatus }) => r.status !== 'cancelled' && r.status !== 'no_show';

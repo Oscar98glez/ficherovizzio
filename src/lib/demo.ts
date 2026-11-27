@@ -24,6 +24,8 @@ import type {
   Message,
   MessageRecipient,
   MessageReply,
+  OrderService,
+  OrderServiceStatus,
   PaymentMethod,
   Profile,
   Reservation,
@@ -315,6 +317,24 @@ function checkLocation(pos?: Position | null) {
 }
 
 const demoVenue = () => ((getDb().venue_location ?? [])[0] as unknown as VenueLocation | undefined) ?? null;
+
+/** Como set_reservation_service de Supabase: un camarero de bandeja acepta un pedido y dice cómo va */
+export async function demoSetReservationService(id: string, order: string, status: OrderServiceStatus): Promise<Record<string, OrderService>> {
+  const userId = demoSession.get();
+  const profile = getDb().profiles.find((p) => p.id === userId) as unknown as Profile | undefined;
+  const emp = getDb().employees.find((e) => e.user_id === userId && e.active) as Employee | undefined;
+  if (!(profile && (profile.role === 'admin' || profile.role === 'tray')) && !emp?.manages_reservations) throw new Error('SERVICE_NOT_ALLOWED');
+  const r = getDb().reservations.find((x) => x.id === id) as unknown as Reservation | undefined;
+  if (!r || (order !== 'main' && !(r.extra_orders ?? []).some((o) => o.id === order))) throw new Error('SERVICE_NOT_FOUND');
+  const by = emp ? `${emp.first_name} ${emp.last_name ?? ''}`.trim() : (profile?.full_name ?? null);
+  const next = { ...(r.service ?? {}) };
+  if (status === 'pending') delete next[order];
+  else next[order] = { status, by, at: new Date().toISOString() };
+  r.service = next;
+  persist();
+  await wait();
+  return next;
+}
 
 /** Como fourvenues_rrpp_names de Supabase: nombre puesto a mano, que pasa al desglose de sus noches */
 export async function demoSetRrppName(fourvenuesUserId: string, name: string): Promise<void> {
