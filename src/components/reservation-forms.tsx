@@ -491,6 +491,8 @@ export function ReservationForm({
   const [adding, setAdding] = useState(false);
   // El coste total se calcula con la carta hasta que se escribe a mano
   const [autoTotal, setAutoTotal] = useState(true);
+  // Se rellena al abrir (o al cambiar de reserva o de reservado), no cada vez que se recargan los datos
+  // de la página: si no, lo que se está escribiendo se borraría con cada actualización
   useEffect(() => {
     if (!open) return;
     setF(toForm(date, reservation, table, myEmployeeId && staff.some((s) => s.id === myEmployeeId) ? myEmployeeId : null));
@@ -500,7 +502,8 @@ export function ReservationForm({
         Math.abs(reservation.total_amount - itemsTotal(allBottles(reservation)) - itemsTotal(allMixers(reservation))) < 0.005,
     );
     setAdding(false);
-  }, [open, date, reservation, table, myEmployeeId, staff]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, date, reservation?.id, table?.id, myEmployeeId]);
   const set = <K extends keyof ReservationFormState>(k: K, v: ReservationFormState[K]) => setF((s) => ({ ...s, [k]: v }));
   // El total incluye los pedidos añadidos después (que no se editan aquí)
   const menuTotal = (s: Pick<ReservationFormState, 'bottles' | 'mixers'>) =>
