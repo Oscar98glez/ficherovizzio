@@ -92,7 +92,8 @@ export default function Reservations() {
     };
   }, [date]);
   // Esta noche se actualiza sola (reservados que llegan y pedidos que aceptan los compañeros)
-  useInterval(() => date === today && refresh(), 20000);
+  // (no mientras hay una ventana abierta, para no cambiar lo que se está viendo o escribiendo)
+  useInterval(() => date === today && !form && !occupied && !ordering && !managing && refresh(), 20000);
 
   const view = useMemo(() => {
     if (!data) return null;
