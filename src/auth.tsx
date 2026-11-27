@@ -88,7 +88,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ...state,
     isAdmin: state.profile?.role === 'admin',
     isRrpp: state.profile?.role === 'rrpp',
-    isTray: state.profile?.role === 'tray',
+    // Camarero de bandeja: su cuenta, o camarero con la ficha en Sala o el puesto de bandeja
+    isTray:
+      state.profile?.role === 'tray' ||
+      (state.profile?.role === 'worker' && (state.employee?.department === 'sala' || /bandeja/i.test(state.employee?.position ?? ''))),
     isOffice: state.profile?.role === 'office',
     recovering: recovering && !!state.userId,
     finishRecovery: () => setRecovering(false),
