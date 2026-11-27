@@ -210,7 +210,6 @@ export default function Reservations() {
       </Card>
 
       <div className={cx('transition-opacity', loading && 'opacity-50')}>
-        {canServe && <TrayOrders reservations={data.reservations} tables={view.tablesById} onChanged={refresh} />}
         <div className="mb-2 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <StatCard label="Reservas" value={view.active.length} icon={<CalendarDays />} tone="blue" />
           <StatCard label="Personas" value={sumBy(view.active, (r) => r.guests)} icon={<Users />} tone="purple" />
@@ -333,6 +332,13 @@ export default function Reservations() {
             )}
           </div>
         </div>
+
+        {/* Pedidos de los reservados que han llegado: debajo del plano y de las reservas */}
+        {canServe && (
+          <div className="mt-5">
+            <TrayOrders reservations={data.reservations} tables={view.tablesById} onChanged={refresh} />
+          </div>
+        )}
 
         {/* Reservados sin ubicar en el plano */}
         {view.zones.length > 0 && (
