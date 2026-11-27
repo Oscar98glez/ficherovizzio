@@ -132,6 +132,7 @@ export function NewOrderModal({ reservation, onClose, onSaved }: { reservation: 
             otherLabel="Otra…"
             placeholder="Escribe la botella"
             courtesy
+            editablePrice
           />
           <ItemsEditor
             label="Refrescos de este pedido"
@@ -142,6 +143,7 @@ export function NewOrderModal({ reservation, onClose, onSaved }: { reservation: 
             emptyLabel="Elige un refresco"
             otherLabel="Otro…"
             placeholder="Escribe el refresco"
+            editablePrice
           />
           {total > 0 && (
             <div className="flex items-center justify-between text-[14px]">
@@ -254,6 +256,7 @@ function ItemsEditor({
   groups,
   placeholder,
   courtesy = false,
+  editablePrice = false,
 }: {
   label: string;
   addLabel: string;
@@ -265,6 +268,8 @@ function ItemsEditor({
   placeholder: string;
   /** Permite marcar cada línea como cortesía (0 €) */
   courtesy?: boolean;
+  /** Permite cambiar el precio de lo que está en la carta (sale el de la carta) */
+  editablePrice?: boolean;
 }) {
   const set = (i: number, patch: Partial<OrderItem>) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const listed = new Map(groups.flatMap((g) => g.items).map((m) => [m.name, m.price]));
@@ -330,6 +335,21 @@ function ItemsEditor({
                     className="w-24 shrink-0"
                   />
                 </div>
+              )}
+              {editablePrice && !!it.name && !isOther(i) && !it.courtesy && (
+                <label className="flex w-fit items-center gap-2 text-[13px] text-ink-2">
+                  Precio por unidad
+                  <Input
+                    key={it.name}
+                    inputMode="decimal"
+                    defaultValue={amountText(it.price ?? listed.get(it.name))}
+                    onChange={(e) => set(i, { price: e.target.value.trim() ? parseAmount(e.target.value) : listed.get(it.name) })}
+                    onFocus={(e) => e.target.select()}
+                    aria-label="Precio por unidad"
+                    className="h-9 w-24 py-0"
+                  />
+                  €
+                </label>
               )}
               {courtesy && (
                 <label className="flex w-fit cursor-pointer items-center gap-2 text-[13px] text-ink-2">
